@@ -1,9 +1,8 @@
 # Bars, launchers, and notifications
 
-Leme does not include a bar, launcher, wallpaper viewer, or notification
-daemon. External programs use layer-shell, the Wayland interface for desktop
-surfaces such as panels and notifications, to place them around managed
-windows.
+Bars, launchers, wallpapers and notification daemons place themselves through
+layer-shell, the Wayland interface for desktop surfaces. Leme positions them
+around managed windows according to the layer they ask for.
 
 ## Layer-shell surfaces
 
@@ -26,7 +25,7 @@ exec {
 
 `exec` receives argument vectors directly and runs once at startup. A configuration reload does not start the programs again. The programs are not build dependencies, and Leme does not manage their complete lifetime on exit.
 
-If you need a bar to remain tied to the graphical login, use the service manager or session wrapper provided by your distribution. The [external services concept](../concepts/external-desktop-services.md) explains the boundary.
+If you need a bar to remain tied to the graphical login, use the service manager or session wrapper provided by your distribution.
 
 ## Media keys
 
@@ -44,9 +43,7 @@ bind_group "media" {
 }
 ```
 
-Then place `inherit media` inside the existing `binds "common"` block. These
-commands configure key bindings only; Leme does not provide or supervise the
-audio and media services.
+Then place `inherit media` inside the existing `binds "common"` block.
 
 ## Input and focus
 

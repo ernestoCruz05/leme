@@ -11,4 +11,3 @@ These limitations describe the current build. Planned and deferred work is track
 - Sticky floating windows and terminal swallowing are not implemented.
 - Physical multi-monitor support is new and still needs broader hardware testing.
 
-An item marked planned or deferred on the roadmap is not part of the current build.

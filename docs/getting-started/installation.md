@@ -11,9 +11,8 @@ Build Leme with:
 - xkbcommon 1.5 or newer;
 - libinput;
 - Pixman;
-- `wayland-scanner`.
-
-Leme does not provide a terminal, bar, launcher, wallpaper program, notification daemon, portal backend, audio server, or idle manager. Install the external programs you want after the compositor itself works.
+- `wayland-scanner`, which ships inside the `wayland` package on most
+  distributions and as `dev-util/wayland-scanner` on Gentoo.
 
 ## Build
 
@@ -80,10 +79,6 @@ this build follows wlroots on Leme's schedule instead of the distribution's.
 
 ## Configuration file location
 
-Leme reads:
-
-```text
-$XDG_CONFIG_HOME/leme/config.scfg
-```
-
-When `XDG_CONFIG_HOME` is empty or unset, it uses `~/.config/leme/config.scfg`. A file named `config`, with no extension, is still read when `config.scfg` is absent. There is no `LEME_CONFIG` override.
+Leme reads `$XDG_CONFIG_HOME/leme/config.scfg`. The
+[configuration reference](../configuration/README.md) covers the fallbacks and
+reload behavior.

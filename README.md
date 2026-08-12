@@ -5,12 +5,8 @@ wlroots 0.20. It supports dwindle, master-stack, and accordion layouts,
 per-output adaptive tags, multiple monitors, native Wayland applications, and
 optional XWayland.
 
-Leme does not include a bar, launcher, wallpaper program, notification daemon,
-portal backend, audio service, or idle manager. Install and configure those
-components separately.
-
-> [!WARNING]
-> **Early alpha:** Leme is usable for development and daily testing, but it is not stable software. Configuration and behavior may change. Multi-monitor support is new and has not been widely tested on physical hardware.
+Leme is early alpha and a personal project. It is usable for daily work but is not stable software: configuration and behavior may change, and physicalmulti-monitor support has had limited hardware testing. It is built primarily
+for my own use. Issues and patches are welcome, but support is best-effort.
 
 ## What works
 

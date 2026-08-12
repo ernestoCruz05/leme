@@ -2,9 +2,7 @@
 
 ## Before you start
 
-Leme is early alpha software. Use a nested session first if you can. For a direct session, log in normally through your display manager or a TTY and make sure the login created a writable `XDG_RUNTIME_DIR` owned by your user.
-
-Do not run Leme as root. Device access should come from the login session and its seat provider.
+Use a nested session first if you can. For a direct session, log in normally through your display manager or a TTY and make sure the login created a writable `XDG_RUNTIME_DIR` owned by your user.
 
 Copy the [minimal configuration](minimal-config.md) before starting. If your terminal is not `foot`, change the `term` variable first.
 

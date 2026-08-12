@@ -1,9 +1,11 @@
 # Crash reports
 
+Report crashes at
+[github.com/ernestoCruz05/leme/issues](https://github.com/ernestoCruz05/leme/issues).
+
 A useful report includes:
 
 - the Git commit or package version;
-- whether the build used sanitizers;
 - the smallest configuration that still reproduces the crash;
 - exact reproduction steps, including native Wayland or XWayland clients;
 - the complete Leme stderr or session log from startup through the crash;

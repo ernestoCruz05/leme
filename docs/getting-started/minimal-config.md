@@ -5,7 +5,7 @@ The repository ships a small starting point at [`config/leme.scfg`](../../config
 ```sh
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 mkdir -p "$config_home/leme"
-cp config/leme.scfg "$config_home/leme/config"
+cp config/leme.scfg "$config_home/leme/config.scfg"
 ```
 
 The file sets up a usable starting session:

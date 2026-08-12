@@ -1,17 +1,30 @@
 diff --git a/include/render/gles2.h b/include/render/gles2.h
-index 6b852dc..6b8576b 100644
+index 6b852dc..5ef3d73 100644
 --- a/include/render/gles2.h
 +++ b/include/render/gles2.h
-@@ -34,6 +34,8 @@ struct wlr_gles2_tex_shader {
+@@ -34,6 +34,21 @@ struct wlr_gles2_tex_shader {
  	GLint tex_proj;
  	GLint tex;
  	GLint alpha;
 +	GLint corner_radius;
 +	GLint half_size;
++	GLint pos_attrib;
++};
++
++struct wlr_gles2_blur_shader {
++	// The radius this program was compiled for, or -1 for the generic
++	// program that takes the radius as a uniform.
++	int taps;
++	GLuint program;
++	GLint proj;
++	GLint tex_proj;
++	GLint tex;
++	GLint direction;
++	GLint radius;
  	GLint pos_attrib;
  };
  
-@@ -77,14 +79,40 @@ struct wlr_gles2_renderer {
+@@ -77,14 +92,36 @@ struct wlr_gles2_renderer {
  		struct {
  			GLuint program;
  			GLint proj;
@@ -25,15 +38,11 @@ index 6b852dc..6b8576b 100644
  		struct wlr_gles2_tex_shader tex_rgba;
  		struct wlr_gles2_tex_shader tex_rgbx;
  		struct wlr_gles2_tex_shader tex_ext;
-+		struct {
-+			GLuint program;
-+			GLint proj;
-+			GLint tex_proj;
-+			GLint tex;
-+			GLint direction;
-+			GLint radius;
-+			GLint pos_attrib;
-+		} blur;
++		struct wlr_gles2_blur_shader blur;
++		// Specialised programs, one per radius, compiled on demand. A
++		// compositor uses one radius for every window, so this holds two in
++		// practice: the configured radius and 0 for the write-back copy.
++		struct wlr_gles2_blur_shader blur_cache[8];
  	} shaders;
  
 +	// Ping-pong targets for the separable backdrop blur. Grown on demand and
@@ -52,6 +61,15 @@ index 6b852dc..6b8576b 100644
  	struct wl_list buffers; // wlr_gles2_buffer.link
  	struct wl_list textures; // wlr_gles2_texture.link
  };
+@@ -157,6 +194,8 @@ struct wlr_gles2_render_timer *gles2_get_render_timer(
+ 	struct wlr_render_timer *timer);
+ struct wlr_gles2_texture *gles2_get_texture(
+ 	struct wlr_texture *wlr_texture);
++const struct wlr_gles2_blur_shader *gles2_get_blur_shader(
++	struct wlr_gles2_renderer *renderer, int taps);
+ struct wlr_gles2_buffer *gles2_buffer_get_or_create(struct wlr_gles2_renderer *renderer,
+ 	struct wlr_buffer *wlr_buffer);
+ 
 diff --git a/include/wlr/render/pass.h b/include/wlr/render/pass.h
 index 61ab771..0a2f2d2 100644
 --- a/include/wlr/render/pass.h
@@ -140,10 +158,10 @@ index 6c627b1..8ad3064 100644
  * Sets the filter mode to use when scaling the buffer
  */
 diff --git a/render/gles2/pass.c b/render/gles2/pass.c
-index a70ea13..d914048 100644
+index a70ea13..8fc7a38 100644
 --- a/render/gles2/pass.c
 +++ b/render/gles2/pass.c
-@@ -164,6 +164,176 @@ static void setup_blending(enum wlr_render_blend_mode mode) {
+@@ -164,6 +164,186 @@ static void setup_blending(enum wlr_render_blend_mode mode) {
  	}
  }
  
@@ -273,28 +291,35 @@ index a70ea13..d914048 100644
 +		.height = (float)span.height / scratch_height,
 +	};
 +
++	// Two programs: one for the separable passes, one for the write-back,
++	// which is a copy and needs a single tap rather than 129.
++	const struct wlr_gles2_blur_shader *blur_shader =
++		gles2_get_blur_shader(renderer, radius);
++	const struct wlr_gles2_blur_shader *copy_shader =
++		gles2_get_blur_shader(renderer, 0);
++
 +	glDisable(GL_BLEND);
-+	glUseProgram(renderer->shaders.blur.program);
-+	glUniform1i(renderer->shaders.blur.tex, 0);
-+	glUniform1f(renderer->shaders.blur.radius, (float)radius);
++	glUseProgram(blur_shader->program);
++	glUniform1i(blur_shader->tex, 0);
++	glUniform1f(blur_shader->radius, (float)radius);
 +	glActiveTexture(GL_TEXTURE0);
 +	glViewport(0, 0, span.width, span.height);
 +
 +	glBindFramebuffer(GL_FRAMEBUFFER, renderer->blur_scratch.fbo[1]);
 +	glBindTexture(GL_TEXTURE_2D, renderer->blur_scratch.tex[0]);
-+	glUniform2f(renderer->shaders.blur.direction, 1.0f / scratch_width, 0.0f);
-+	set_proj_matrix(renderer->shaders.blur.proj, scratch_proj, &span_box);
-+	set_tex_matrix(renderer->shaders.blur.tex_proj,
++	glUniform2f(blur_shader->direction, 1.0f / scratch_width, 0.0f);
++	set_proj_matrix(blur_shader->proj, scratch_proj, &span_box);
++	set_tex_matrix(blur_shader->tex_proj,
 +		WL_OUTPUT_TRANSFORM_NORMAL, &span_uv);
-+	render(&span_box, NULL, renderer->shaders.blur.pos_attrib);
++	render(&span_box, NULL, blur_shader->pos_attrib);
 +
 +	glBindFramebuffer(GL_FRAMEBUFFER, renderer->blur_scratch.fbo[0]);
 +	glBindTexture(GL_TEXTURE_2D, renderer->blur_scratch.tex[1]);
-+	glUniform2f(renderer->shaders.blur.direction, 0.0f, 1.0f / scratch_height);
-+	set_proj_matrix(renderer->shaders.blur.proj, scratch_proj, &span_box);
-+	set_tex_matrix(renderer->shaders.blur.tex_proj,
++	glUniform2f(blur_shader->direction, 0.0f, 1.0f / scratch_height);
++	set_proj_matrix(blur_shader->proj, scratch_proj, &span_box);
++	set_tex_matrix(blur_shader->tex_proj,
 +		WL_OUTPUT_TRANSFORM_NORMAL, &span_uv);
-+	render(&span_box, NULL, renderer->shaders.blur.pos_attrib);
++	render(&span_box, NULL, blur_shader->pos_attrib);
 +
 +	// Back to the framebuffer. A zero radius makes the shader a plain copy,
 +	// so this writes the blurred span back over the destination alone.
@@ -307,12 +332,15 @@ index a70ea13..d914048 100644
 +		.width = (float)box.width / scratch_width,
 +		.height = (float)box.height / scratch_height,
 +	};
-+	glUniform2f(renderer->shaders.blur.direction, 0.0f, 0.0f);
-+	glUniform1f(renderer->shaders.blur.radius, 0.0f);
-+	set_proj_matrix(renderer->shaders.blur.proj, pass->projection_matrix, &box);
-+	set_tex_matrix(renderer->shaders.blur.tex_proj,
++	// Sampler bindings are per program, so this one needs its own.
++	glUseProgram(copy_shader->program);
++	glUniform1i(copy_shader->tex, 0);
++	glUniform2f(copy_shader->direction, 0.0f, 0.0f);
++	glUniform1f(copy_shader->radius, 0.0f);
++	set_proj_matrix(copy_shader->proj, pass->projection_matrix, &box);
++	set_tex_matrix(copy_shader->tex_proj,
 +		WL_OUTPUT_TRANSFORM_NORMAL, &src_uv);
-+	render(&box, clip, renderer->shaders.blur.pos_attrib);
++	render(&box, clip, copy_shader->pos_attrib);
 +
 +	glBindTexture(GL_TEXTURE_2D, 0);
 +}
@@ -320,7 +348,7 @@ index a70ea13..d914048 100644
  static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
  		const struct wlr_render_texture_options *options) {
  	struct wlr_gles2_render_pass *pass = get_render_pass(wlr_pass);
-@@ -223,6 +393,12 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
+@@ -223,6 +403,12 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
  		}
  	}
  
@@ -333,7 +361,7 @@ index a70ea13..d914048 100644
  	setup_blending(!texture->has_alpha && alpha == 1.0 ?
  		WLR_RENDER_BLEND_MODE_NONE : options->blend_mode);
  
-@@ -244,6 +420,10 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
+@@ -244,6 +430,10 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
  
  	glUniform1i(shader->tex, 0);
  	glUniform1f(shader->alpha, alpha);
@@ -344,7 +372,7 @@ index a70ea13..d914048 100644
  	set_proj_matrix(shader->proj, pass->projection_matrix, &dst_box);
  	set_tex_matrix(shader->tex_proj, options->transform, &src_fbox);
  
-@@ -263,10 +443,19 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
+@@ -263,10 +453,19 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
  	struct wlr_buffer *wlr_buffer = pass->buffer->buffer;
  	wlr_render_rect_options_get_box(options, wlr_buffer, &box);
  
@@ -366,7 +394,7 @@ index a70ea13..d914048 100644
  			options->clip == NULL &&
  			box.x == 0 && box.y == 0 &&
  			box.width == wlr_buffer->width &&
-@@ -274,10 +463,21 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
+@@ -274,10 +473,21 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
  		glClearColor(color->r, color->g, color->b, color->a);
  		glClear(GL_COLOR_BUFFER_BIT);
  	} else {
@@ -389,10 +417,18 @@ index a70ea13..d914048 100644
  	}
  
 diff --git a/render/gles2/renderer.c b/render/gles2/renderer.c
-index e362dae..cff441a 100644
+index e362dae..f79caa7 100644
 --- a/render/gles2/renderer.c
 +++ b/render/gles2/renderer.c
-@@ -25,6 +25,7 @@
+@@ -5,6 +5,7 @@
+ #include <stdint.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
+ #include <time.h>
+ #include <unistd.h>
+ #include <wayland-server-protocol.h>
+@@ -25,6 +26,7 @@
  #include "tex_rgba_frag_src.h"
  #include "tex_rgbx_frag_src.h"
  #include "tex_external_frag_src.h"
@@ -400,11 +436,15 @@ index e362dae..cff441a 100644
  
  static const struct wlr_renderer_impl renderer_impl;
  static const struct wlr_render_timer_impl render_timer_impl;
-@@ -219,6 +220,11 @@ static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
+@@ -219,6 +221,15 @@ static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
  	glDeleteProgram(renderer->shaders.tex_rgba.program);
  	glDeleteProgram(renderer->shaders.tex_rgbx.program);
  	glDeleteProgram(renderer->shaders.tex_ext.program);
 +	glDeleteProgram(renderer->shaders.blur.program);
++	for (size_t i = 0; i < sizeof(renderer->shaders.blur_cache) /
++			sizeof(renderer->shaders.blur_cache[0]); i++) {
++		glDeleteProgram(renderer->shaders.blur_cache[i].program);
++	}
 +	if (renderer->blur_scratch.tex[0] != 0) {
 +		glDeleteFramebuffers(2, renderer->blur_scratch.fbo);
 +		glDeleteTextures(2, renderer->blur_scratch.tex);
@@ -412,7 +452,78 @@ index e362dae..cff441a 100644
  	pop_gles2_debug(renderer);
  
  	if (renderer->exts.KHR_debug) {
-@@ -639,7 +645,14 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
+@@ -466,6 +477,70 @@ error:
+ 	return 0;
+ }
+ 
++static bool init_blur_shader(struct wlr_gles2_renderer *renderer,
++		struct wlr_gles2_blur_shader *shader, int taps) {
++	char *src = NULL;
++	if (taps >= 0) {
++		size_t len = strlen(blur_frag_src) + 32;
++		src = malloc(len);
++		if (src == NULL) {
++			return false;
++		}
++		snprintf(src, len, "#define BLUR_TAPS %d\n%s", taps, blur_frag_src);
++	}
++
++	GLuint prog = link_program(renderer, common_vert_src,
++		src != NULL ? src : blur_frag_src);
++	free(src);
++	if (!prog) {
++		return false;
++	}
++
++	shader->taps = taps;
++	shader->program = prog;
++	shader->proj = glGetUniformLocation(prog, "proj");
++	shader->tex_proj = glGetUniformLocation(prog, "tex_proj");
++	shader->tex = glGetUniformLocation(prog, "tex");
++	shader->direction = glGetUniformLocation(prog, "direction");
++	// Unused once BLUR_TAPS is set, so this resolves to -1. glUniform1f on
++	// -1 is a defined no-op, which keeps the call sites uniform.
++	shader->radius = glGetUniformLocation(prog, "radius");
++	shader->pos_attrib = glGetAttribLocation(prog, "pos");
++	return true;
++}
++
++const struct wlr_gles2_blur_shader *gles2_get_blur_shader(
++		struct wlr_gles2_renderer *renderer, int taps) {
++	size_t cache_len =
++		sizeof(renderer->shaders.blur_cache) /
++		sizeof(renderer->shaders.blur_cache[0]);
++
++	if (taps < 0 || taps > 64) {
++		return &renderer->shaders.blur;
++	}
++
++	for (size_t i = 0; i < cache_len; i++) {
++		struct wlr_gles2_blur_shader *entry = &renderer->shaders.blur_cache[i];
++		if (entry->program != 0 && entry->taps == taps) {
++			return entry;
++		}
++	}
++
++	for (size_t i = 0; i < cache_len; i++) {
++		struct wlr_gles2_blur_shader *entry = &renderer->shaders.blur_cache[i];
++		if (entry->program == 0) {
++			if (!init_blur_shader(renderer, entry, taps)) {
++				return &renderer->shaders.blur;
++			}
++			return entry;
++		}
++	}
++
++	// More live radii than slots. Correct, just slower.
++	return &renderer->shaders.blur;
++}
++
++
+ static bool check_gl_ext(const char *exts, const char *ext) {
+ 	size_t extlen = strlen(ext);
+ 	const char *end = exts + strlen(exts);
+@@ -639,7 +714,14 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
  		goto error;
  	}
  	renderer->shaders.quad.proj = glGetUniformLocation(prog, "proj");
@@ -427,7 +538,7 @@ index e362dae..cff441a 100644
  	renderer->shaders.quad.pos_attrib = glGetAttribLocation(prog, "pos");
  
  	renderer->shaders.tex_rgba.program = prog =
-@@ -651,6 +664,8 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
+@@ -651,6 +733,8 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
  	renderer->shaders.tex_rgba.tex_proj = glGetUniformLocation(prog, "tex_proj");
  	renderer->shaders.tex_rgba.tex = glGetUniformLocation(prog, "tex");
  	renderer->shaders.tex_rgba.alpha = glGetUniformLocation(prog, "alpha");
@@ -436,7 +547,7 @@ index e362dae..cff441a 100644
  	renderer->shaders.tex_rgba.pos_attrib = glGetAttribLocation(prog, "pos");
  
  	renderer->shaders.tex_rgbx.program = prog =
-@@ -662,6 +677,8 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
+@@ -662,6 +746,8 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
  	renderer->shaders.tex_rgbx.tex_proj = glGetUniformLocation(prog, "tex_proj");
  	renderer->shaders.tex_rgbx.tex = glGetUniformLocation(prog, "tex");
  	renderer->shaders.tex_rgbx.alpha = glGetUniformLocation(prog, "alpha");
@@ -445,7 +556,7 @@ index e362dae..cff441a 100644
  	renderer->shaders.tex_rgbx.pos_attrib = glGetAttribLocation(prog, "pos");
  
  	if (renderer->exts.OES_egl_image_external) {
-@@ -674,9 +691,23 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
+@@ -674,9 +760,15 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
  		renderer->shaders.tex_ext.tex_proj = glGetUniformLocation(prog, "tex_proj");
  		renderer->shaders.tex_ext.tex = glGetUniformLocation(prog, "tex");
  		renderer->shaders.tex_ext.alpha = glGetUniformLocation(prog, "alpha");
@@ -454,27 +565,19 @@ index e362dae..cff441a 100644
  		renderer->shaders.tex_ext.pos_attrib = glGetAttribLocation(prog, "pos");
  	}
  
-+	renderer->shaders.blur.program = prog =
-+		link_program(renderer, common_vert_src, blur_frag_src);
-+	if (!renderer->shaders.blur.program) {
++	if (!init_blur_shader(renderer, &renderer->shaders.blur, -1)) {
 +		goto error;
 +	}
-+	renderer->shaders.blur.proj = glGetUniformLocation(prog, "proj");
-+	renderer->shaders.blur.tex_proj = glGetUniformLocation(prog, "tex_proj");
-+	renderer->shaders.blur.tex = glGetUniformLocation(prog, "tex");
-+	renderer->shaders.blur.direction = glGetUniformLocation(prog, "direction");
-+	renderer->shaders.blur.radius = glGetUniformLocation(prog, "radius");
-+	renderer->shaders.blur.pos_attrib = glGetAttribLocation(prog, "pos");
 +
  	pop_gles2_debug(renderer);
  
  	wlr_egl_unset_current(renderer->egl);
 diff --git a/render/gles2/shaders/blur.frag b/render/gles2/shaders/blur.frag
 new file mode 100644
-index 0000000..b837e4e
+index 0000000..df7d49b
 --- /dev/null
 +++ b/render/gles2/shaders/blur.frag
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,45 @@
 +#ifdef GL_FRAGMENT_PRECISION_HIGH
 +precision highp float;
 +#else
@@ -487,12 +590,28 @@ index 0000000..b837e4e
 +uniform float radius;
 +
 +// One half of a separable box blur, matching the pixman renderer so the two
-+// agree. GLSL ES 1.00 needs a constant loop bound, so the radius is applied
-+// by skipping samples instead. 64 is the widest radius the compositor
-+// accepts.
++// agree.
++//
++// BLUR_TAPS is defined when the renderer compiles this for a known radius:
++// the loop bound becomes the radius, so there is no branch and no wasted
++// iteration. Without it, GLSL ES 1.00's constant-bound requirement forces
++// the widest loop the compositor accepts plus a test on every sample.
++//
++// Both forms visit offsets ascending from -r to +r, so they sum the same
++// texels in the same order. Results agree to within 1/255 rather than
++// exactly: the compiler may contract v_texcoord + direction * offset into a
++// fused multiply-add in one body and not the other, and one ULP in the
++// coordinate flips the bilinear weights at a texel boundary.
 +void main() {
 +	vec4 total = vec4(0.0);
 +	float count = 0.0;
++#ifdef BLUR_TAPS
++	for (int i = 0; i <= BLUR_TAPS * 2; i++) {
++		float offset = float(i) - float(BLUR_TAPS);
++		total += texture2D(tex, v_texcoord + direction * offset);
++		count += 1.0;
++	}
++#else
 +	for (int i = 0; i <= 128; i++) {
 +		float offset = float(i) - 64.0;
 +		if (abs(offset) > radius) {
@@ -501,6 +620,7 @@ index 0000000..b837e4e
 +		total += texture2D(tex, v_texcoord + direction * offset);
 +		count += 1.0;
 +	}
++#endif
 +	gl_FragColor = total / count;
 +}
 diff --git a/render/gles2/shaders/meson.build b/render/gles2/shaders/meson.build
@@ -874,7 +994,7 @@ index af738bb..2ee3135 100644
  
  static const struct wlr_render_pass_impl render_pass_impl = {
 diff --git a/types/scene/wlr_scene.c b/types/scene/wlr_scene.c
-index 7bc8b76..432f586 100644
+index 7bc8b76..66b3ddc 100644
 --- a/types/scene/wlr_scene.c
 +++ b/types/scene/wlr_scene.c
 @@ -266,6 +266,13 @@ static void scene_node_opaque_region(struct wlr_scene_node *node, int x, int y,
@@ -903,7 +1023,39 @@ index 7bc8b76..432f586 100644
  		if (!scene_buffer->buffer_is_opaque) {
  			pixman_region32_copy(opaque, &scene_buffer->opaque_region);
  			pixman_region32_intersect_rect(opaque, opaque, 0, 0, width, height);
-@@ -394,16 +406,85 @@ static void scene_output_damage_whole(struct wlr_scene_output *scene_output) {
+@@ -366,13 +378,30 @@ static void transform_output_box(struct wlr_box *box, const struct render_data *
+ 	wlr_box_transform(box, box, transform, data->trans_width, data->trans_height);
+ }
+ 
++static void scene_expand_blur_damage(struct wlr_scene_output *scene_output,
++	struct wlr_scene_node *node, int lx, int ly, pixman_region32_t *damage);
++
+ static void scene_output_damage(struct wlr_scene_output *scene_output,
+ 		const pixman_region32_t *damage) {
+ 	struct wlr_output *output = scene_output->output;
+ 
++	// A blurred node reads more of the target than it writes, so damage near
++	// one drags in everything the blur will sample.
++	//
++	// This has to happen here rather than in scene_damage_outputs: software
++	// cursors and backend logic damage the output directly through
++	// wlr_output.events.damage and never pass through there. A cursor moving
++	// over a blurred window is exactly the case that leaves a trail.
++	pixman_region32_t expanded;
++	pixman_region32_init(&expanded);
++	pixman_region32_copy(&expanded, damage);
++	scene_expand_blur_damage(scene_output, &scene_output->scene->tree.node,
++		0, 0, &expanded);
++
+ 	pixman_region32_t clipped;
+ 	pixman_region32_init(&clipped);
+-	pixman_region32_intersect_rect(&clipped, damage, 0, 0, output->width, output->height);
++	pixman_region32_intersect_rect(&clipped, &expanded, 0, 0, output->width, output->height);
++	pixman_region32_fini(&expanded);
+ 
+ 	if (!pixman_region32_empty(&clipped)) {
+ 		wlr_output_schedule_frame(scene_output->output);
+@@ -394,6 +423,102 @@ static void scene_output_damage_whole(struct wlr_scene_output *scene_output) {
  	pixman_region32_fini(&damage);
  }
  
@@ -917,8 +1069,13 @@ index 7bc8b76..432f586 100644
 + * is bottom to top, lets one pass settle stacked blurred nodes. A node can
 + * be affected by one below it, never by one above.
 + */
-+static void scene_expand_blur_damage(struct wlr_scene_node *node,
-+		int lx, int ly, pixman_region32_t *damage) {
++// Damage arrives here in output-buffer coordinates, so each node's box and
++// its blur radius are converted the same way before any region maths. Doing
++// it per node rather than once up front is what keeps a scaled or rotated
++// output correct.
++static void scene_expand_blur_damage(struct wlr_scene_output *scene_output,
++		struct wlr_scene_node *node, int lx, int ly,
++		pixman_region32_t *damage) {
 +	if (!node->enabled) {
 +		return;
 +	}
@@ -927,8 +1084,8 @@ index 7bc8b76..432f586 100644
 +		struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
 +		struct wlr_scene_node *child;
 +		wl_list_for_each(child, &scene_tree->children, link) {
-+			scene_expand_blur_damage(child, lx + child->x, ly + child->y,
-+				damage);
++			scene_expand_blur_damage(scene_output, child,
++				lx + child->x, ly + child->y, damage);
 +		}
 +		return;
 +	}
@@ -948,57 +1105,60 @@ index 7bc8b76..432f586 100644
 +		return;
 +	}
 +
++	struct wlr_output *output = scene_output->output;
++	float scale = output->scale;
++	int radius = (int)ceilf(scene_buffer->backdrop_blur * scale);
++
 +	// Only the part the blur could show through is worth repainting. Behind
 +	// an opaque node the texture covers the result, so expanding there would
 +	// cost a repaint every frame and change nothing.
 +	pixman_region32_t opaque, box;
 +	pixman_region32_init(&opaque);
-+	scene_node_opaque_region(node, lx, ly, &opaque);
-+	pixman_region32_init_rect(&box, lx, ly, width, height);
-+	pixman_region32_subtract(&box, &box, &opaque);
++	scene_node_opaque_region(node, lx - scene_output->x, ly - scene_output->y,
++		&opaque);
++	scale_region(&opaque, scale, true);
++	output_to_buffer_coords(&opaque, output);
++
++	pixman_region32_init_rect(&box, lx - scene_output->x,
++		ly - scene_output->y, (uint32_t)width, (uint32_t)height);
++	scale_region(&box, scale, true);
++	output_to_buffer_coords(&box, output);
++
++	pixman_region32_t visible;
++	pixman_region32_init(&visible);
++	pixman_region32_subtract(&visible, &box, &opaque);
 +	pixman_region32_fini(&opaque);
 +
-+	if (pixman_region32_not_empty(&box)) {
-+		pixman_region32_t reach, extra;
++	if (pixman_region32_not_empty(&visible)) {
++		// Does anything within blur reach of the visible part change? If so
++		// this node's blurred output changes and it must be repainted.
++		pixman_region32_t reach;
 +		pixman_region32_init(&reach);
-+		wlr_region_expand(&reach, damage, (int)scene_buffer->backdrop_blur);
-+		pixman_region32_init(&extra);
-+		pixman_region32_intersect(&extra, &reach, &box);
-+		pixman_region32_union(damage, damage, &extra);
-+		pixman_region32_fini(&extra);
++		wlr_region_expand(&reach, damage, radius);
++		pixman_region32_intersect(&reach, &reach, &visible);
++		bool affected = pixman_region32_not_empty(&reach);
 +		pixman_region32_fini(&reach);
++
++		// Repainting the node is not enough. The blur samples the whole box
++		// widened by the radius, and outside the damage the target still
++		// holds the previous frame's composited image - this window
++		// included. Reading that feeds the blur its own output and smears.
++		if (affected) {
++			pixman_region32_t span;
++			pixman_region32_init(&span);
++			wlr_region_expand(&span, &box, radius);
++			pixman_region32_union(damage, damage, &span);
++			pixman_region32_fini(&span);
++		}
 +	}
++	pixman_region32_fini(&visible);
 +	pixman_region32_fini(&box);
 +}
 +
  static void scene_damage_outputs(struct wlr_scene *scene, const pixman_region32_t *damage) {
  	if (pixman_region32_empty(damage)) {
  		return;
- 	}
- 
-+	pixman_region32_t expanded;
-+	pixman_region32_init(&expanded);
-+	pixman_region32_copy(&expanded, damage);
-+	scene_expand_blur_damage(&scene->tree.node, 0, 0, &expanded);
-+
- 	struct wlr_scene_output *scene_output;
- 	wl_list_for_each(scene_output, &scene->outputs, link) {
- 		pixman_region32_t output_damage;
- 		pixman_region32_init(&output_damage);
--		pixman_region32_copy(&output_damage, damage);
-+		pixman_region32_copy(&output_damage, &expanded);
- 		pixman_region32_translate(&output_damage,
- 			-scene_output->x, -scene_output->y);
- 		scale_region(&output_damage, scene_output->output->scale, true);
-@@ -411,6 +492,7 @@ static void scene_damage_outputs(struct wlr_scene *scene, const pixman_region32_
- 		scene_output_damage(scene_output, &output_damage);
- 		pixman_region32_fini(&output_damage);
- 	}
-+	pixman_region32_fini(&expanded);
- }
- 
- static void update_node_update_outputs(struct wlr_scene_node *node,
-@@ -799,6 +881,18 @@ void wlr_scene_rect_set_color(struct wlr_scene_rect *rect, const float color[sta
+@@ -799,6 +924,18 @@ void wlr_scene_rect_set_color(struct wlr_scene_rect *rect, const float color[sta
  	scene_node_update(&rect->node, NULL);
  }
  
@@ -1017,7 +1177,7 @@ index 7bc8b76..432f586 100644
  static void scene_buffer_handle_buffer_release(struct wl_listener *listener,
  		void *data) {
  	struct wlr_scene_buffer *scene_buffer =
-@@ -1135,6 +1229,26 @@ void wlr_scene_buffer_set_opacity(struct wlr_scene_buffer *scene_buffer,
+@@ -1135,6 +1272,26 @@ void wlr_scene_buffer_set_opacity(struct wlr_scene_buffer *scene_buffer,
  	scene_node_update(&scene_buffer->node, NULL);
  }
  
@@ -1044,7 +1204,7 @@ index 7bc8b76..432f586 100644
  void wlr_scene_buffer_set_filter_mode(struct wlr_scene_buffer *scene_buffer,
  		enum wlr_scale_filter_mode filter_mode) {
  	if (scene_buffer->filter_mode == filter_mode) {
-@@ -1487,6 +1601,8 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
+@@ -1487,6 +1644,8 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
  
  		wlr_render_pass_add_rect(data->render_pass, &(struct wlr_render_rect_options){
  			.box = dst_box,
@@ -1053,7 +1213,7 @@ index 7bc8b76..432f586 100644
  			.color = {
  				.r = scene_rect->color[0],
  				.g = scene_rect->color[1],
-@@ -1545,6 +1661,11 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
+@@ -1545,6 +1704,11 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
  			.transform = transform,
  			.clip = &render_region,
  			.alpha = &scene_buffer->opacity,

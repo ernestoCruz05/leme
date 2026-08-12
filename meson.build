@@ -43,8 +43,6 @@ xkbcommon_dep = dependency('xkbcommon', version: '>=1.5')
 libinput_dep = dependency('libinput')
 pixman_dep = dependency('pixman-1')
 wayland_scanner = find_program('wayland-scanner')
-wayland_protocols_dep = dependency('wayland-protocols')
-wayland_protocols_dir = wayland_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
 layer_shell_header = custom_target(
   'wlr-layer-shell-server-header',
   input: 'protocols/wlr-layer-shell-unstable-v1.xml',
@@ -57,46 +55,6 @@ output_power_header = custom_target(
   output: 'wlr-output-power-management-unstable-v1-protocol.h',
   command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'],
 )
-
-xdg_shell_client_header = custom_target(
-  'xdg-shell-client-header',
-  input: 'protocols/xdg-shell.xml',
-  output: 'xdg-shell-client-protocol.h',
-  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
-)
-xdg_shell_code = custom_target(
-  'xdg-shell-private-code',
-  input: 'protocols/xdg-shell.xml',
-  output: 'xdg-shell-protocol.c',
-  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
-)
-
-wayland_protocols_staging = join_paths(wayland_protocols_dir, 'staging')
-capture_protocols = [
-  join_paths(wayland_protocols_staging, 'ext-foreign-toplevel-list',
-    'ext-foreign-toplevel-list-v1.xml'),
-  join_paths(wayland_protocols_staging, 'ext-image-capture-source',
-    'ext-image-capture-source-v1.xml'),
-  join_paths(wayland_protocols_staging, 'ext-image-copy-capture',
-    'ext-image-copy-capture-v1.xml'),
-]
-capture_client_headers = []
-capture_client_code = []
-foreach protocol : capture_protocols
-  capture_client_headers += custom_target(
-    '@0@-client-header'.format(protocol.split('/')[-1]),
-    input: protocol,
-    output: '@0@-client-protocol.h'.format(protocol.split('/')[-1]),
-    command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
-  )
-  capture_client_code += custom_target(
-    '@0@-private-code'.format(protocol.split('/')[-1]),
-    input: protocol,
-    output: '@0@-protocol.c'.format(protocol.split('/')[-1]),
-    command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
-  )
-endforeach
-wayland_client_dep = dependency('wayland-client', version: '>=1.22')
 
 leme_sources = files(
   'src/core/server.c',

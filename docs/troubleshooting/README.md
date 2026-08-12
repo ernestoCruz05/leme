@@ -9,4 +9,3 @@ Start with the [session log](startup.md#start-with-the-log), then choose the sym
 - [XWayland](xwayland.md) covers lazy startup, missing binaries, and native fallback.
 - [Crashes](crashes.md) lists the information needed for a useful report.
 
-Do not run Leme as root or change device permissions globally as a workaround. Those steps hide the login-session problem and can make the system less safe.
