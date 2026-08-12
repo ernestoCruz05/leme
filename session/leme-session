@@ -1,0 +1,40 @@
+#!/bin/sh
+
+if [ -z "${XDG_RUNTIME_DIR:-}" ] || [ ! -d "$XDG_RUNTIME_DIR" ] ||
+        [ ! -w "$XDG_RUNTIME_DIR" ]; then
+    echo "leme-session: XDG_RUNTIME_DIR is unavailable" >&2
+    exit 1
+fi
+
+export XDG_CURRENT_DESKTOP=leme
+export XDG_SESSION_DESKTOP=leme
+export XDG_SESSION_TYPE=wayland
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    if ! command -v dbus-run-session >/dev/null 2>&1; then
+        echo "leme-session: dbus-run-session is unavailable" >&2
+        exit 1
+    fi
+    exec dbus-run-session -- "$0" "$@"
+fi
+
+leme_log="${LEME_SESSION_LOG-}"
+if [ -z "$leme_log" ]; then
+    leme_state="${XDG_STATE_HOME:-${HOME:+$HOME/.local/state}}"
+    if [ -n "$leme_state" ]; then
+        leme_log="$leme_state/leme/session.log"
+    fi
+fi
+
+if [ -n "$leme_log" ] && [ "$leme_log" != none ]; then
+    if mkdir -p "$(dirname "$leme_log")" 2>/dev/null; then
+        if [ -f "$leme_log" ]; then
+            mv -f "$leme_log" "$leme_log.1" 2>/dev/null || true
+        fi
+        if true 2>/dev/null >>"$leme_log"; then
+            exec leme "$@" >"$leme_log" 2>&1
+        fi
+    fi
+fi
+
+exec leme "$@"

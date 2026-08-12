@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Leme
+Comment=Minimal wlroots Wayland compositor
+Exec=leme-session
+Type=Application
+DesktopNames=leme;wlroots

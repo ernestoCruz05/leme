@@ -1,0 +1,255 @@
+tags {
+    initial 3
+    maximum 9
+    layout dwindle
+    drop_mode simple
+    tag 2 {
+        layout master_stack
+        mfact 0.6
+        nmaster 1
+    }
+    tag 4-6 {
+        layout accordion
+        drop_mode edges
+        gap 4
+        split_ratio 0.5
+        accordion_collapse_width 46
+    }
+}
+
+style {
+    gap 8
+    border_width 2
+    border_active "#296bb8"
+    border_inactive "#3a3a3a"
+    opacity_active 1.0
+    opacity_inactive 1.0
+}
+
+# animation {
+#     open {
+#         duration 150
+#         curve ease_out
+#         # A curve may also use four cubic-bezier control points:
+#         # curve 0.34 1.56 0.64 1.0
+#         # opacity_curve ease_out
+#         effect fade scale
+#         scale_from 0.92
+#     }
+#     close {
+#         duration 120
+#         curve ease_in
+#         effect fade
+#     }
+#     workspace {
+#         duration 180
+#         # Change glide_fade to full_slide for a full-width slide.
+#         style glide_fade
+#         distance 0.15
+#         curve ease_out
+#         opacity_curve ease_out
+#     }
+# }
+
+# window "firefox" {
+#     opacity 0.95
+# }
+#
+# window "*" {
+#     title "*Picture-in-Picture*"
+#     floating true
+#     opacity 1.0
+# }
+#
+# window "mpv" {
+#     tag 3
+#     fullscreen true
+#     output "DP-2"
+# }
+
+# A named scratchpad matches this exact Wayland app-id or X11 class. Its
+# command is an argument vector, so shell expansion is not available here.
+scratchpad "drop" {
+    identity "foot-drop"
+    spawn foot --app-id foot-drop
+    width 0.6
+    height 0.6
+}
+
+keyboard {
+    layout pt
+    layout us
+}
+
+output {
+    cross_output_focus true
+    cross_output_move false
+    cross_output_drag true
+    warp_cursor true
+}
+
+output "DP-1" {
+    mode 1920x1080
+    refresh 165.0
+    scale 1.0
+    transform normal
+    position 0 0
+}
+
+output "DP-2" {
+    mode 1920x1080
+    refresh 200.0
+    scale 1.0
+    transform 90
+    right_of "DP-1"
+}
+
+pointer {
+    accel_profile adaptive
+    accel_speed 0.0
+    natural_scroll false
+    left_handed false
+    tap true
+}
+
+pointer "Razer Razer DeathAdder V2" {
+    accel_profile flat
+    accel_speed 0.0
+}
+
+vars {
+    mod SUPER
+    term foot
+}
+
+bind_group "vt" {
+    CTRL+ALT+F1 switch_vt 1
+    CTRL+ALT+F2 switch_vt 2
+    CTRL+ALT+F3 switch_vt 3
+    CTRL+ALT+F4 switch_vt 4
+    CTRL+ALT+F5 switch_vt 5
+    CTRL+ALT+F6 switch_vt 6
+    CTRL+ALT+F7 switch_vt 7
+    CTRL+ALT+F8 switch_vt 8
+    CTRL+ALT+F9 switch_vt 9
+    CTRL+ALT+F10 switch_vt 10
+    CTRL+ALT+F11 switch_vt 11
+    CTRL+ALT+F12 switch_vt 12
+}
+
+bind_group "movement" {
+    ALT+Left focus left
+    ALT+Right focus right
+    ALT+Up focus up
+    ALT+Down focus down
+    $mod+SHIFT+Left move left
+    $mod+SHIFT+Right move right
+    $mod+SHIFT+Up move up
+    $mod+SHIFT+Down move down
+}
+
+bind_group "outputs" {
+    $mod+comma focus_output left
+    $mod+period focus_output right
+    $mod+SHIFT+comma move_view_to_output left follow
+    $mod+SHIFT+period move_view_to_output right follow
+}
+
+bind_group "layouts" {
+    $mod+t set_layout dwindle
+    $mod+m set_layout master_stack
+    $mod+a set_layout accordion
+    $mod+w switch_layout
+}
+
+bind_group "tags" {
+    $mod+Right focus_next_tag
+    $mod+Left focus_previous_tag
+    $mod+Tab focus_previous_view
+    $mod+grave focus_last_tag
+    $mod+1 focus_tag 1
+    $mod+2 focus_tag 2
+    $mod+3 focus_tag 3
+    $mod+4 focus_tag 4
+    $mod+5 focus_tag 5
+    $mod+6 focus_tag 6
+    $mod+7 focus_tag 7
+    $mod+8 focus_tag 8
+    $mod+9 focus_tag 9
+    $mod+SHIFT+1 move_view_to_tag 1
+    $mod+SHIFT+2 move_view_to_tag 2
+    $mod+SHIFT+3 move_view_to_tag 3
+    $mod+SHIFT+4 move_view_to_tag 4
+    $mod+SHIFT+5 move_view_to_tag 5
+    $mod+SHIFT+6 move_view_to_tag 6
+    $mod+SHIFT+7 move_view_to_tag 7
+    $mod+SHIFT+8 move_view_to_tag 8
+    $mod+SHIFT+9 move_view_to_tag 9
+    $mod+CTRL+Right move_view_to_tag next follow
+    $mod+CTRL+Left move_view_to_tag previous follow
+    $mod+Delete remove_empty_tag 4
+}
+
+bind_group "windows" {
+    $mod+v toggle_floating
+    $mod+f toggle_fullscreen
+    $mod+q close_view
+}
+
+bind_group "scratchpads" {
+    # Send the focused window to the scratchpad pool.
+    $mod+minus scratchpad_send
+    # Show or hide the newest unnamed scratchpad.
+    $mod+equal scratchpad_toggle
+    # Return the shown scratchpad, or the newest unnamed one, to this tag.
+    $mod+SHIFT+minus scratchpad_retrieve
+    # Show or hide the named scratchpad declared above.
+    $mod+d scratchpad_toggle drop
+}
+
+binds "common" {
+    inherit vt
+    inherit movement
+    inherit outputs
+    inherit layouts
+    inherit tags
+    inherit windows
+    inherit scratchpads
+    $mod+Return spawn $term
+    CTRL+ALT+space cycle_keyboard_layout
+    $mod+r reload_config
+    $mod+space mode resize
+    $mod+SHIFT+e quit
+}
+
+binds "resize" {
+    h resize left 32
+    j resize down 32
+    k resize up 32
+    l resize right 32
+    Escape mode common
+}
+
+binds "game" {
+    escape_exits false
+    inherit vt
+    inherit outputs
+    inherit windows
+    $mod+SHIFT+g mode common
+}
+
+publication {
+    activation follow
+}
+
+# Configuration errors are written to the session log and exposed through
+# `timao get config`. The accepted config_errors block is reserved for a
+# future on-screen report and currently has no visible effect.
+
+env {
+    XCURSOR_THEME Adwaita
+}
+
+exec {
+    foot --server
+}

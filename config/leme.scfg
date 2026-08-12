@@ -1,0 +1,30 @@
+tags {
+    initial 3
+    maximum 9
+    layout dwindle
+}
+
+keyboard {
+    layout us
+}
+
+vars {
+    mod SUPER
+    term foot
+}
+
+binds "common" {
+    $mod+Return spawn $term
+    $mod+q close_view
+
+    $mod+1 focus_tag 1
+    $mod+2 focus_tag 2
+    $mod+3 focus_tag 3
+
+    $mod+SHIFT+1 move_view_to_tag 1
+    $mod+SHIFT+2 move_view_to_tag 2
+    $mod+SHIFT+3 move_view_to_tag 3
+
+    $mod+r reload_config
+    $mod+SHIFT+e quit
+}
