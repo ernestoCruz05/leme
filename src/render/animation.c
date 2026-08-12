@@ -76,6 +76,10 @@ leme_animation_copy_children(struct leme_animation_copy_context context)
             if (branch == NULL) {
                 return false;
             }
+#ifdef LEME_HAVE_EFFECTS
+            wlr_scene_rect_set_corner_radius(branch,
+                rect->corner_radius, rect->border_thickness);
+#endif
             copy = &branch->node;
             break;
         }
@@ -99,6 +103,12 @@ leme_animation_copy_children(struct leme_animation_copy_context context)
             wlr_scene_buffer_set_transform(branch, buffer->transform);
             wlr_scene_buffer_set_filter_mode(branch, buffer->filter_mode);
             wlr_scene_buffer_set_opacity(branch, buffer->opacity);
+#ifdef LEME_HAVE_EFFECTS
+            wlr_scene_buffer_set_corner_radius(branch,
+                buffer->corner_radius);
+            wlr_scene_buffer_set_backdrop_blur(branch,
+                buffer->backdrop_blur);
+#endif
             copy = &branch->node;
             break;
         }
