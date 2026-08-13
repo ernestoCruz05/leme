@@ -7,6 +7,7 @@
 #include "render/animation.h"
 #include "render/render.h"
 #include "render/workspace_effect.h"
+#include "shell/layer.h"
 #include "shell/view.h"
 
 #include <limits.h>
@@ -48,6 +49,34 @@ leme_workspace_view_is_participant(const struct leme_view *view,
         !view->unmanaged && !view->detached && view->tag != NULL &&
         view->tag->owner != NULL && view->tag->owner->output == output &&
         view->tag->id == tag_id;
+}
+
+static const struct leme_view *
+leme_workspace_destination_focus(
+    const struct leme_output *output, uint16_t tag_id)
+{
+    const struct leme_tag *tag;
+    const struct leme_view *view;
+
+    if (output == NULL || output->server == NULL ||
+            output->server->focused_output != output ||
+            leme_layer_keyboard_is_exclusive(output->server) ||
+            tag_id == 0 || tag_id > output->tags.max_tags) {
+        return NULL;
+    }
+    tag = output->tags.table[tag_id];
+    if (tag == NULL) {
+        return NULL;
+    }
+    if (tag->focused_view != NULL && tag->focused_view->mapped) {
+        return tag->focused_view;
+    }
+    wl_list_for_each(view, &tag->views, tag_link) {
+        if (view->mapped) {
+            return view;
+        }
+    }
+    return NULL;
 }
 
 static bool
@@ -103,6 +132,7 @@ struct leme_workspace_collection {
 static bool
 leme_workspace_collect_parent(struct leme_output *output,
     uint16_t tag_id, const struct leme_workspace_collection *collection,
+    const struct leme_view *active_view,
     const struct leme_workspace_transition_ops *ops)
 {
     struct wlr_scene_node *node;
@@ -119,6 +149,9 @@ leme_workspace_collect_parent(struct leme_output *output,
         if (copy == NULL) {
             return false;
         }
+        if (view == active_view) {
+            leme_render_view_apply_active_snapshot(view, copy);
+        }
         wlr_scene_node_set_position(&copy->node,
             leme_workspace_coordinate_subtract(
                 copy->node.x, output->full_box.x),
@@ -131,6 +164,7 @@ leme_workspace_collect_parent(struct leme_output *output,
 static bool
 leme_workspace_collect_tag(struct leme_output *output, uint16_t tag_id,
     struct wlr_scene_tree *composition,
+    const struct leme_view *active_view,
     const struct leme_workspace_transition_ops *ops)
 {
     if (!leme_workspace_tag_is_capturable(output, tag_id)) {
@@ -140,12 +174,12 @@ leme_workspace_collect_tag(struct leme_output *output, uint16_t tag_id,
             &(struct leme_workspace_collection){
                 .source = output->server->scene_tiled,
                 .destination = composition,
-            }, ops) &&
+            }, active_view, ops) &&
         leme_workspace_collect_parent(output, tag_id,
             &(struct leme_workspace_collection){
                 .source = output->server->scene_floating,
                 .destination = composition,
-            }, ops);
+            }, active_view, ops);
 }
 
 static void
@@ -221,6 +255,7 @@ leme_render_workspace_transition_prepare_with_ops(
     struct leme_workspace_transition *transition = NULL;
     struct leme_workspace_transition *previous = output == NULL ? NULL :
         output->workspace_transition;
+    const struct leme_view *destination_focus;
     bool previous_finished = previous == NULL;
 
     if (!leme_workspace_transition_is_eligible(output,
@@ -231,6 +266,8 @@ leme_render_workspace_transition_prepare_with_ops(
         }
         return NULL;
     }
+    destination_focus = leme_workspace_destination_focus(
+        output, destination_id);
     if (previous == NULL) {
         leme_render_output_animations_finish(output);
     } else {
@@ -256,7 +293,7 @@ leme_render_workspace_transition_prepare_with_ops(
     }
     if (previous == NULL) {
         if (!leme_workspace_collect_tag(output, source_id,
-                transition->outgoing, ops)) {
+                transition->outgoing, NULL, ops)) {
             goto fail;
         }
     } else {
@@ -275,7 +312,7 @@ leme_render_workspace_transition_prepare_with_ops(
         previous_finished = true;
     }
     if (!leme_workspace_collect_tag(output, destination_id,
-            transition->incoming, ops)) {
+            transition->incoming, destination_focus, ops)) {
         goto fail;
     }
     transition->effect = ops->effect_create(transition->outgoing,

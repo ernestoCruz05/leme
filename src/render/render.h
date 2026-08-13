@@ -88,6 +88,8 @@ void leme_render_view_hide_drop_preview(struct leme_view *view);
 void leme_render_set_view_visible(struct leme_view *view, bool visible);
 void leme_render_view_focus(struct leme_view *view);
 void leme_render_view_set_activated(struct leme_view *view, bool activated);
+void leme_render_view_apply_active_snapshot(
+    const struct leme_view *view, struct wlr_scene_tree *snapshot);
 float leme_render_view_opacity(const struct leme_config *config,
     bool activated, bool fullscreen, const struct leme_view_rules *rules);
 void leme_render_view_update_layer(struct leme_view *view);

@@ -1075,6 +1075,37 @@ leme_render_view_frame_from_snapshot(struct wlr_scene_tree *snapshot,
     }
 }
 
+void
+leme_render_view_apply_active_snapshot(
+    const struct leme_view *view, struct wlr_scene_tree *snapshot)
+{
+    struct leme_render_view_frame_nodes nodes;
+    const struct leme_config *config;
+    struct leme_view_rules rules;
+    float opacity;
+    size_t index;
+
+    if (view == NULL || snapshot == NULL || view->server == NULL ||
+            view->server->config == NULL) {
+        return;
+    }
+    config = view->server->config;
+    rules = leme_view_rules_match(config,
+        leme_view_identity(view), leme_view_title(view));
+    opacity = leme_render_view_opacity(
+        config, true, view->fullscreen, &rules);
+    wlr_scene_node_for_each_buffer(&snapshot->node,
+        leme_render_view_apply_opacity, &opacity);
+
+    leme_render_view_frame_from_snapshot(snapshot, &nodes);
+    for (index = 0; index < LEME_ARRAY_LENGTH(nodes.border); index++) {
+        if (nodes.border[index] != NULL) {
+            wlr_scene_rect_set_color(
+                nodes.border[index], config->border_active);
+        }
+    }
+}
+
 static struct leme_box
 leme_render_view_shrunk(struct leme_box box, double scale_from)
 {
