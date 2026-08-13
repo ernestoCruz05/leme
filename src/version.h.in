@@ -1,0 +1,6 @@
+#ifndef LEME_VERSION_H
+#define LEME_VERSION_H
+
+#define LEME_VCS_TAG "@VCS_TAG@"
+
+#endif

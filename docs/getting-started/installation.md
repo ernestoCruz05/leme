@@ -45,6 +45,12 @@ The install contains:
 /usr/share/xdg-desktop-portal/leme-portals.conf
 ```
 
+Check which build is installed with:
+
+```sh
+leme --version
+```
+
 Read [minimal configuration](minimal-config.md) before copying a config file. Read [first session](first-session.md) before selecting Leme from a display manager or launching it from a TTY.
 
 ## Visual effects

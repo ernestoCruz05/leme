@@ -6,6 +6,16 @@ project(
 
 add_project_arguments('-D_POSIX_C_SOURCE=200809L', '-DWLR_USE_UNSTABLE', language: 'c')
 
+leme_version_header = vcs_tag(
+  input: 'src/version.h.in',
+  output: 'leme-version.h',
+  command: ['git', 'describe', '--always', '--dirty', '--exclude=*'],
+  fallback: 'unknown',
+)
+leme_version_c_args = [
+  '-DLEME_VERSION="@0@"'.format(meson.project_version()),
+]
+
 cc = meson.get_compiler('c')
 add_project_arguments(
   cc.get_supported_arguments(
@@ -125,8 +135,10 @@ leme_exe = executable(
   'src/main.c',
   leme_sources,
   layer_shell_header,
+  leme_version_header,
   include_directories: leme_inc,
   dependencies: leme_dependencies,
+  c_args: leme_version_c_args,
   install: true,
 )
 

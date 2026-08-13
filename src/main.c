@@ -1,5 +1,6 @@
 #include "config/config.h"
 #include "core/server.h"
+#include "leme-version.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +13,9 @@ leme_usage(FILE *stream)
 {
     fputs("usage: leme\n"
         "       leme --config-check [PATH]\n"
-        "       leme --help\n", stream);
+        "       leme --help\n"
+        "       leme --version\n"
+        "       leme -v\n", stream);
 }
 
 int
@@ -24,6 +27,18 @@ main(int argc, char *argv[])
     if (argc > 1) {
         if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
             leme_usage(stdout);
+            return EXIT_SUCCESS;
+        }
+        if (strcmp(argv[1], "--version") == 0 ||
+                strcmp(argv[1], "-v") == 0) {
+            if (argc != 2) {
+                leme_usage(stderr);
+                return 2;
+            }
+            if (printf("leme %s (%s)\n", LEME_VERSION,
+                    LEME_VCS_TAG) < 0) {
+                return EXIT_FAILURE;
+            }
             return EXIT_SUCCESS;
         }
         if (strcmp(argv[1], "--config-check") == 0 ||
