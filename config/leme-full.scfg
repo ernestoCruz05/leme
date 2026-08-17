@@ -192,6 +192,8 @@ bind_group "tags" {
 
 bind_group "windows" {
     $mod+v toggle_floating
+    # Keep the focused floating window above every tag on this output.
+    $mod+s toggle_sticky
     $mod+f toggle_fullscreen
     $mod+q close_view
 }
@@ -242,12 +244,17 @@ publication {
     activation follow
 }
 
+cursor {
+    theme Adwaita
+    size 24
+}
+
 # Configuration errors are written to the session log and exposed through
 # `timao get config`. The accepted config_errors block is reserved for a
 # future on-screen report and currently has no visible effect.
 
 env {
-    XCURSOR_THEME Adwaita
+    MOZ_ENABLE_WAYLAND 1
 }
 
 exec {

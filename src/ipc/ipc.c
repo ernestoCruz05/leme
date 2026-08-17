@@ -270,7 +270,8 @@ leme_ipc_emit(struct leme_ipc *ipc, uint32_t event, const char *text)
 
 static void
 leme_ipc_emit_string(struct leme_ipc *ipc, uint32_t event,
-    const char *name, const char *key, const char *value)
+    const char *name, // NOLINT(bugprone-easily-swappable-parameters)
+    const char *key, const char *value)
 {
     struct leme_json json;
     const char *text;
@@ -358,7 +359,10 @@ leme_ipc_diff(struct leme_ipc *ipc, const struct leme_ipc_state *previous,
     }
     if (previous->has_focused_view != current->has_focused_view ||
             previous->focused_floating != current->focused_floating ||
-            previous->focused_scratchpad != current->focused_scratchpad) {
+            previous->focused_scratchpad != current->focused_scratchpad ||
+            previous->focused_sticky != current->focused_sticky ||
+            leme_ipc_text_changed(previous->focused_view_output,
+                current->focused_view_output)) {
         struct leme_json json;
         const char *text;
 
@@ -375,6 +379,12 @@ leme_ipc_diff(struct leme_ipc *ipc, const struct leme_ipc_state *previous,
         leme_json_key(&json, "scratchpad");
         if (current->has_focused_view) {
             leme_json_bool(&json, current->focused_scratchpad);
+        } else {
+            leme_json_null(&json);
+        }
+        leme_json_key(&json, "sticky");
+        if (current->has_focused_view) {
+            leme_json_bool(&json, current->focused_sticky);
         } else {
             leme_json_null(&json);
         }
@@ -459,7 +469,9 @@ leme_ipc_client_dispatch(struct leme_ipc_client *client, char *line)
 }
 
 static int
-leme_ipc_handle_client(int fd, uint32_t mask, void *data)
+leme_ipc_handle_client(
+    int fd, // NOLINT(bugprone-easily-swappable-parameters)
+    uint32_t mask, void *data)
 {
     struct leme_ipc_client *client = data;
     char buffer[LEME_IPC_MAX_LINE];
@@ -506,7 +518,9 @@ leme_ipc_handle_client(int fd, uint32_t mask, void *data)
 }
 
 static int
-leme_ipc_handle_listen(int fd, uint32_t mask, void *data)
+leme_ipc_handle_listen(
+    int fd, // NOLINT(bugprone-easily-swappable-parameters)
+    uint32_t mask, void *data)
 {
     struct leme_ipc *ipc = data;
     struct leme_ipc_client *client;

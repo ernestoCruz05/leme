@@ -2,6 +2,7 @@
 
 #include "shell/layer.h"
 #include "shell/scratchpad.h"
+#include "shell/sticky.h"
 #include "output/output.h"
 #include "render/render.h"
 #include "core/server.h"
@@ -82,6 +83,7 @@ leme_layer_arrange(struct leme_server *server)
         /* As fracções nomeadas são política de exibição. Nesta costura
          * final da área útil, preserva-se a caixa actual e só se limita. */
         leme_scratchpad_handle_usable_area(output);
+        leme_sticky_handle_usable_area(output);
         if (!leme_layer_box_equal(previous, usable)) {
             wlr_log(WLR_INFO, "leme: usable area on %s %dx%d+%d+%d",
                 output->wlr_output->name, usable.width, usable.height,

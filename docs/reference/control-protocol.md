@@ -27,6 +27,7 @@ Each request is one whitespace-separated line. The verbs are the same tokens acc
 set_layout accordion
 switch_layout
 toggle_floating
+toggle_sticky
 scratchpad_send
 scratchpad_toggle
 scratchpad_toggle drop
@@ -76,16 +77,16 @@ The state tree contains focused output, mode, keyboard layouts, published worksp
 ### Focused view
 
 `get focused_view` puts the focused-view projection in `value`. The projection
-has `floating` first and `scratchpad` second:
+has `floating` first, `scratchpad` second, and `sticky` third:
 
 ```json
-{"ok":true,"value":{"floating":true,"scratchpad":false}}
+{"ok":true,"value":{"floating":true,"scratchpad":false,"sticky":true}}
 ```
 
-A focused scratchpad has `"scratchpad":true`:
+A focused scratchpad has `"scratchpad":true` and `"sticky":false`:
 
 ```json
-{"ok":true,"value":{"floating":true,"scratchpad":true}}
+{"ok":true,"value":{"floating":true,"scratchpad":true,"sticky":false}}
 ```
 
 With no focused view, the complete response is:
@@ -99,24 +100,25 @@ Each focused-view field is also available as a query:
 ```text
 get focused_view floating
 get focused_view scratchpad
-get focused_view floating,scratchpad
+get focused_view sticky
+get focused_view floating,scratchpad,sticky
 ```
 
-The first two queries put a JSON boolean in `value`, or `null` when no view is
-focused:
+Each query puts a JSON boolean in `value`, or `null` when no view is focused:
 
 | Request | True response | False response | No focused view |
 | --- | --- | --- | --- |
 | `get focused_view floating` | `{"ok":true,"value":true}` | `{"ok":true,"value":false}` | `{"ok":true,"value":null}` |
 | `get focused_view scratchpad` | `{"ok":true,"value":true}` | `{"ok":true,"value":false}` | `{"ok":true,"value":null}` |
+| `get focused_view sticky` | `{"ok":true,"value":true}` | `{"ok":true,"value":false}` | `{"ok":true,"value":null}` |
 
-The comma query puts an object in `value` in `floating`, `scratchpad` order.
+The comma query puts an object in `value` in `floating`, `scratchpad`, `sticky` order.
 For a focused scratchpad and with no focused view, respectively, the responses
 are:
 
 ```json
-{"ok":true,"value":{"floating":true,"scratchpad":true}}
-{"ok":true,"value":{"floating":null,"scratchpad":null}}
+{"ok":true,"value":{"floating":true,"scratchpad":true,"sticky":false}}
+{"ok":true,"value":{"floating":null,"scratchpad":null,"sticky":null}}
 ```
 
 ## Events
@@ -134,17 +136,17 @@ subscribe keyboard_layout mode
 | `keyboard_layout` | `{"event":"keyboard_layout","layout":"us"}` |
 | `mode` | `{"event":"mode","mode":"resize"}` |
 | `focused_output` | `{"event":"focused_output","output":"HDMI-A-1"}` |
-| `view` | `{"event":"view","floating":true,"scratchpad":false}` |
+| `view` | `{"event":"view","floating":true,"scratchpad":false,"sticky":true}` |
 | `config` | `{"event":"config","diagnostics":3,"truncated":false}` |
 
 Events are generated from reconciled state. A client that never subscribes
 receives none. Event JSON is not wrapped in a query response envelope.
 
-The `view` event has both fields. When no view is focused, both values are
-null:
+The `view` event has all three fields in canonical order. When no view is
+focused, all values are null:
 
 ```json
-{"event":"view","floating":null,"scratchpad":null}
+{"event":"view","floating":null,"scratchpad":null,"sticky":null}
 ```
 
 ## Locked sessions and stale sockets

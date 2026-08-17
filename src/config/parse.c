@@ -1399,6 +1399,82 @@ leme_config_output_relation(const char *name,
 }
 
 static bool
+leme_config_parse_cursor_size(struct leme_config *config,
+    const struct leme_scfg_directive *entry, bool *handled)
+{
+    int value;
+
+    if (!leme_config_parse_nonnegative(entry->params[0], &value) ||
+            value == 0 || value > LEME_CURSOR_SIZE_MAX) {
+        return leme_config_reject(config, entry->lineno,
+            "size expects an integer between 1 and %d",
+            LEME_CURSOR_SIZE_MAX);
+    }
+    config->cursor.size = value;
+    *handled = true;
+    return true;
+}
+
+static bool
+leme_config_parse_cursor(struct leme_config *config,
+    const struct leme_scfg_directive *directive, const char *path, char **error)
+{
+    bool have_theme = false;
+    bool have_size = false;
+    size_t index;
+
+    if (directive->params_len != 0) {
+        leme_config_set_error(error,
+            "%s:%d: cursor block takes no parameters",
+            path, directive->lineno);
+        return false;
+    }
+    for (index = 0; index < directive->children.directives_len; index++) {
+        const struct leme_scfg_directive *entry =
+            &directive->children.directives[index];
+        const bool theme = strcmp(entry->name, "theme") == 0;
+        const bool size = strcmp(entry->name, "size") == 0;
+
+        if (entry->params_len != 1 || entry->children.directives_len != 0) {
+            if (!leme_config_reject(config, entry->lineno,
+                    "cursor property requires one value")) {
+                return false;
+            }
+            continue;
+        }
+        if (!theme && !size) {
+            if (!leme_config_reject(config, entry->lineno,
+                    "unknown cursor property %s", entry->name)) {
+                return false;
+            }
+            continue;
+        }
+        if ((theme && have_theme) || (size && have_size)) {
+            if (!leme_config_reject(config, entry->lineno,
+                    "duplicate cursor property %s", entry->name)) {
+                return false;
+            }
+            continue;
+        }
+        if (theme) {
+            char *name = strdup(entry->params[0]);
+
+            if (name == NULL) {
+                leme_config_set_error(error, "%s:%d: out of memory",
+                    path, entry->lineno);
+                return false;
+            }
+            free(config->cursor.theme);
+            config->cursor.theme = name;
+            have_theme = true;
+        } else if (!leme_config_parse_cursor_size(config, entry, &have_size)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool
 leme_config_parse_publication(struct leme_config *config,
     const struct leme_scfg_directive *directive, const char *path, char **error)
 {
@@ -3039,6 +3115,7 @@ leme_config_load(const char *path, char **error)
     bool have_animation = false;
     bool have_keyboard = false;
     bool have_output_policy = false;
+    bool have_cursor = false;
     bool have_publication = false;
     bool have_config_errors = false;
     bool have_global_pointer = false;
@@ -3064,6 +3141,7 @@ leme_config_load(const char *path, char **error)
         .timeout = 0,
     };
     config->drop_mode = LEME_DROP_MODE_SIMPLE;
+    config->cursor.size = LEME_CURSOR_SIZE_DEFAULT;
     config->publication.activation = LEME_ACTIVATION_FOLLOW;
     leme_config_set_style_defaults(config);
     leme_config_set_output_defaults(config);
@@ -3120,6 +3198,9 @@ leme_config_load(const char *path, char **error)
         } else if (strcmp(directive->name, "output") == 0) {
             valid = leme_config_parse_output(config, directive,
                 path, error, &have_output_policy);
+        } else if (strcmp(directive->name, "cursor") == 0 && !have_cursor) {
+            have_cursor = true;
+            valid = leme_config_parse_cursor(config, directive, path, error);
         } else if (strcmp(directive->name, "publication") == 0 &&
                 !have_publication) {
             have_publication = true;

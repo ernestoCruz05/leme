@@ -219,7 +219,7 @@ leme_server_init(struct leme_server *server)
     if (!leme_input_protocols_init(server)) {
         return false;
     }
-    if (!leme_scratchpad_init(server)) {
+    if (!leme_scratchpad_init(server) || !leme_sticky_init(server)) {
         return false;
     }
     leme_xwayland_init(server);
@@ -297,6 +297,7 @@ leme_server_finish(struct leme_server *server)
     if (server->display != NULL) {
         wl_display_destroy_clients(server->display);
     }
+    leme_sticky_finish(server);
     leme_scratchpad_finish(server);
 
     leme_desktop_finish(server);

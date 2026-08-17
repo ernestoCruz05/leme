@@ -78,7 +78,8 @@ leme_ipc_capture_keyboard(struct leme_ipc_state *state,
     if (config == NULL || config->keyboard_layout_count == 0) {
         return true;
     }
-    state->keyboard_available = calloc(config->keyboard_layout_count,
+    state->keyboard_available = (char **)calloc(
+        config->keyboard_layout_count,
         sizeof(*state->keyboard_available));
     if (state->keyboard_available == NULL) {
         return false;
@@ -225,6 +226,15 @@ leme_ipc_state_capture(struct leme_ipc_state *state,
         state->focused_floating = server->focused_view->floating;
         state->focused_scratchpad =
             leme_view_is_scratchpad(server->focused_view);
+        state->focused_sticky = leme_view_is_sticky(server->focused_view);
+        if (leme_ownership_effective_output(server->focused_view) != NULL &&
+                leme_ownership_effective_output(server->focused_view)->wlr_output != NULL) {
+            state->focused_view_output = strdup(
+                leme_ownership_effective_output(server->focused_view)->wlr_output->name);
+            if (state->focused_view_output == NULL) {
+                goto error;
+            }
+        }
     }
     return true;
 
@@ -244,12 +254,13 @@ leme_ipc_state_finish(struct leme_ipc_state *state)
     }
     free(state->config_diagnostics);
     free(state->focused_output);
+    free(state->focused_view_output);
     free(state->mode);
     free(state->keyboard_active);
     for (index = 0; index < state->keyboard_count; index++) {
         free(state->keyboard_available[index]);
     }
-    free(state->keyboard_available);
+    free((void *)state->keyboard_available);
     for (index = 0; index < state->workspace_count; index++) {
         free(state->workspaces[index].id);
     }
@@ -313,6 +324,8 @@ leme_ipc_write_focused_view(const struct leme_ipc_state *state,
     leme_json_bool(json, state->focused_floating);
     leme_json_key(json, "scratchpad");
     leme_json_bool(json, state->focused_scratchpad);
+    leme_json_key(json, "sticky");
+    leme_json_bool(json, state->focused_sticky);
     leme_json_object_end(json);
 }
 
@@ -456,7 +469,8 @@ leme_ipc_write_view_field(const struct leme_ipc_state *state,
 {
     if (!state->has_focused_view) {
         if (strcmp(field, "floating") != 0 &&
-                strcmp(field, "scratchpad") != 0) {
+                strcmp(field, "scratchpad") != 0 &&
+                strcmp(field, "sticky") != 0) {
             leme_ipc_set_error(error, field);
             return false;
         }
@@ -467,6 +481,8 @@ leme_ipc_write_view_field(const struct leme_ipc_state *state,
         leme_json_bool(json, state->focused_floating);
     } else if (strcmp(field, "scratchpad") == 0) {
         leme_json_bool(json, state->focused_scratchpad);
+    } else if (strcmp(field, "sticky") == 0) {
+        leme_json_bool(json, state->focused_sticky);
     } else {
         leme_ipc_set_error(error, field);
         return false;

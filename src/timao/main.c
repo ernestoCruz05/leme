@@ -151,12 +151,15 @@ timao_scan_value(const char *cursor, const char **end)
         if (character == '{' || character == '[') {
             depth++;
         } else if (character == '}' || character == ']') {
+            if (depth == 0) {
+                return cursor;
+            }
             depth--;
-            if (depth <= 0) {
+            if (depth == 0) {
                 (*end)++;
                 return cursor;
             }
-        } else if (depth == 0 && (character == ',' || character == '}')) {
+        } else if (depth == 0 && character == ',') {
             return cursor;
         }
     }

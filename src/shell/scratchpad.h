@@ -13,12 +13,6 @@ struct leme_server;
 struct leme_tags;
 struct leme_view;
 
-enum leme_scratchpad_state {
-    LEME_SCRATCHPAD_NONE,
-    LEME_SCRATCHPAD_HIDDEN,
-    LEME_SCRATCHPAD_SHOWN,
-};
-
 enum leme_scratchpad_map_result {
     LEME_SCRATCHPAD_MAP_NO_MATCH,
     LEME_SCRATCHPAD_MAP_ADOPTED,
@@ -30,7 +24,6 @@ struct leme_scratchpad_manager {
     struct wl_list pool; /* struct leme_view::scratchpad_link, MRU first */
     struct wl_list pending; /* private owned named spawn requests */
     struct leme_view *shown;
-    struct leme_output *shown_output;
     /*
      * Ganchos que um teste preenche para substituir o que toca no sistema:
      * lançar um processo, armar um temporizador, contar configurações. Em
@@ -72,8 +65,6 @@ bool leme_scratchpad_retrieve(struct leme_server *server,
     struct leme_tags *destination);
 bool leme_view_is_scratchpad(const struct leme_view *view);
 bool leme_view_is_shown_scratchpad(const struct leme_view *view);
-/* Uma vista gerida e mapeada que pode estar exposta pelos protocolos. */
-bool leme_view_protocol_eligible(const struct leme_view *view);
 enum leme_scratchpad_map_result leme_scratchpad_try_adopt_map(
     struct leme_view *view);
 void leme_scratchpad_handle_unmap(struct leme_view *view);

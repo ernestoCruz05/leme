@@ -13,6 +13,7 @@ struct leme_view;
 
 struct leme_tags;
 struct leme_tag_detach;
+struct leme_tag_materialize;
 
 struct leme_tags_resize {
     struct leme_tags *tags;
@@ -30,6 +31,7 @@ enum leme_tags_prepare_checkpoint {
 
 enum leme_tag_change_direction {
     LEME_TAG_CHANGE_BACKWARD = -1,
+    LEME_TAG_CHANGE_NONE = 0,
     LEME_TAG_CHANGE_FORWARD = 1,
 };
 
@@ -96,6 +98,14 @@ bool leme_tags_prepare_detach(struct leme_view *view,
 void leme_tags_commit_detach(struct leme_view *view,
     struct leme_tag_detach **detach);
 void leme_tags_discard_detach(struct leme_tag_detach **detach);
+bool leme_tags_prepare_materialize(struct leme_tags *tags, uint16_t id,
+    struct leme_tag_materialize **plan);
+struct leme_tag *leme_tags_materialize_target(
+    const struct leme_tag_materialize *plan);
+void leme_tags_commit_materialize(struct leme_tag_materialize **plan);
+void leme_tags_discard_materialize(struct leme_tag_materialize **plan);
+void leme_tags_attach_floating_prepared(struct leme_tag *tag,
+    struct leme_view *view, bool focused);
 bool leme_tags_prepare_floating_attach(struct leme_tags *tags, uint16_t id);
 void leme_tags_attach_floating(struct leme_tags *tags,
     struct leme_view *view, uint16_t id);

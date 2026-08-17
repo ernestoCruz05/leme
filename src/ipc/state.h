@@ -48,6 +48,8 @@ struct leme_ipc_state {
     bool has_focused_view;
     bool focused_floating;
     bool focused_scratchpad;
+    bool focused_sticky;
+    char *focused_view_output;
 };
 
 bool leme_ipc_state_capture(struct leme_ipc_state *state,

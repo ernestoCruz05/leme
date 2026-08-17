@@ -3,6 +3,8 @@
 
 #include "config/config.h"
 #include "shell/layer.h"
+#include "shell/ownership.h"
+#include "shell/ownership_internal.h"
 #include "shell/view.h"
 #include "core/server.h"
 #include "output/output.h"
@@ -116,12 +118,17 @@ leme_tags_apply_settings(struct leme_tags *tags,
                 leme_layout_set_kind(&tag->layout, new_settings.layout,
                     NULL, 0);
             } else {
-                views = calloc(count, sizeof(*views));
+                views = (struct leme_view **)calloc(
+                    count, sizeof(*views));
                 if (views != NULL) {
-                    (void)leme_tags_tiled_views(tag, views, count);
-                    leme_layout_set_kind(&tag->layout, new_settings.layout,
-                        views, count);
-                    free(views);
+                    const size_t collected =
+                        leme_tags_tiled_views(tag, views, count);
+
+                    if (collected == count) {
+                        leme_layout_set_kind(&tag->layout,
+                            new_settings.layout, views, count);
+                    }
+                    free((void *)views);
                 }
             }
         }
@@ -151,13 +158,16 @@ leme_tags_set_layout(struct leme_tags *tags, enum leme_layout_kind kind)
         leme_layout_set_kind(&tag->layout, kind, NULL, 0);
         return true;
     }
-    views = calloc(count, sizeof(*views));
+    views = (struct leme_view **)calloc(count, sizeof(*views));
     if (views == NULL) {
         return false;
     }
-    (void)leme_tags_tiled_views(tag, views, count);
+    if (leme_tags_tiled_views(tag, views, count) != count) {
+        free((void *)views);
+        return false;
+    }
     leme_layout_set_kind(&tag->layout, kind, views, count);
-    free(views);
+    free((void *)views);
     return true;
 }
 
@@ -288,7 +298,8 @@ leme_tags_init(struct leme_tags *tags, uint16_t initial_tags, uint16_t max_tags)
     if (initial_tags == 0 || initial_tags > max_tags) {
         return false;
     }
-    tags->table = calloc((size_t)max_tags + 1, sizeof(*tags->table));
+    tags->table = (struct leme_tag **)calloc(
+        (size_t)max_tags + 1, sizeof(*tags->table));
     if (tags->table == NULL) {
         return false;
     }
@@ -319,12 +330,12 @@ leme_tags_finish(struct leme_tags *tags)
         wl_list_for_each_safe(view, next, &tags->table[id]->views, tag_link) {
             wl_list_remove(&view->tag_link);
             wl_list_init(&view->tag_link);
-            view->tag = NULL;
+            leme_ownership_release_tag(view, tags->table[id]);
         }
         leme_layout_finish(&tags->table[id]->layout);
         free(tags->table[id]);
     }
-    free(tags->table);
+    free((void *)tags->table);
     *tags = (struct leme_tags){0};
 }
 
@@ -382,12 +393,14 @@ leme_tags_prepare_set_max(struct leme_tags *tags, uint16_t max_tags,
         *resize = (struct leme_tags_resize){0};
         return false;
     }
-    table = calloc(count, sizeof(*table));
+    table = (struct leme_tag **)calloc(count, sizeof(*table));
     if (table == NULL) {
         *resize = (struct leme_tags_resize){0};
         return false;
     }
-    memcpy(table, tags->table, ((size_t)tags->max_tags + 1) * sizeof(*table));
+    for (size_t index = 0; index <= tags->max_tags; index++) {
+        table[index] = tags->table[index];
+    }
     resize->table = table;
     return true;
 }
@@ -398,7 +411,7 @@ leme_tags_discard_set_max(struct leme_tags_resize *resize)
     if (resize == NULL) {
         return;
     }
-    free(resize->table);
+    free((void *)resize->table);
     *resize = (struct leme_tags_resize){0};
 }
 
@@ -413,7 +426,7 @@ leme_tags_commit_set_max(struct leme_tags_resize *resize)
     }
     tags = resize->tags;
     if (resize->table != NULL) {
-        free(tags->table);
+        free((void *)tags->table);
         tags->table = resize->table;
         resize->table = NULL;
     }
@@ -616,7 +629,7 @@ leme_tags_assign_view_to(struct leme_tags *tags,
 {
     struct leme_tag *tag;
 
-    if (tags == NULL || view == NULL || view->tag != NULL || id == 0 ||
+    if (tags == NULL || view == NULL || leme_ownership_tag(view) != NULL || id == 0 ||
             id > tags->max_tags) {
         return false;
     }
@@ -630,7 +643,7 @@ leme_tags_assign_view_to(struct leme_tags *tags,
     if (id == tags->focused_id) {
         tags->focused_is_candidate = false;
     }
-    view->tag = tag;
+    leme_ownership_commit_tag(view, tag);
     wl_list_insert(&tag->views, &view->tag_link);
     if (!view->floating) {
         leme_layout_add_view(&tag->layout, tag->focused_view, view);
@@ -654,7 +667,7 @@ leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
     struct leme_tag *source;
     struct leme_tag *target;
 
-    if (destination == NULL || view == NULL || view->tag == NULL) {
+    if (destination == NULL || view == NULL || leme_ownership_tag(view) == NULL) {
         return false;
     }
     if (id == 0) {
@@ -663,7 +676,7 @@ leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
     if (id > destination->max_tags) {
         id = destination->max_tags;
     }
-    source = view->tag;
+    source = leme_ownership_tag(view);
     source_tags = source->owner;
     target = materialize(destination, id);
     if (target == NULL) {
@@ -679,7 +692,7 @@ leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
         source->focused_view = NULL;
     }
     wl_list_remove(&view->tag_link);
-    view->tag = target;
+    leme_ownership_replace_tag(view, source, target);
     wl_list_insert(&target->views, &view->tag_link);
     if (!view->floating && !view->detached) {
         leme_layout_add_view(&target->layout, target->focused_view, view);
@@ -701,14 +714,14 @@ leme_tags_move_view(struct leme_tags *tags,
     struct leme_tag *source;
     struct leme_tag *destination;
 
-    if (view == NULL || view->tag == NULL || id == 0 || id > tags->max_tags) {
+    if (view == NULL || leme_ownership_tag(view) == NULL || id == 0 || id > tags->max_tags) {
         return false;
     }
     destination = materialize(tags, id);
     if (destination == NULL) {
         return false;
     }
-    source = view->tag;
+    source = leme_ownership_tag(view);
     if (source == destination) {
         return true;
     }
@@ -719,7 +732,7 @@ leme_tags_move_view(struct leme_tags *tags,
         source->focused_view = NULL;
     }
     wl_list_remove(&view->tag_link);
-    view->tag = destination;
+    leme_ownership_replace_tag(view, source, destination);
     wl_list_insert(&destination->views, &view->tag_link);
     if (!view->floating) {
         leme_layout_add_view(&destination->layout,
@@ -778,10 +791,18 @@ leme_tags_directional_view(const struct leme_tags *tags,
                 (tiled_only && (view->floating || view->fullscreen))) {
             continue;
         }
+        if (index >= count) {
+            free(candidates);
+            return NULL;
+        }
         candidates[index++] = (struct leme_layout_candidate){
             .view = view,
             .box = view->box,
         };
+    }
+    if (index != count) {
+        free(candidates);
+        return NULL;
     }
     result = leme_layout_directional_candidate(
         candidates, count, origin, direction);
@@ -832,10 +853,18 @@ leme_tags_pointer_drop_target(
                 view->floating || view->detached || view->fullscreen) {
             continue;
         }
+        if (index >= count) {
+            free(candidates);
+            return NULL;
+        }
         candidates[index++] = (struct leme_layout_candidate){
             .view = view,
             .box = view->box,
         };
+    }
+    if (index != count) {
+        free(candidates);
+        return NULL;
     }
     result = leme_layout_nearest_candidate(
         candidates, count, layout_x, layout_y);
@@ -849,7 +878,7 @@ leme_tags_swap_directional(struct leme_tags *tags,
 {
     struct leme_view *neighbor;
 
-    if (tags == NULL || view == NULL || view->tag == NULL ||
+    if (tags == NULL || view == NULL || leme_ownership_tag(view) == NULL ||
             view->floating || view->detached || view->fullscreen) {
         return false;
     }
@@ -858,10 +887,10 @@ leme_tags_swap_directional(struct leme_tags *tags,
     if (neighbor == NULL) {
         return false;
     }
-    if (view->tag->layout.kind == LEME_LAYOUT_DWINDLE) {
-        return leme_layout_swap_views(view->tag->layout.root, view, neighbor);
+    if (leme_ownership_tag(view)->layout.kind == LEME_LAYOUT_DWINDLE) {
+        return leme_layout_swap_views(leme_ownership_tag(view)->layout.root, view, neighbor);
     }
-    return leme_tags_swap_list_order(view->tag, view, neighbor);
+    return leme_tags_swap_list_order(leme_ownership_tag(view), view, neighbor);
 }
 
 static void
@@ -892,11 +921,14 @@ leme_tags_arrange_current(struct leme_tags *tags,
             tag->focused_view, usable_box, gap, leme_tags_apply_box, NULL);
         return;
     }
-    views = calloc(count, sizeof(*views));
+    views = (struct leme_view **)calloc(count, sizeof(*views));
     if (views == NULL) {
         return;
     }
-    (void)leme_tags_tiled_views(tag, views, count);
+    if (leme_tags_tiled_views(tag, views, count) != count) {
+        free((void *)views);
+        return;
+    }
     leme_layout_arrange_subject(&tag->layout, views, count,
         tag->focused_view, usable_box, gap, leme_tags_apply_box, NULL);
     if (tag->layout.kind == LEME_LAYOUT_ACCORDION) {
@@ -911,7 +943,7 @@ leme_tags_arrange_current(struct leme_tags *tags,
             leme_render_view_focus(tag->focused_view);
         }
     }
-    free(views);
+    free((void *)views);
 }
 
 struct leme_tag_detach {
@@ -931,10 +963,10 @@ leme_tags_prepare_detach(struct leme_view *view,
     size_t count = 0;
     size_t index = 0;
 
-    if (view == NULL || detach == NULL || *detach != NULL || view->tag == NULL) {
+    if (view == NULL || detach == NULL || *detach != NULL || leme_ownership_tag(view) == NULL) {
         return false;
     }
-    for (link = view->tag->views.next; link != &view->tag->views;
+    for (link = leme_ownership_tag(view)->views.next; link != &leme_ownership_tag(view)->views;
             link = link->next) {
         struct leme_view *candidate = wl_container_of(link, candidate,
             tag_link);
@@ -946,7 +978,7 @@ leme_tags_prepare_detach(struct leme_view *view,
     }
     if (leme_gate_tags_prepare != NULL && !leme_gate_tags_prepare(
             LEME_TAGS_PREPARE_DETACH_PLAN_ALLOCATION, view,
-            view->tag->owner)) {
+            leme_ownership_tag(view)->owner)) {
         return false;
     }
     plan = calloc(1, sizeof(*plan));
@@ -960,16 +992,17 @@ leme_tags_prepare_detach(struct leme_view *view,
     if (count > 0) {
         if (leme_gate_tags_prepare != NULL && !leme_gate_tags_prepare(
                 LEME_TAGS_PREPARE_DETACH_REMAINING_ALLOCATION, view,
-                view->tag->owner)) {
+                leme_ownership_tag(view)->owner)) {
             free(plan);
             return false;
         }
-        plan->remaining = calloc(count, sizeof(*plan->remaining));
+        plan->remaining = (struct leme_view **)calloc(
+            count, sizeof(*plan->remaining));
         if (plan->remaining == NULL) {
             free(plan);
             return false;
         }
-        for (link = view->tag->views.next; link != &view->tag->views;
+        for (link = leme_ownership_tag(view)->views.next; link != &leme_ownership_tag(view)->views;
                 link = link->next) {
             struct leme_view *candidate = wl_container_of(link, candidate,
                 tag_link);
@@ -977,18 +1010,28 @@ leme_tags_prepare_detach(struct leme_view *view,
             if (candidate != view && candidate->mapped &&
                     !candidate->unmanaged && !candidate->floating &&
                     !candidate->fullscreen) {
+                if (index >= count) {
+                    free((void *)plan->remaining);
+                    free(plan);
+                    return false;
+                }
                 plan->remaining[index++] = candidate;
             }
         }
+        if (index != count) {
+            free((void *)plan->remaining);
+            free(plan);
+            return false;
+        }
     }
-    plan->tag = view->tag;
+    plan->tag = leme_ownership_tag(view);
     plan->remaining_count = count;
-    if (view->tag->owner != NULL && view->tag->owner->output != NULL) {
-        plan->area = view->tag->owner->output->usable_box;
+    if (leme_ownership_tag(view)->owner != NULL && leme_ownership_tag(view)->owner->output != NULL) {
+        plan->area = leme_ownership_tag(view)->owner->output->usable_box;
     }
-    if (view->tag->owner != NULL && view->tag->owner->server != NULL &&
-            view->tag->owner->server->config != NULL) {
-        plan->gap = view->tag->owner->server->config->gap;
+    if (leme_ownership_tag(view)->owner != NULL && leme_ownership_tag(view)->owner->server != NULL &&
+            leme_ownership_tag(view)->owner->server->config != NULL) {
+        plan->gap = leme_ownership_tag(view)->owner->server->config->gap;
     }
     *detach = plan;
     return true;
@@ -1009,7 +1052,7 @@ leme_tags_commit_detach(struct leme_view *view,
     *detach = NULL;
     tag = plan->tag;
     tags = tag == NULL ? NULL : tag->owner;
-    assert(tag != NULL && view->tag == tag);
+    assert(tag != NULL && leme_ownership_tag(view) == tag);
     if (!view->floating) {
         leme_layout_remove_view(&tag->layout, view);
     }
@@ -1018,7 +1061,7 @@ leme_tags_commit_detach(struct leme_view *view,
     }
     wl_list_remove(&view->tag_link);
     wl_list_init(&view->tag_link);
-    view->tag = NULL;
+    leme_ownership_release_tag(view, tag);
     if (tags != NULL && tags->output != NULL &&
             !tags->focused_is_candidate &&
             tags->table[tags->focused_id] == tag) {
@@ -1029,7 +1072,7 @@ leme_tags_commit_detach(struct leme_view *view,
     if (tags != NULL) {
         (void)leme_tags_prune_empty(tags, tag);
     }
-    free(plan->remaining);
+    free((void *)plan->remaining);
     free(plan);
 }
 
@@ -1039,9 +1082,119 @@ leme_tags_discard_detach(struct leme_tag_detach **detach)
     if (detach == NULL || *detach == NULL) {
         return;
     }
-    free((*detach)->remaining);
+    free((void *)(*detach)->remaining);
     free(*detach);
     *detach = NULL;
+}
+
+struct leme_tag_materialize {
+    struct leme_tags *tags;
+    struct leme_tag *tag;
+    bool owned;
+};
+
+bool
+leme_tags_prepare_materialize(struct leme_tags *tags, uint16_t id,
+    struct leme_tag_materialize **slot)
+{
+    struct leme_tag_materialize *plan;
+    struct leme_tag *tag;
+
+    if (tags == NULL || slot == NULL || *slot != NULL || id == 0 ||
+            id > tags->max_tags || tags->table == NULL) {
+        return false;
+    }
+    plan = calloc(1, sizeof(*plan));
+    if (plan == NULL) {
+        return false;
+    }
+    tag = tags->table[id];
+    if (tag == NULL) {
+        if (leme_gate_tags_prepare != NULL && !leme_gate_tags_prepare(
+                LEME_TAGS_PREPARE_MATERIALIZE_TAG_ALLOCATION,
+                NULL, tags)) {
+            free(plan);
+            return false;
+        }
+        tag = calloc(1, sizeof(*tag));
+        if (tag == NULL) {
+            free(plan);
+            return false;
+        }
+        tag->id = id;
+        tag->owner = tags;
+        leme_layout_init(&tag->layout, LEME_LAYOUT_DWINDLE);
+        if (tags->server != NULL && tags->server->config != NULL) {
+            struct leme_tag_settings settings;
+
+            leme_config_tag_settings(tags->server->config, id, &settings);
+            leme_tag_apply_settings(tag, &settings);
+        }
+        wl_list_init(&tag->views);
+        plan->owned = true;
+    }
+    plan->tags = tags;
+    plan->tag = tag;
+    *slot = plan;
+    return true;
+}
+
+struct leme_tag *
+leme_tags_materialize_target(const struct leme_tag_materialize *plan)
+{
+    return plan == NULL ? NULL : plan->tag;
+}
+
+void
+leme_tags_commit_materialize(struct leme_tag_materialize **slot)
+{
+    struct leme_tag_materialize *plan;
+
+    assert(slot != NULL && *slot != NULL);
+    plan = *slot;
+    *slot = NULL;
+    if (plan->owned) {
+        assert(plan->tags->table[plan->tag->id] == NULL);
+        plan->tags->table[plan->tag->id] = plan->tag;
+        plan->owned = false;
+    }
+    free(plan);
+}
+
+void
+leme_tags_discard_materialize(struct leme_tag_materialize **slot)
+{
+    struct leme_tag_materialize *plan;
+
+    if (slot == NULL || *slot == NULL) {
+        return;
+    }
+    plan = *slot;
+    *slot = NULL;
+    if (plan->owned) {
+        leme_layout_finish(&plan->tag->layout);
+        free(plan->tag);
+    }
+    free(plan);
+}
+
+void
+leme_tags_attach_floating_prepared(struct leme_tag *tag,
+    struct leme_view *view, bool focused)
+{
+    struct leme_tags *tags;
+
+    assert(tag != NULL && view != NULL && view->floating &&
+        leme_ownership_kind(view) == LEME_VIEW_OWNER_NONE);
+    tags = tag->owner;
+    leme_ownership_commit_tag(view, tag);
+    wl_list_insert(&tag->views, &view->tag_link);
+    if (focused) {
+        tag->focused_view = view;
+    }
+    if (tags != NULL && tag->id == tags->focused_id) {
+        tags->focused_is_candidate = false;
+    }
 }
 
 bool
@@ -1059,11 +1212,11 @@ leme_tags_attach_floating(struct leme_tags *tags,
 {
     struct leme_tag *tag;
 
-    assert(tags != NULL && view != NULL && view->tag == NULL &&
+    assert(tags != NULL && view != NULL && leme_ownership_tag(view) == NULL &&
         view->floating && id > 0 && id <= tags->max_tags &&
         tags->table[id] != NULL);
     tag = tags->table[id];
-    view->tag = tag;
+    leme_ownership_commit_tag(view, tag);
     wl_list_insert(&tag->views, &view->tag_link);
     tag->focused_view = view;
     if (id == tags->focused_id) {
@@ -1077,10 +1230,10 @@ leme_tags_remove_view(struct leme_view *view)
     struct leme_tag *tag;
     struct leme_tags *tags;
 
-    if (view->tag == NULL) {
+    if (leme_ownership_tag(view) == NULL) {
         return;
     }
-    tag = view->tag;
+    tag = leme_ownership_tag(view);
     tags = tag->owner;
     if (!view->floating) {
         leme_layout_remove_view(&tag->layout, view);
@@ -1090,7 +1243,7 @@ leme_tags_remove_view(struct leme_view *view)
     }
     wl_list_remove(&view->tag_link);
     wl_list_init(&view->tag_link);
-    view->tag = NULL;
+    leme_ownership_release_tag(view, tag);
     if (tags != NULL) {
         (void)leme_tags_prune_empty(tags, tag);
     }

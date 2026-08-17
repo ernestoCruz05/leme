@@ -5,16 +5,25 @@
 #include "input/input.h"
 #include "core/server.h"
 #include "protocols/session.h"
+#include "protocols/toplevel.h"
 #include "workspace/tag.h"
 #include "shell/policy.h"
 #include "shell/rules.h"
 #include "shell/scratchpad.h"
+#include "shell/sticky.h"
 #include "shell/view.h"
 
+#include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+#include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/util/box.h>
 #include <wlr/util/edges.h>
 #include <wlr/util/log.h>
+#include <wlr/xcursor.h>
 #include <wlr/xwayland/server.h>
 #include <wlr/xwayland/shell.h>
 #include <wlr/xwayland/xwayland.h>
@@ -66,6 +75,10 @@ leme_xwayland_handle_ready(struct wl_listener *listener, void *data)
 
     (void)data;
     xwayland->is_ready = true;
+    if (xwayland->startup_fd >= 0) {
+        (void)close(xwayland->startup_fd);
+        xwayland->startup_fd = -1;
+    }
     leme_xwayland_update_workarea(xwayland->server);
     wlr_log(WLR_INFO, "leme: XWayland ready on %s",
         xwayland->wlr_xwayland->display_name);
@@ -117,9 +130,12 @@ leme_xwayland_surface_map(struct leme_xwayland_view *wrapper)
     struct leme_view *parent =
         parent_wrapper == NULL ? NULL : parent_wrapper->view;
     struct leme_view_destination destination;
+    struct leme_sticky_adoption *adoption = NULL;
 
     if (parent != NULL && (!parent->mapped || parent->unmanaged ||
-            parent->tag == NULL || parent->tag->owner == NULL)) {
+            (!leme_view_is_sticky(parent) &&
+                (leme_ownership_tag(parent) == NULL ||
+                    leme_ownership_tag(parent)->owner == NULL)))) {
         parent = NULL;
     }
     destination = leme_view_policy_destination(view->server, parent);
@@ -132,12 +148,16 @@ leme_xwayland_surface_map(struct leme_xwayland_view *wrapper)
     leme_view_policy_apply_rules(view->server, &rules, &destination,
         &floating, parent != NULL);
 
+    const bool sticky_parent = parent != NULL &&
+        leme_view_is_sticky(parent) &&
+        !wrapper->xsurface->override_redirect;
     const struct leme_view_map_options options = {
-        .tags = destination.tags,
-        .tag_id = destination.tag_id,
+        .tags = sticky_parent ? NULL : destination.tags,
+        .tag_id = sticky_parent ? 0 : destination.tag_id,
         .parent = parent,
         .floating = floating,
         .unmanaged = wrapper->xsurface->override_redirect,
+        .durable_direct = sticky_parent,
     };
 
     if (scratchpad_map == LEME_SCRATCHPAD_MAP_ADOPTED) {
@@ -147,10 +167,24 @@ leme_xwayland_surface_map(struct leme_xwayland_view *wrapper)
         wlr_log(WLR_ERROR, "%s", "leme: failed to adopt pending X11 scratchpad");
         return;
     }
+    if (sticky_parent &&
+            !leme_sticky_prepare_transient(parent, view, &adoption)) {
+        wlr_log(WLR_ERROR,
+            "leme: failed to prepare sticky X11 transient 0x%x",
+            wrapper->xsurface->window_id);
+        return;
+    }
     if (!leme_view_map(view, &options)) {
+        leme_sticky_discard_transient(&adoption);
         wlr_log(WLR_ERROR, "leme: failed to map X11 window 0x%x",
             wrapper->xsurface->window_id);
         return;
+    }
+    if (adoption != NULL) {
+        leme_view_apply_layout_box(view,
+            leme_view_policy_center_box(view->box, parent->box,
+                leme_output_usable_box(leme_view_output(parent))));
+        leme_sticky_commit_transient(&adoption);
     }
     if (wrapper->xsurface->fullscreen ||
             ((rules.fields & LEME_WINDOW_RULE_FULLSCREEN) != 0 &&
@@ -160,7 +194,7 @@ leme_xwayland_surface_map(struct leme_xwayland_view *wrapper)
     if (view->unmanaged &&
             wlr_xwayland_surface_override_redirect_wants_focus(
                 wrapper->xsurface)) {
-        leme_view_focus(view);
+        leme_view_focus_unmanaged_xwayland(view);
     }
     wlr_log(WLR_INFO, "leme: mapped X11 window 0x%x%s%s",
         wrapper->xsurface->window_id,
@@ -279,14 +313,17 @@ leme_xwayland_handle_request_activate(
     struct leme_view *view = wrapper->view;
 
     (void)data;
-    if (view->mapped && view->tag != NULL &&
-            view->tag->id == leme_focused_tags(view->server)->focused_id &&
-            !leme_focused_tags(view->server)->focused_is_candidate &&
-            (!view->unmanaged ||
-                wlr_xwayland_surface_override_redirect_wants_focus(
-                    wrapper->xsurface))) {
-        leme_view_focus(view);
+    if (!view->mapped) {
+        return;
     }
+    if (view->unmanaged) {
+        if (wlr_xwayland_surface_override_redirect_wants_focus(
+                wrapper->xsurface)) {
+            leme_view_focus_unmanaged_xwayland(view);
+        }
+        return;
+    }
+    leme_toplevel_activate_view(view);
 }
 
 static void
@@ -463,6 +500,7 @@ leme_xwayland_handle_new_surface(struct wl_listener *listener, void *data)
     view->kind = LEME_VIEW_XWAYLAND;
     view->xwayland_surface = xsurface;
     view->render_opacity = 1.0f;
+    leme_ownership_init(view);
     wl_list_init(&view->link);
     wl_list_init(&view->tag_link);
     wl_list_init(&view->focus_link);
@@ -530,6 +568,7 @@ leme_xwayland_init(struct leme_server *server)
         return;
     }
     xwayland->server = server;
+    xwayland->startup_fd = -1;
     wl_list_init(&xwayland->views);
     xwayland->wlr_xwayland = wlr_xwayland_create(
         server->display, server->compositor, true);
@@ -564,11 +603,49 @@ leme_xwayland_finish(struct leme_server *server)
         return;
     }
     wl_display_set_global_filter(server->display, NULL, NULL);
+    if (xwayland->startup_fd >= 0) {
+        (void)close(xwayland->startup_fd);
+        xwayland->startup_fd = -1;
+    }
     if (xwayland->wlr_xwayland != NULL) {
         wlr_xwayland_destroy(xwayland->wlr_xwayland);
     }
     free(xwayland);
     server->xwayland = NULL;
+}
+
+bool
+leme_xwayland_start(struct leme_server *server)
+{
+    struct leme_xwayland *xwayland;
+    struct wlr_xwayland_server *backend;
+
+    if (server == NULL || server->xwayland == NULL ||
+            server->xwayland->wlr_xwayland == NULL ||
+            server->xwayland->wlr_xwayland->server == NULL) {
+        return false;
+    }
+    xwayland = server->xwayland;
+    backend = xwayland->wlr_xwayland->server;
+    if (backend->ready || backend->pid > 0 || xwayland->startup_fd >= 0) {
+        return true;
+    }
+    xwayland->startup_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (xwayland->startup_fd < 0) {
+        return false;
+    }
+    struct sockaddr_un address = {.sun_family = AF_UNIX};
+    const int written = snprintf(address.sun_path, sizeof(address.sun_path),
+        "/tmp/.X11-unix/X%d", backend->display);
+
+    if (written < 0 || (size_t)written >= sizeof(address.sun_path) ||
+            connect(xwayland->startup_fd, (struct sockaddr *)&address,
+                sizeof(address)) != 0) {
+        (void)close(xwayland->startup_fd);
+        xwayland->startup_fd = -1;
+        return false;
+    }
+    return true;
 }
 
 const char *
@@ -656,4 +733,30 @@ leme_xwayland_update_workarea(struct leme_server *server)
 
         wlr_xwayland_set_workareas(xwayland->wlr_xwayland, &box, 1);
     }
+}
+
+void
+leme_xwayland_set_root_cursor(struct leme_server *server,
+    struct wlr_xcursor_manager *manager, const char *name, float scale)
+{
+    struct leme_xwayland *xwayland =
+        server == NULL ? NULL : server->xwayland;
+    struct wlr_xcursor *xcursor;
+    struct wlr_buffer *buffer;
+
+    if (xwayland == NULL || xwayland->wlr_xwayland == NULL ||
+            manager == NULL || name == NULL) {
+        return;
+    }
+    xcursor = wlr_xcursor_manager_get_xcursor(manager, name, scale);
+    if (xcursor == NULL || xcursor->image_count == 0) {
+        return;
+    }
+    buffer = wlr_xcursor_image_get_buffer(xcursor->images[0]);
+    if (buffer == NULL) {
+        return;
+    }
+    wlr_xwayland_set_cursor(xwayland->wlr_xwayland, buffer,
+        (int32_t)xcursor->images[0]->hotspot_x,
+        (int32_t)xcursor->images[0]->hotspot_y);
 }

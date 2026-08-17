@@ -7,6 +7,7 @@
 #include "output/output.h"
 #include "workspace/tag.h"
 #include "shell/scratchpad.h"
+#include "shell/sticky.h"
 #include "shell/view.h"
 #include "shell/xwayland.h"
 #include "protocols/session.h"
@@ -208,6 +209,8 @@ leme_command_parse(struct leme_command *command,
         }
     } else if (strcmp(name, "toggle_floating") == 0 && arguments == 0) {
         command->type = LEME_COMMAND_TOGGLE_FLOATING;
+    } else if (strcmp(name, "toggle_sticky") == 0 && arguments == 0) {
+        command->type = LEME_COMMAND_TOGGLE_STICKY;
     } else if (strcmp(name, "toggle_fullscreen") == 0 && arguments == 0) {
         command->type = LEME_COMMAND_TOGGLE_FULLSCREEN;
     } else if (strcmp(name, "resize") == 0 && arguments == 2) {
@@ -372,12 +375,27 @@ leme_command_execute(struct leme_server *server,
     }
     if ((command->type == LEME_COMMAND_SCRATCHPAD_SEND ||
             command->type == LEME_COMMAND_SCRATCHPAD_TOGGLE ||
-            command->type == LEME_COMMAND_SCRATCHPAD_RETRIEVE) &&
+            command->type == LEME_COMMAND_SCRATCHPAD_RETRIEVE ||
+            command->type == LEME_COMMAND_TOGGLE_STICKY) &&
             leme_session_locked(server)) {
         wlr_log(WLR_ERROR, "%s", "leme: scratchpad command refused while locked");
         return false;
     }
     tags = leme_focused_tags(server);
+    view = server->focused_view;
+    if (leme_sticky_is_dependent(view)) {
+        switch (command->type) {
+        case LEME_COMMAND_MOVE_VIEW_TO_TAG:
+        case LEME_COMMAND_MOVE_VIEW_TO_OUTPUT:
+        case LEME_COMMAND_TOGGLE_FLOATING:
+        case LEME_COMMAND_TOGGLE_STICKY:
+        case LEME_COMMAND_TOGGLE_FULLSCREEN:
+            view = leme_sticky_group_root(view);
+            break;
+        default:
+            break;
+        }
+    }
     switch (command->type) {
     case LEME_COMMAND_FOCUS_NEXT_TAG:
         leme_input_pointer_grab_cancel_tiled(server);
@@ -447,13 +465,20 @@ leme_command_execute(struct leme_server *server,
                 return false;
             }
         }
-        view = server->focused_view;
         if (leme_view_is_scratchpad(view)) {
             wlr_log(WLR_ERROR, "%s",
                 "leme: cannot move a scratchpad member to a tag");
             return false;
         }
         leme_input_pointer_grab_cancel_tiled(server);
+        if (leme_view_is_sticky(view)) {
+            if (!leme_sticky_move_to_tag(view, target, command->follow)) {
+                wlr_log(WLR_ERROR, "leme: cannot move sticky group to tag %u",
+                    target);
+                return false;
+            }
+            return true;
+        }
         if (!leme_tags_move_view(tags, view, target)) {
             wlr_log(WLR_ERROR, "leme: cannot move view to tag %u", target);
             return false;
@@ -500,14 +525,15 @@ leme_command_execute(struct leme_server *server,
             wlr_log(WLR_DEBUG, "%s", "leme: no output in that direction");
             return true;
         }
-        view = server->focused_view;
         if (leme_view_is_scratchpad(view)) {
             wlr_log(WLR_ERROR, "%s",
                 "leme: cannot move a scratchpad member to an output");
             return false;
         }
         leme_input_pointer_grab_cancel_tiled(server);
-        if (!leme_view_move_to_output(view, target, command->follow)) {
+        if (leme_view_is_sticky(view) ?
+                !leme_sticky_move_to_output(view, target, command->follow) :
+                !leme_view_move_to_output(view, target, command->follow)) {
             wlr_log(WLR_ERROR, "%s",
                 "leme: cannot move the focused view to that output");
             return false;
@@ -546,14 +572,17 @@ leme_command_execute(struct leme_server *server,
         if (!leme_command_require_view(server, "toggle_floating")) {
             return false;
         }
-        return leme_view_set_floating(server->focused_view,
-            !server->focused_view->floating);
+        return leme_view_set_floating(view, !view->floating);
+    case LEME_COMMAND_TOGGLE_STICKY:
+        if (!leme_command_require_view(server, "toggle_sticky")) {
+            return false;
+        }
+        return leme_sticky_toggle(view);
     case LEME_COMMAND_TOGGLE_FULLSCREEN:
         if (!leme_command_require_view(server, "toggle_fullscreen")) {
             return false;
         }
-        return leme_view_set_fullscreen(server->focused_view,
-            !server->focused_view->fullscreen);
+        return leme_view_set_fullscreen(view, !view->fullscreen);
     case LEME_COMMAND_RESIZE:
         if (!leme_command_require_view(server, "resize")) {
             return false;

@@ -185,6 +185,7 @@ leme_config_destroy(struct leme_config *config)
     }
     free(config->scratchpads);
     leme_diagnostics_finish(&config->diagnostics);
+    free(config->cursor.theme);
     free(config->path);
     free(config);
 }
@@ -343,6 +344,7 @@ leme_config_defaults(void)
     config->initial_tags = 3;
     config->max_tags = 9;
     config->drop_mode = LEME_DROP_MODE_SIMPLE;
+    config->cursor.size = LEME_CURSOR_SIZE_DEFAULT;
     config->publication.activation = LEME_ACTIVATION_FOLLOW;
     config->config_errors = (struct leme_config_errors){
         .show = true,

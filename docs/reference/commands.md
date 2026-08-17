@@ -19,8 +19,9 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `set_layout dwindle\|master_stack\|accordion` | Set the focused tag's layout and retile its views. |
 | `switch_layout` | Cycle dwindle, master-stack, and accordion. |
 | `remove_empty_tag ID` | Remove an empty non-initial materialized tag. |
-| `toggle_floating` | Toggle the focused managed view between tiled and floating. |
-| `toggle_fullscreen` | Toggle fullscreen for the focused managed view. |
+| `toggle_floating` | Toggle the focused managed view between tiled and floating. Sticky views refuse this command. |
+| `toggle_sticky` | Keep the focused managed window visible across tags on its current output, or attach its complete sticky group to that output's current tag. Takes no arguments. |
+| `toggle_fullscreen` | Toggle fullscreen for the focused managed view. A sticky group attaches to its owner output's current tag first. |
 | `scratchpad_send` | Put the focused managed view in the global scratchpad pool. A normal tagged view becomes unnamed. |
 | `scratchpad_toggle [NAME]` | Without a name, show or hide the newest unnamed pool member. With a configured name, show, hide, move, adopt, or start that named scratchpad. |
 | `scratchpad_retrieve` | Return the shown scratchpad to the focused tag, or return the newest unnamed member when none is shown. |
@@ -34,6 +35,14 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `quit` | Terminate the compositor. |
 
 Directional focus and tiled movement consider visible managed views on the focused output's current tag. A fullscreen view hides its siblings. Floating movement is not clamped to output edges.
+
+`toggle_sticky` makes the focused managed window floating and keeps it visible
+on its current output across tag changes. Running it again attaches the complete
+sticky group to that output's current tag. It refuses fullscreen windows,
+scratchpad members, and locked sessions. Managed child windows join their
+sticky root's group; owner-changing commands applied to a dependent resolve to
+the root. Sticky move, resize, and move-to-output operations retain sticky
+ownership, while move-to-tag and fullscreen end it transactionally.
 
 Scratchpads use one global pool and Leme shows at most one member at a time. A
 shown member can move to the focused output without joining that output's tag.

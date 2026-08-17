@@ -3,8 +3,10 @@
 
 #include "core/command.h"
 #include "core/server.h"
+#include "core/session_environment.h"
 #include "input/input.h"
 #include "output/output.h"
+#include "protocols/desktop.h"
 #include "render/render.h"
 #include "workspace/tag.h"
 
@@ -15,6 +17,15 @@
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
+
+static bool
+leme_config_same_text(const char *first, const char *second)
+{
+    if (first == NULL || second == NULL) {
+        return first == second;
+    }
+    return strcmp(first, second) == 0;
+}
 
 static bool
 leme_config_validate_outputs(const struct leme_config *config, char **error)
@@ -202,6 +213,7 @@ leme_config_validate_command(const struct leme_config *config,
     case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
     case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
     case LEME_COMMAND_TOGGLE_FLOATING:
+    case LEME_COMMAND_TOGGLE_STICKY:
     case LEME_COMMAND_TOGGLE_FULLSCREEN:
     case LEME_COMMAND_CLOSE_VIEW:
     case LEME_COMMAND_RELOAD_CONFIG:
@@ -253,6 +265,13 @@ leme_config_validate(const struct leme_config *config, char **error)
         leme_config_set_error(error,
             "config: gap, border_width, corner_radius and blur are out "
             "of range");
+        return false;
+    }
+    if (config->cursor.size <= 0 ||
+            config->cursor.size > LEME_CURSOR_SIZE_MAX) {
+        leme_config_set_error(error,
+            "config: cursor size must be between 1 and %d",
+            LEME_CURSOR_SIZE_MAX);
         return false;
     }
     if (!leme_config_validate_outputs(config, error)) {
@@ -456,6 +475,15 @@ leme_config_apply(struct leme_server *server,
     }
     leme_scratchpad_reconcile_config(server, old, next);
     server->config = next;
+    if (old == NULL || old->cursor.size != next->cursor.size ||
+            !leme_config_same_text(old->cursor.theme, next->cursor.theme)) {
+        leme_session_environment_cursor(server);
+        if (server->desktop != NULL &&
+                !leme_desktop_apply_cursor_config(server, next)) {
+            wlr_log(WLR_ERROR, "%s",
+                "leme: cursor theme unavailable; keeping the previous one");
+        }
+    }
     leme_input_replace_modes(server, next->modes, next->mode_count);
     leme_input_apply_pointer_config(server, next);
     if (leme_output_focused(server) != NULL) {

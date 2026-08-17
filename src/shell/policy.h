@@ -26,6 +26,8 @@ void leme_view_policy_apply_rules(struct leme_server *server,
     bool parent_destination);
 struct leme_box leme_view_policy_clamp_box(
     struct leme_box box, struct leme_box area);
+struct leme_box leme_view_policy_reanchor_box(struct leme_box box,
+    struct leme_box from, struct leme_box to);
 struct leme_box leme_view_policy_center_box(struct leme_box box,
     struct leme_box anchor, struct leme_box area);
 struct leme_box leme_view_policy_requested_box(struct leme_box requested,

@@ -6,6 +6,7 @@
 #include "protocols/publication.h"
 #include "protocols/session.h"
 #include "protocols/workspace.h"
+#include "shell/sticky.h"
 #include "shell/view.h"
 #include "workspace/tag.h"
 
@@ -55,7 +56,7 @@ leme_toplevel_app_id(const struct leme_view *view)
 static bool
 leme_toplevel_eligible(const struct leme_view *view)
 {
-    return leme_view_protocol_eligible(view);
+    return leme_ownership_publication_eligible(view);
 }
 
 static bool
@@ -160,6 +161,11 @@ leme_toplevel_activate_view(struct leme_view *view)
             output == NULL) {
         return;
     }
+    if (leme_view_is_sticky(view)) {
+        leme_output_set_focused(server, output, false);
+        leme_view_focus(view);
+        return;
+    }
     if (leme_view_is_shown_scratchpad(view)) {
         leme_view_focus(view);
         return;
@@ -172,7 +178,7 @@ leme_toplevel_activate_view(struct leme_view *view)
         return;
     }
     same_tag = output == leme_output_focused(server) &&
-        tags->focused_id == view->tag->id;
+        tags->focused_id == leme_ownership_tag(view)->id;
     if (same_tag) {
         leme_view_focus(view);
         return;
@@ -181,14 +187,14 @@ leme_toplevel_activate_view(struct leme_view *view)
         return;
     }
     if (policy == LEME_ACTIVATION_URGENT) {
-        leme_workspace_mark_urgent(server, output, view->tag->id);
+        leme_workspace_mark_urgent(server, output, leme_ownership_tag(view)->id);
         leme_publication_invalidate(server);
         return;
     }
     if (output != leme_output_focused(server)) {
         leme_output_set_focused(server, output, true);
     }
-    leme_tags_focus_id(tags, view->tag->id);
+    leme_tags_focus_id(tags, leme_ownership_tag(view)->id);
     leme_view_refresh_tag_focus(server);
     leme_view_focus(view);
     leme_publication_invalidate(server);

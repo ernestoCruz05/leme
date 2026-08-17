@@ -5,6 +5,7 @@
 #include "shell/layer.h"
 #include "shell/layer_layout.h"
 #include "shell/scratchpad.h"
+#include "shell/sticky.h"
 #include "render/render.h"
 #include "render/workspace_transition.h"
 #include "core/server.h"
@@ -168,9 +169,12 @@ leme_output_target(struct leme_server *server,
 }
 
 static bool
-leme_output_logical_size(int physical_width, int physical_height,
+leme_output_logical_size(
+    int physical_width, // NOLINT(bugprone-easily-swappable-parameters)
+    int physical_height, // NOLINT(bugprone-easily-swappable-parameters)
     float configured_scale, enum wl_output_transform transform,
-    int *width, int *height)
+    int *width, // NOLINT(bugprone-easily-swappable-parameters)
+    int *height)
 {
     double scale = (double)configured_scale;
     double logical_width;
@@ -315,6 +319,13 @@ leme_output_resolve_plans(struct leme_output_plan *plans, size_t count)
 
 static bool leme_output_heads_overlap(
     const struct wlr_output_configuration_v1 *configuration);
+static bool leme_output_head_box(
+    const struct wlr_output_configuration_head_v1 *head,
+    struct wlr_box *box);
+static const struct wlr_output_configuration_head_v1 *
+leme_output_configuration_head_for(
+    const struct wlr_output_configuration_v1 *configuration,
+    const struct wlr_output *output);
 
 static struct wlr_output_configuration_v1 *
 leme_output_build_persistent(struct leme_server *server,
@@ -420,7 +431,8 @@ cleanup:
 
 static bool
 leme_output_box_edges(const struct wlr_box *box,
-    int64_t *right, int64_t *bottom)
+    int64_t *right, // NOLINT(bugprone-easily-swappable-parameters)
+    int64_t *bottom)
 {
     int64_t box_right;
     int64_t box_bottom;
@@ -609,6 +621,64 @@ leme_output_finish_reconfigured_animations(
 }
 
 static bool
+leme_output_configuration_snapshots(struct leme_server *server,
+    const struct wlr_output_configuration_v1 *configuration,
+    struct leme_sticky_output_snapshot **snapshots, size_t *snapshot_count)
+{
+    struct leme_sticky_output_snapshot *prepared;
+    struct leme_output *output;
+    size_t count = leme_output_count(server);
+    size_t index = 0;
+
+    if (snapshots == NULL || *snapshots != NULL ||
+            snapshot_count == NULL || count == 0 ||
+            count > SIZE_MAX / sizeof(*prepared)) {
+        return false;
+    }
+    prepared = calloc(count, sizeof(*prepared));
+    if (prepared == NULL) {
+        return false;
+    }
+    wl_list_for_each(output, &server->outputs, link) {
+        const struct wlr_output_configuration_head_v1 *head =
+            leme_output_configuration_head_for(
+                configuration, output->wlr_output);
+        struct wlr_box box = {0};
+        bool usable = output->wlr_output->enabled;
+
+        if (head != NULL) {
+            usable = head->state.enabled;
+            if (usable && !leme_output_head_box(head, &box)) {
+                free(prepared);
+                return false;
+            }
+        } else if (usable) {
+            const struct leme_box current = leme_output_full_box(output);
+
+            box = (struct wlr_box){
+                .x = current.x,
+                .y = current.y,
+                .width = current.width,
+                .height = current.height,
+            };
+        }
+        prepared[index++] = (struct leme_sticky_output_snapshot){
+            .output = output,
+            .future_full = {
+                .x = box.x,
+                .y = box.y,
+                .width = box.width,
+                .height = box.height,
+            },
+            .usable = usable,
+        };
+    }
+    *snapshots = prepared;
+    *snapshot_count = count;
+    return true;
+}
+
+static bool
 leme_output_configuration_run(struct leme_server *server,
     struct wlr_output_configuration_v1 *configuration, bool commit)
 {
@@ -689,7 +759,8 @@ leme_output_configuration_commit(struct leme_server *server,
 }
 
 static bool
-leme_output_reconcile(struct leme_server *server)
+leme_output_reconcile(struct leme_server *server,
+    struct leme_sticky_output_plan **sticky)
 {
     struct leme_output *first = NULL;
     struct leme_output *output;
@@ -725,6 +796,9 @@ leme_output_reconcile(struct leme_server *server)
     /* Fica de propósito depois de tudo o que pode falhar acima. A
      * reconciliação também corre no desfazer, por isso o estado de ciclo de
      * vida só pode ver uma topologia de saídas completa. */
+    if (sticky != NULL && *sticky != NULL) {
+        leme_sticky_commit_outputs(sticky);
+    }
     leme_scratchpad_reconcile_outputs(server);
     leme_capture_reconcile_outputs(server);
     if (server->focused_output == NULL ||
@@ -740,6 +814,11 @@ leme_output_reconcile(struct leme_server *server)
     leme_session_output_changed(server);
     leme_render_layers_refresh_output(server);
     leme_layer_arrange(server);
+    wl_list_for_each(output, &server->outputs, link) {
+        if (output->wlr_output->enabled) {
+            leme_sticky_handle_usable_area(output);
+        }
+    }
     if (old != server->focused_output || layer_focus_lost) {
         leme_layer_restore_keyboard_focus(server);
     }
@@ -806,25 +885,37 @@ leme_output_commit_and_reconcile(struct leme_server *server,
 {
     struct wlr_output_configuration_v1 *previous =
         leme_output_build_current_configuration(server);
+    struct leme_sticky_output_snapshot *snapshots = NULL;
+    struct leme_sticky_output_plan *sticky = NULL;
+    size_t snapshot_count = 0;
     bool restored;
 
-    if (previous == NULL) {
+    if (previous == NULL ||
+            !leme_output_configuration_snapshots(server, configuration,
+                &snapshots, &snapshot_count) ||
+            !leme_sticky_prepare_outputs(server, snapshots,
+                snapshot_count, &sticky)) {
+        free(snapshots);
+        wlr_output_configuration_v1_destroy(previous);
         return false;
     }
+    free(snapshots);
     if (!leme_output_configuration_commit(server, configuration)) {
+        leme_sticky_discard_outputs(&sticky);
         wlr_output_configuration_v1_destroy(previous);
         return false;
     }
     leme_output_track_configuration(server, configuration);
-    if (leme_output_reconcile(server)) {
+    if (leme_output_reconcile(server, &sticky)) {
         wlr_output_configuration_v1_destroy(previous);
         return true;
     }
+    leme_sticky_discard_outputs(&sticky);
 
     restored = leme_output_configuration_commit(server, previous);
     if (restored) {
         leme_output_track_configuration(server, previous);
-        restored = leme_output_reconcile(server);
+        restored = leme_output_reconcile(server, NULL);
     }
     if (!restored) {
         leme_output_detach_all_scenes(server);
@@ -859,6 +950,9 @@ bool
 leme_output_set_power(struct leme_output *output, bool on)
 {
     struct leme_server *server;
+    struct leme_sticky_output_snapshot *snapshots = NULL;
+    struct leme_sticky_output_plan *sticky = NULL;
+    size_t snapshot_count = 0;
     struct leme_output *previous;
     struct leme_output_plan plan = {0};
     struct wlr_box target_box = {0};
@@ -952,6 +1046,40 @@ leme_output_set_power(struct leme_output *output, bool on)
         failure_stage = "backend test";
         goto failed;
     }
+    snapshot_count = leme_output_count(server);
+    if (snapshot_count == 0 ||
+            snapshot_count > SIZE_MAX / sizeof(*snapshots)) {
+        failure_stage = "sticky snapshot size";
+        goto failed;
+    }
+    snapshots = calloc(snapshot_count, sizeof(*snapshots));
+    if (snapshots == NULL) {
+        failure_stage = "sticky snapshot allocation";
+        goto failed;
+    }
+    size_t snapshot_index = 0;
+    struct leme_output *candidate;
+
+    wl_list_for_each(candidate, &server->outputs, link) {
+        const bool usable = candidate == output ? on :
+            candidate->wlr_output->enabled;
+        const struct leme_box box = candidate == output && on ?
+            wake_box : leme_output_full_box(candidate);
+
+        snapshots[snapshot_index++] =
+            (struct leme_sticky_output_snapshot){
+                .output = candidate,
+                .future_full = box,
+                .usable = usable,
+            };
+    }
+    if (!leme_sticky_prepare_outputs(server, snapshots,
+            snapshot_count, &sticky)) {
+        failure_stage = "sticky migration preparation";
+        goto failed;
+    }
+    free(snapshots);
+    snapshots = NULL;
     if (!on) {
         leme_render_output_animations_finish(output);
     }
@@ -968,9 +1096,10 @@ leme_output_set_power(struct leme_output *output, bool on)
         output->layout_x = plan.x;
         output->layout_y = plan.y;
     }
-    if (!leme_output_reconcile(server)) {
+    if (!leme_output_reconcile(server, &sticky)) {
         bool rolled_back = true;
 
+        leme_sticky_discard_outputs(&sticky);
         output->layout_x = previous_x;
         output->layout_y = previous_y;
         if (server->output_layout != NULL) {
@@ -1002,7 +1131,7 @@ leme_output_set_power(struct leme_output *output, bool on)
                 wlr_output_commit_state(output->wlr_output, &rollback);
             wlr_output_state_finish(&rollback);
             if (rolled_back) {
-                rolled_back = leme_output_reconcile(server);
+                rolled_back = leme_output_reconcile(server, NULL);
             }
         }
         leme_output_publish_configuration(server);
@@ -1021,6 +1150,8 @@ leme_output_set_power(struct leme_output *output, bool on)
     return true;
 
 failed:
+    free(snapshots);
+    leme_sticky_discard_outputs(&sticky);
     wlr_output_state_finish(&state);
     if (attachment_created) {
         leme_render_detach_output(output);
@@ -1511,8 +1642,10 @@ leme_output_handle_destroy(struct wl_listener *listener, void *data)
     bool was_active = server->focused_output == output;
 
     (void)data;
-    leme_scratchpad_handle_output_destroy(server, output);
+    successor = leme_output_surviving(server, output);
     leme_input_pointer_grab_cancel(server);
+    leme_scratchpad_handle_output_destroy(server, output);
+    leme_sticky_handle_output_destroy(server, output, successor);
     leme_render_output_animations_finish(output);
     leme_workspace_release_output(output);
     leme_layer_handle_output_destroy(server, output->wlr_output);
@@ -1522,7 +1655,6 @@ leme_output_handle_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&output->commit.link);
     wl_list_remove(&output->destroy.link);
     wl_list_remove(&output->link);
-    successor = leme_output_surviving(server, output);
     if (successor == NULL) {
         leme_output_ensure_fallback(server);
         successor = leme_output_surviving(server, output);
@@ -1544,6 +1676,7 @@ leme_output_handle_destroy(struct wl_listener *listener, void *data)
     } else {
         leme_output_publish_configuration(server);
     }
+    leme_publication_invalidate(server);
 }
 
 static bool
@@ -1813,18 +1946,7 @@ leme_output_set_focused(struct leme_server *server,
 struct leme_output *
 leme_view_output(const struct leme_view *view)
 {
-    if (view == NULL) {
-        return NULL;
-    }
-    if (view->scratchpad_state == LEME_SCRATCHPAD_SHOWN &&
-            view->server != NULL && view->server->scratchpads.shown == view) {
-        return view->server->scratchpads.shown_output;
-    }
-    if (view->scratchpad_state != LEME_SCRATCHPAD_NONE || view->tag == NULL ||
-            view->tag->owner == NULL) {
-        return NULL;
-    }
-    return view->tag->owner->output;
+    return leme_ownership_effective_output(view);
 }
 
 struct leme_tags *

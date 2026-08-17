@@ -8,6 +8,13 @@ Directional focus, tiled swaps, previous-view focus, last-tag switching, tag mov
 
 At an output edge, focus may continue to an adjacent output when `cross_output_focus` is enabled. Moving a view across that edge is a separate choice controlled by `cross_output_move`. The exact syntax is in [keybindings](../configuration/keybindings.md) and [commands](../reference/commands.md).
 
+Output-presented sticky windows participate in global previous-focus history on
+their owner output. Directional focus deliberately excludes them and continues
+to search only tag-owned layout content. A tag change prefers the destination
+tag's own most recent eligible view; a sticky window takes keyboard focus only
+when that tag has none, which also covers closing the last window on a tag.
+Waking or migrating an output never hands focus to a sticky window.
+
 ## Pointer operations
 
 Holding SUPER provides compositor pointer operations:
@@ -19,7 +26,7 @@ Holding SUPER provides compositor pointer operations:
 
 A cancelled tiled move restores the original tree. Tiled resize ratios remain between `0.10` and `0.90`.
 
-A pointer drag can carry a view to another output when `cross_output_drag` is enabled. When it is disabled, a floating view stays within the source output and a tiled view has no drop target beyond that output.
+A pointer drag can carry a view to another output when `cross_output_drag` is enabled. When it is disabled, a floating view stays within the source output and a tiled view has no drop target beyond that output. Dragging a sticky window across an allowed boundary changes its durable output owner rather than attaching it to a tag; its complete transient group follows and is reanchored inside the destination usable area.
 
 ## Input ownership
 

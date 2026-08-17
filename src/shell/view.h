@@ -1,6 +1,7 @@
 #ifndef LEME_VIEW_H
 #define LEME_VIEW_H
 
+#include "shell/ownership.h"
 #include "shell/scratchpad.h"
 #include "workspace/layout.h"
 
@@ -11,6 +12,7 @@ struct leme_output;
 struct leme_publication_toplevel;
 struct leme_render_view_state;
 struct leme_server;
+struct leme_sticky_member;
 struct leme_tag;
 struct leme_tags;
 struct leme_view;
@@ -30,7 +32,7 @@ struct leme_view_map_options {
     const struct leme_view *parent;
     bool floating;
     bool unmanaged;
-    bool scratchpad_direct;
+    bool durable_direct;
 };
 
 struct leme_view_popup {
@@ -61,7 +63,8 @@ struct leme_view {
     struct wl_list focus_link;
     struct wl_list scratchpad_link;
     struct wl_list popups;
-    struct leme_tag *tag;
+    struct leme_view_owner owner;
+    struct leme_output *unmanaged_output;
     struct wl_listener map;
     struct wl_listener unmap;
     struct wl_listener commit;
@@ -72,8 +75,8 @@ struct leme_view {
     struct wl_listener request_resize;
     struct wl_listener new_popup;
     struct wl_listener destroy;
-    enum leme_scratchpad_state scratchpad_state;
     char *scratchpad_name;
+    struct leme_sticky_member *sticky_member;
     struct leme_box scratchpad_anchor_area;
     /*
      * Um cliente XWayland leva um ConfigureNotify por cada evento de
@@ -118,6 +121,7 @@ bool leme_view_map(struct leme_view *view,
 void leme_view_unmap(struct leme_view *view);
 void leme_view_destroy_core(struct leme_view *view);
 void leme_view_focus(struct leme_view *view);
+void leme_view_focus_unmanaged_xwayland(struct leme_view *view);
 void leme_view_focus_history_remove(struct leme_view *view);
 void leme_view_clear_focus(struct leme_server *server);
 void leme_view_focus_next(struct leme_server *server);

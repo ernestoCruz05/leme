@@ -57,7 +57,8 @@ leme_capture_next_sibling(struct wlr_scene_node *node)
 
 static void
 leme_capture_place_at_slot(struct wlr_scene_node *node,
-    struct wlr_scene_node *below, struct wlr_scene_node *above)
+    struct wlr_scene_node *below, // NOLINT(bugprone-easily-swappable-parameters)
+    struct wlr_scene_node *above)
 {
     if (below != NULL) {
         wlr_scene_node_place_above(node, below);
@@ -150,7 +151,8 @@ leme_capture_view_eligible(const struct leme_server *server,
     const struct leme_output *output;
 
     if (server == NULL || view == NULL || view->server != server ||
-            leme_session_locked(server) || !leme_view_protocol_eligible(view) ||
+            leme_session_locked(server) ||
+            !leme_ownership_direct_capture_eligible(view) ||
             view->scene_tree == NULL) {
         return false;
     }

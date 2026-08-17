@@ -35,6 +35,10 @@ struct leme_render_hit {
 
 void leme_render_init(struct leme_server *server);
 void leme_render_finish(struct leme_server *server);
+struct wlr_scene_tree *leme_render_durable_group_create(
+    struct leme_server *server);
+void leme_render_durable_group_raise(struct wlr_scene_tree *group);
+void leme_render_durable_group_destroy(struct wlr_scene_tree **group);
 bool leme_render_prepare_output_attachment(struct leme_output *output);
 bool leme_render_attach_output(struct leme_output *output);
 void leme_render_position_output(struct leme_output *output);
@@ -80,6 +84,7 @@ void leme_render_view_layout_frame(
     const struct leme_render_view_frame_nodes *nodes,
     struct leme_box box, int border_width, int corner_radius);
 void leme_render_view_set_box(struct leme_view *view, struct leme_box box);
+void leme_render_view_clip_to_geometry(struct leme_view *view);
 struct leme_box leme_render_view_local_box(
     const struct leme_view *view, struct leme_box global);
 bool leme_render_view_show_drop_preview(

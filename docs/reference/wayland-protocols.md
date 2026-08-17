@@ -31,9 +31,11 @@ Portal integration offers whole-output sources. Compatible direct clients can
 request a per-window source through
 `ext_foreign_toplevel_image_capture_source_manager_v1`; the source is refused
 while locked or when the window is not currently protocol-eligible. Tagged
-windows and shown scratchpads are eligible. A hidden mapped scratchpad is not:
-new direct capture requests and stale requests are rejected, and an already
-accepted source is invalidated when it hides. A window capture is a region of
+windows, shown scratchpads, and output-presented sticky windows are eligible.
+A hidden mapped scratchpad or suspended sticky window is not: new direct
+capture requests and stale requests are rejected, and an already accepted
+source is invalidated when it hides or changes output. Whole-output capture
+includes presented sticky windows only on their owner output. A window capture is a region of
 the scene, so surfaces drawn over that region appear in the result.
 
 The current `xdg-desktop-portal-wlr` picker does not expose that direct
@@ -54,9 +56,11 @@ window placement still follows the parent and size rules described under
 Windows and shell surfaces. Both decoration protocols select server-side mode.
 
 Activation requires a one-use token tied to Leme's seat and a valid input
-serial. It can focus only a mapped view on the current tag and never changes
-tags. A shown scratchpad on the focused output is focused directly; a hidden
-scratchpad is not an activation target. Requests are ignored while locked or
+serial. It can focus a mapped view on the current tag without changing tags.
+A shown scratchpad on the focused output is focused directly; a hidden
+scratchpad is not an activation target. A presented sticky window focuses its
+owner output and then the window; a suspended sticky window is not eligible.
+Requests are ignored while locked or
 while an exclusive layer surface owns keyboard focus.
 
 Cursor-shape requests require the pointer-focused client and a valid serial. Client cursor surfaces remain authoritative across output scale changes except during compositor move and resize operations.
@@ -71,9 +75,11 @@ Leme publishes tags and managed windows through:
 
 Each output has one workspace group. Workspace ids include the connector, such as `DP-1:3`. The published set is the navigable set: pinned tags, occupied adaptive tags, and at most one empty candidate.
 
-A managed mapped window is published. Ordinary tagged windows and shown
-scratchpads are published; a hidden mapped scratchpad is not. A shown
-scratchpad belongs only to its displayed output. Override-redirect X11
+A managed mapped window is published. Ordinary tagged windows, shown
+scratchpads, and output-presented sticky windows are published; a hidden mapped
+scratchpad or suspended sticky window is not. A shown scratchpad and a sticky
+window belong only to their displayed/owner output, and output moves send leave
+and enter on the same handle. Override-redirect X11
 surfaces and layer-shell clients are not. XWayland windows publish their title
 and class as the app id.
 
@@ -87,7 +93,7 @@ and class as the app id.
 | workspace `assign` | rejected; tag ids are local to each output |
 | toplevel `close` | honored |
 | toplevel `set_fullscreen`, `unset_fullscreen` | honored through the normal fullscreen path for tagged windows; rejected for pool scratchpads, which remain non-fullscreen |
-| toplevel `activate` | tagged windows follow the configured activation policy; shown scratchpads focus directly when otherwise eligible and unlocked; hidden or stale scratchpads are rejected |
+| toplevel `activate` | tagged windows follow the configured activation policy; shown scratchpads focus directly; presented sticky windows focus their owner output then the view; hidden or stale durable views are rejected |
 | toplevel `set_maximized`, `set_minimized` | dropped; Leme has no maximized or minimized state |
 | toplevel `set_rectangle` | ignored |
 

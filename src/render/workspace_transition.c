@@ -46,9 +46,9 @@ leme_workspace_view_is_participant(const struct leme_view *view,
     const struct leme_output *output, uint16_t tag_id)
 {
     return view != NULL && view->render_tree != NULL && view->mapped &&
-        !view->unmanaged && !view->detached && view->tag != NULL &&
-        view->tag->owner != NULL && view->tag->owner->output == output &&
-        view->tag->id == tag_id;
+        !view->unmanaged && !view->detached && leme_ownership_tag(view) != NULL &&
+        leme_ownership_tag(view)->owner != NULL && leme_ownership_tag(view)->owner->output == output &&
+        leme_ownership_tag(view)->id == tag_id;
 }
 
 static const struct leme_view *
@@ -206,8 +206,8 @@ leme_workspace_finish_live_view_animations(struct leme_output *output)
         return;
     }
     wl_list_for_each(view, &output->server->views, link) {
-        if (view->tag != NULL && view->tag->owner != NULL &&
-                view->tag->owner->output == output) {
+        if (leme_ownership_tag(view) != NULL && leme_ownership_tag(view)->owner != NULL &&
+                leme_ownership_tag(view)->owner->output == output) {
             leme_render_view_finish_animation(view);
         }
     }
@@ -356,8 +356,8 @@ leme_render_workspace_transition_refresh_views(struct leme_output *output)
         return;
     }
     wl_list_for_each(view, &output->server->views, link) {
-        if (view->tag != NULL && view->tag->owner != NULL &&
-                view->tag->owner->output == output) {
+        if (leme_ownership_tag(view) != NULL && leme_ownership_tag(view)->owner != NULL &&
+                leme_ownership_tag(view)->owner->output == output) {
             leme_render_view_sync_presentation(view);
         }
     }
@@ -401,7 +401,6 @@ leme_render_workspace_transition_commit(
     output = transition->output;
     output->workspace_transition = transition;
     wlr_scene_node_set_enabled(&transition->master->node, true);
-    leme_render_workspace_transition_restack_scratchpad(output);
     leme_render_workspace_transition_refresh_views(output);
     spec = leme_workspace_effect_animation_spec(
         transition->effect, &transition->settings);
@@ -456,10 +455,10 @@ leme_render_workspace_transition_hides_view(const struct leme_view *view)
     const struct leme_workspace_transition *transition;
 
     if (view == NULL || view->unmanaged || view->detached ||
-            view->tag == NULL || view->tag->owner == NULL) {
+            leme_ownership_tag(view) == NULL || leme_ownership_tag(view)->owner == NULL) {
         return false;
     }
-    output = view->tag->owner->output;
+    output = leme_ownership_tag(view)->owner->output;
     transition = output == NULL ? NULL : output->workspace_transition;
-    return transition != NULL && transition->destination_id == view->tag->id;
+    return transition != NULL && transition->destination_id == leme_ownership_tag(view)->id;
 }

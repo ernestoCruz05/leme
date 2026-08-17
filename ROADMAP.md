@@ -13,8 +13,8 @@ is planned. For setup and configuration, start with the
 
 Leme supports native Wayland and managed XWayland windows, per-output adaptive
 tags, dwindle, master-stack, and accordion layouts, floating and fullscreen
-windows, standard and named scratchpads, window rules, and directional keyboard
-navigation. Pointer operations include tiled detachment with insertion previews,
+windows, output-scoped sticky floating windows, standard and named scratchpads,
+window rules, and directional keyboard navigation. Pointer operations include tiled detachment with insertion previews,
 split-boundary resizing, cancellation rollback, and reinsertion across outputs.
 
 Window open and close animations and workspace transitions are optional. See
@@ -110,10 +110,10 @@ compositor exits.
 
 ## Planned
 
-### Detached window workflows
+### Remaining detached window workflows
 
-Add sticky floating windows, terminal swallowing, and minimize as a detach and
-restore operation.
+Add terminal swallowing and minimize as detach-and-restore operations. Sticky
+floating windows and scratchpads are already available.
 
 ### Window and tag overview
 

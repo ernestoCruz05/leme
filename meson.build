@@ -90,7 +90,9 @@ leme_sources = files(
   'src/workspace/tag.c',
   'src/workspace/layout.c',
   'src/shell/policy.c',
+  'src/shell/ownership.c',
   'src/shell/scratchpad.c',
+  'src/shell/sticky.c',
   'src/shell/view.c',
   'src/shell/xdg.c',
   'src/shell/layer.c',
@@ -142,7 +144,7 @@ leme_exe = executable(
   install: true,
 )
 
-executable(
+timao_exe = executable(
   'timao',
   'src/timao/main.c',
   include_directories: leme_inc,

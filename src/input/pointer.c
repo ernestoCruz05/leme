@@ -214,7 +214,7 @@ leme_input_pointer_grab_cleanup(struct leme_pointer_grab *grab)
     grab->view = NULL;
     grab->button = 0;
     grab->edges = LEME_GRAB_EDGE_NONE;
-    memset(&grab->resize_drag, 0, sizeof(grab->resize_drag));
+    grab->resize_drag = (struct leme_layout_resize_drag){0};
     grab->drop_direction = LEME_DIRECTION_LEFT;
     grab->preview_failed = false;
     grab->destination = NULL;
@@ -270,7 +270,8 @@ leme_input_pointer_grab_update_destination(struct leme_pointer_grab *grab)
 
 static void
 leme_input_pointer_grab_motion(struct wlr_seat_pointer_grab *seat_grab,
-    uint32_t time_msec, double sx, double sy)
+    uint32_t time_msec, // NOLINT(bugprone-easily-swappable-parameters)
+    double sx, double sy)
 {
     struct leme_pointer_grab *grab = seat_grab->data;
     struct leme_box box;
@@ -346,7 +347,8 @@ leme_input_pointer_grab_motion(struct wlr_seat_pointer_grab *seat_grab,
 
 static uint32_t
 leme_input_pointer_grab_button(struct wlr_seat_pointer_grab *seat_grab,
-    uint32_t time_msec, uint32_t button, enum wl_pointer_button_state state)
+    uint32_t time_msec, // NOLINT(bugprone-easily-swappable-parameters)
+    uint32_t button, enum wl_pointer_button_state state)
 {
     struct leme_pointer_grab *grab = seat_grab->data;
 
@@ -378,6 +380,9 @@ leme_input_pointer_grab_button(struct wlr_seat_pointer_grab *seat_grab,
             if (crossing && grab->mode == LEME_POINTER_GRAB_FLOAT_MOVE) {
                 if (leme_view_is_shown_scratchpad(grab->view)) {
                     (void)leme_scratchpad_move_shown(grab->view, destination);
+                } else if (leme_view_is_sticky(grab->view)) {
+                    (void)leme_sticky_move_to_output(
+                        grab->view, destination, true);
                 } else {
                     (void)leme_view_drop_to_output(grab->view, NULL,
                         destination, NULL, LEME_DIRECTION_LEFT);
@@ -391,7 +396,8 @@ leme_input_pointer_grab_button(struct wlr_seat_pointer_grab *seat_grab,
 
 static void
 leme_input_pointer_grab_axis(struct wlr_seat_pointer_grab *seat_grab,
-    uint32_t time_msec, enum wl_pointer_axis orientation, double value,
+    uint32_t time_msec, // NOLINT(bugprone-easily-swappable-parameters)
+    enum wl_pointer_axis orientation, double value,
     int32_t value_discrete, enum wl_pointer_axis_source source,
     enum wl_pointer_axis_relative_direction relative_direction)
 {
@@ -431,7 +437,8 @@ static const struct wlr_pointer_grab_interface leme_pointer_grab_interface = {
 
 static bool
 leme_input_pointer_grab_start(struct leme_view *view, bool resize,
-    uint32_t button, uint32_t wlr_edges, bool compositor_owned)
+    uint32_t button, // NOLINT(bugprone-easily-swappable-parameters)
+    uint32_t wlr_edges, bool compositor_owned)
 {
     struct leme_server *server;
     struct leme_pointer_grab *grab;
@@ -451,16 +458,16 @@ leme_input_pointer_grab_start(struct leme_view *view, bool resize,
             !view->mapped || view->unmanaged || view->detached ||
             view->fullscreen || (leme_view_is_scratchpad(view) &&
                 !leme_view_is_shown_scratchpad(view)) ||
-            (tiled && view->tag == NULL) ||
+            (tiled && leme_ownership_tag(view) == NULL) ||
             (!compositor_owned && tiled) ||
             (resize && !leme_input_pointer_edges(wlr_edges, &edges)) ||
             grab->detach != NULL) {
         return false;
     }
     if (tiled && resize) {
-        if (!leme_layout_drag_supported(&view->tag->layout) ||
+        if (!leme_layout_drag_supported(&leme_ownership_tag(view)->layout) ||
                 !leme_layout_resize_drag_begin(
-                    view->tag->layout.root, view, edges,
+                    leme_ownership_tag(view)->layout.root, view, edges,
                     &grab->resize_drag)) {
             return false;
         }
@@ -476,7 +483,7 @@ leme_input_pointer_grab_start(struct leme_view *view, bool resize,
     cursor_name = tiled && !resize ? "grabbing" :
         leme_input_pointer_grab_cursor(edges);
     if (!leme_desktop_cursor_override(server, cursor_name)) {
-        memset(&grab->resize_drag, 0, sizeof(grab->resize_drag));
+        grab->resize_drag = (struct leme_layout_resize_drag){0};
         return false;
     }
     if (tiled && !resize &&
@@ -529,7 +536,9 @@ leme_input_pointer_grab_active(const struct leme_server *server)
 
 bool
 leme_input_pointer_grab_start_xdg(struct leme_view *view,
-    bool resize, uint32_t serial, uint32_t wlr_edges)
+    bool resize,
+    uint32_t serial, // NOLINT(bugprone-easily-swappable-parameters)
+    uint32_t wlr_edges)
 {
     struct leme_server *server;
     uint32_t button;
@@ -580,7 +589,7 @@ leme_input_pointer_grab_sink(struct leme_pointer_grab *grab)
     grab->mode = LEME_POINTER_GRAB_SINK;
     leme_view_set_configure_deferred(grab->view, false);
     grab->view = NULL;
-    memset(&grab->resize_drag, 0, sizeof(grab->resize_drag));
+    grab->resize_drag = (struct leme_layout_resize_drag){0};
     leme_desktop_cursor_restore(grab->server);
     if (!leme_input_pointer_button_held(
             grab->server->seat, grab->button)) {
@@ -633,7 +642,7 @@ leme_input_pointer_grab_cancel_view(struct leme_view *view)
     }
     if (leme_input_pointer_grab_mode_tiled(grab->mode)) {
         if (grab->view == view || (grab->view != NULL &&
-                view->tag != NULL && view->tag == grab->view->tag &&
+                leme_ownership_tag(view) != NULL && leme_ownership_tag(view) == leme_ownership_tag(grab->view) &&
                 !view->floating && !view->unmanaged)) {
             leme_input_pointer_grab_cancel(view->server);
         }

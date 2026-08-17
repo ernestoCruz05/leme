@@ -8,6 +8,7 @@
 #include "workspace/tag.h"
 
 #include <limits.h>
+#include <math.h>
 #include <stdint.h>
 
 static int
@@ -35,10 +36,10 @@ leme_view_policy_destination(
     const struct leme_server *server, const struct leme_view *parent)
 {
     if (parent != NULL && parent->mapped && !parent->unmanaged &&
-            parent->tag != NULL && parent->tag->owner != NULL) {
+            leme_ownership_tag(parent) != NULL && leme_ownership_tag(parent)->owner != NULL) {
         return (struct leme_view_destination){
-            .tags = parent->tag->owner,
-            .tag_id = parent->tag->id,
+            .tags = leme_ownership_tag(parent)->owner,
+            .tag_id = leme_ownership_tag(parent)->id,
         };
     }
     if (server == NULL || server->focused_output == NULL) {
@@ -114,6 +115,34 @@ leme_view_policy_clamp_box(struct leme_box box, struct leme_box area)
         box.y = leme_view_policy_saturate(bottom - box.height);
     }
     return box;
+}
+
+struct leme_box
+leme_view_policy_reanchor_box(struct leme_box box,
+    struct leme_box from, struct leme_box to)
+{
+    double x_fraction = 0.0;
+    double y_fraction = 0.0;
+
+    if (from.width > 0) {
+        x_fraction = (double)((int64_t)box.x - from.x) /
+            (double)from.width;
+    }
+    if (from.height > 0) {
+        y_fraction = (double)((int64_t)box.y - from.y) /
+            (double)from.height;
+    }
+    if (!isfinite(x_fraction)) {
+        x_fraction = 0.0;
+    }
+    if (!isfinite(y_fraction)) {
+        y_fraction = 0.0;
+    }
+    box.x = leme_view_policy_saturate((int64_t)to.x +
+        (int64_t)llround(x_fraction * (double)to.width));
+    box.y = leme_view_policy_saturate((int64_t)to.y +
+        (int64_t)llround(y_fraction * (double)to.height));
+    return leme_view_policy_clamp_box(box, to);
 }
 
 struct leme_box

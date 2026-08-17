@@ -15,14 +15,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/util/log.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/xwayland/xwayland.h>
 
 static struct wlr_scene_tree *
 leme_render_view_parent(const struct leme_view *view)
 {
-    return view->scratchpad_state == LEME_SCRATCHPAD_SHOWN ||
-        view->floating || view->detached || view->fullscreen ?
+    if (view == NULL || view->server == NULL) {
+        return NULL;
+    }
+    if (leme_ownership_kind(view) == LEME_VIEW_OWNER_DURABLE) {
+        return view->server->scene_durable;
+    }
+    return view->floating || view->detached || view->fullscreen ?
         view->server->scene_floating : view->server->scene_tiled;
 }
 
@@ -88,8 +94,11 @@ void
 leme_render_view_create(struct leme_view *view)
 {
     static const float fallback[4] = {0.16f, 0.42f, 0.72f, 1.0f};
-    const float *border_color = view->server != NULL &&
-        view->server->config != NULL ?
+
+    if (view == NULL || view->server == NULL) {
+        return;
+    }
+    const float *border_color = view->server->config != NULL ?
         view->server->config->border_inactive : fallback;
     struct wlr_surface *surface = NULL;
     size_t index;
@@ -298,7 +307,10 @@ leme_render_view_destroy(struct leme_view *view)
     view->render_tree = NULL;
     view->scene_tree = NULL;
     view->drop_preview = NULL;
-    memset(view->border, 0, sizeof(view->border));
+    for (size_t index = 0;
+            index < LEME_ARRAY_LENGTH(view->border); index++) {
+        view->border[index] = NULL;
+    }
     leme_session_refresh_idle_inhibitors(view->server);
 }
 
@@ -761,44 +773,15 @@ leme_render_view_opacity(const struct leme_config *config, bool activated,
         config->opacity_active : config->opacity_inactive);
 }
 
-/*
- * Um scratchpad exposto não tem etiqueta e tem de ficar acima da composição
- * flutuante e de etiquetas na saída onde aparece. A raiz flutuante continua
- * abaixo das raízes top e overlay do compositor.
- */
-void
-leme_render_workspace_transition_restack_scratchpad(
-    struct leme_output *output)
-{
-    struct leme_scratchpad_manager *manager;
-    struct leme_view *view;
-
-    if (output == NULL || output->server == NULL) {
-        return;
-    }
-    manager = &output->server->scratchpads;
-    view = manager->shown;
-    if (manager->server != output->server || manager->shown_output != output ||
-            view == NULL || view->scratchpad_state != LEME_SCRATCHPAD_SHOWN ||
-            view->render_tree == NULL) {
-        return;
-    }
-    wlr_scene_node_raise_to_top(&view->render_tree->node);
-}
-
 void
 leme_render_view_focus(struct leme_view *view)
 {
-    struct leme_output *output;
-
     if (view == NULL || view->render_tree == NULL) {
         return;
     }
     wlr_scene_node_raise_to_top(&view->render_tree->node);
-    output = view->tag == NULL || view->tag->owner == NULL ? NULL :
-        view->tag->owner->output;
-    leme_render_workspace_transition_restack_scratchpad(output);
 }
+
 
 void
 leme_render_view_update_layer(struct leme_view *view)
@@ -1164,11 +1147,11 @@ leme_render_view_animation_begin(struct leme_view *view,
     content = leme_render_view_content_box(view, view->box);
     wl_array_init(&state->content_bases);
     state->view = view;
-    state->output = view->scratchpad_state == LEME_SCRATCHPAD_SHOWN &&
+    state->output = leme_view_is_shown_scratchpad(view) &&
         view->server->scratchpads.shown == view ?
-        view->server->scratchpads.shown_output :
-        (view->tag == NULL || view->tag->owner == NULL ? NULL :
-            view->tag->owner->output);
+        leme_ownership_effective_output(view) :
+        (leme_ownership_tag(view) == NULL || leme_ownership_tag(view)->owner == NULL ? NULL :
+            leme_ownership_tag(view)->owner->output);
     state->restore_on_done = opening;
     state->border_width = leme_render_view_border_width(view, view->box);
     state->final_content_width = content.width;
@@ -1182,9 +1165,12 @@ leme_render_view_animation_begin(struct leme_view *view,
             for (index = 0;
                     index < LEME_ARRAY_LENGTH(state->nodes.border); index++) {
                 if (state->nodes.border[index] != NULL) {
-                    memcpy(state->border_color[index],
-                        state->nodes.border[index]->color,
-                        sizeof(state->border_color[index]));
+                    for (size_t component = 0;
+                            component < LEME_ARRAY_LENGTH(
+                                state->border_color[index]); component++) {
+                        state->border_color[index][component] =
+                            state->nodes.border[index]->color[component];
+                    }
                 }
             }
         } else {
@@ -1313,7 +1299,8 @@ leme_render_view_apply_surface_effects_to_buffer(
  */
 static void
 leme_render_view_apply_surface_effects(struct leme_view *view,
-    int corner_radius, int border_width, int blur)
+    int corner_radius, // NOLINT(bugprone-easily-swappable-parameters)
+    int border_width, int blur)
 {
 #ifdef LEME_HAVE_EFFECTS
     int inner = corner_radius - border_width;
@@ -1353,7 +1340,9 @@ leme_render_view_apply_surface_effects(struct leme_view *view,
 void
 leme_render_view_layout_frame(
     const struct leme_render_view_frame_nodes *nodes,
-    struct leme_box box, int border_width, int corner_radius)
+    struct leme_box box,
+    int border_width, // NOLINT(bugprone-easily-swappable-parameters)
+    int corner_radius)
 {
     size_t index;
 
@@ -1410,6 +1399,37 @@ leme_render_view_layout_frame(
     }
 }
 
+/*
+ * Uma janela com margens invisíveis compromete uma superfície maior do que a
+ * sua geometria, e é essa superfície que leva o desfoque e os cantos. Sem este
+ * recorte os efeitos passam para fora da moldura, e até para a saída ao lado.
+ */
+void
+leme_render_view_clip_to_geometry(struct leme_view *view)
+{
+    const struct wlr_surface *surface;
+    struct wlr_box geometry;
+
+    if (view == NULL || view->scene_tree == NULL ||
+            view->kind != LEME_VIEW_XDG || view->xdg_toplevel == NULL) {
+        return;
+    }
+    surface = view->xdg_toplevel->base->surface;
+    geometry = view->xdg_toplevel->base->geometry;
+    /*
+     * Só as janelas que confirmam mais superfície do que geometria precisam de
+     * recorte. Aplicá-lo às outras mexia na árvore sem nada para cortar.
+     */
+    if (geometry.width <= 0 || geometry.height <= 0 ||
+            (geometry.x <= 0 && geometry.y <= 0 &&
+                geometry.width >= surface->current.width &&
+                geometry.height >= surface->current.height)) {
+        return;
+    }
+    wlr_scene_subsurface_tree_set_clip(&view->scene_tree->node, &geometry);
+    leme_render_view_apply_cached_opacity(view);
+}
+
 void
 leme_render_view_set_box(struct leme_view *view, struct leme_box box)
 {
@@ -1423,6 +1443,7 @@ leme_render_view_set_box(struct leme_view *view, struct leme_box box)
     }
     content = leme_render_view_content_box(view, box);
     border_width = content.x - box.x;
+    leme_render_view_clip_to_geometry(view);
     wlr_scene_node_set_position(&view->render_tree->node, box.x, box.y);
     for (index = 0; index < LEME_ARRAY_LENGTH(view->border); index++) {
         nodes.border[index] = view->border[index];

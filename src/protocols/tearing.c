@@ -59,9 +59,9 @@ leme_tearing_can_tear(const struct leme_server *server,
         return false;
     }
     view = server->focused_view;
-    if (!view->mapped || !view->fullscreen || view->tag == NULL ||
+    if (!view->mapped || !view->fullscreen || leme_ownership_tag(view) == NULL ||
             tags == NULL || tags->focused_is_candidate ||
-            view->tag->id != tags->focused_id ||
+            leme_ownership_tag(view)->id != tags->focused_id ||
             leme_view_output(view) != output) {
         return false;
     }

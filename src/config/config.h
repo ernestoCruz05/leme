@@ -64,6 +64,14 @@ struct leme_output_policy {
     bool warp_cursor;
 };
 
+#define LEME_CURSOR_SIZE_DEFAULT 24
+#define LEME_CURSOR_SIZE_MAX 512
+
+struct leme_cursor_config {
+    char *theme;
+    int size;
+};
+
 enum leme_tag_field {
     LEME_TAG_FIELD_LAYOUT = 1 << 0,
     LEME_TAG_FIELD_DROP_MODE = 1 << 1,
@@ -197,6 +205,7 @@ struct leme_config {
     struct leme_output_config *outputs;
     size_t output_count;
     struct leme_output_policy output_policy;
+    struct leme_cursor_config cursor;
     struct leme_publication_config publication;
     struct leme_pointer_settings pointer_defaults;
     struct leme_pointer_rule *pointer_rules;

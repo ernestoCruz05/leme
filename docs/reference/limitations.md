@@ -8,6 +8,6 @@ These limitations describe the current build. Planned and deferred work is track
 - Views do not return to their original monitor when a disconnected output is plugged back in.
 - Portal screen sharing offers whole-output sources. Direct clients can request per-window capture, but portals do not use that source.
 - Leme has no maximized or minimized state.
-- Sticky floating windows and terminal swallowing are not implemented.
+- Terminal swallowing is not implemented.
 - Physical multi-monitor support is new and still needs broader hardware testing.
 

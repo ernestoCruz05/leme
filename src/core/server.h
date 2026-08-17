@@ -4,6 +4,7 @@
 #include "core/leme.h"
 #include "config/config.h"
 #include "shell/scratchpad.h"
+#include "shell/sticky.h"
 
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
@@ -66,6 +67,7 @@ struct leme_server {
     struct wlr_scene_tree *scene_bottom;
     struct wlr_scene_tree *scene_tiled;
     struct wlr_scene_tree *scene_floating;
+    struct wlr_scene_tree *scene_durable;
     struct wlr_scene_tree *scene_top;
     struct wlr_scene_tree *scene_overlay;
     struct wlr_scene_tree *scene_drag;
@@ -103,6 +105,7 @@ struct leme_server {
     struct leme_tearing *tearing;
     struct leme_view *focused_view;
     struct leme_scratchpad_manager scratchpads;
+    struct leme_sticky_manager sticky;
     struct leme_layer_surface *focused_layer;
     struct wl_list views;
     struct wl_list focus_history;

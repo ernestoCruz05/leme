@@ -7,6 +7,7 @@
 #include "render/render.h"
 #include "shell/policy.h"
 #include "shell/rules.h"
+#include "shell/sticky.h"
 #include "workspace/tag.h"
 
 #include <stdlib.h>
@@ -146,7 +147,9 @@ leme_xdg_parent_view(struct leme_server *server,
         if (candidate->kind == LEME_VIEW_XDG &&
                 candidate->xdg_toplevel == toplevel->parent &&
                 candidate->mapped && !candidate->unmanaged &&
-                candidate->tag != NULL && candidate->tag->owner != NULL) {
+                (leme_view_is_sticky(candidate) ||
+                    (leme_ownership_tag(candidate) != NULL &&
+                        leme_ownership_tag(candidate)->owner != NULL))) {
             return candidate;
         }
     }
@@ -161,6 +164,7 @@ leme_view_handle_map(struct wl_listener *listener, void *data)
         leme_scratchpad_try_adopt_map(view);
     struct leme_view *parent =
         leme_xdg_parent_view(view->server, view->xdg_toplevel);
+    struct leme_sticky_adoption *adoption = NULL;
     struct leme_view_destination destination =
         leme_view_policy_destination(view->server, parent);
     const struct wlr_xdg_toplevel_state *state =
@@ -175,11 +179,14 @@ leme_view_handle_map(struct wl_listener *listener, void *data)
     leme_view_policy_apply_rules(view->server, &rules, &destination,
         &floating, parent != NULL);
 
+    const bool sticky_parent = parent != NULL &&
+        leme_view_is_sticky(parent);
     const struct leme_view_map_options options = {
-        .tags = destination.tags,
-        .tag_id = destination.tag_id,
+        .tags = sticky_parent ? NULL : destination.tags,
+        .tag_id = sticky_parent ? 0 : destination.tag_id,
         .parent = parent,
         .floating = floating,
+        .durable_direct = sticky_parent,
     };
 
     (void)data;
@@ -190,9 +197,22 @@ leme_view_handle_map(struct wl_listener *listener, void *data)
         wlr_log(WLR_ERROR, "%s", "leme: failed to adopt pending XDG scratchpad");
         return;
     }
+    if (sticky_parent &&
+            !leme_sticky_prepare_transient(parent, view, &adoption)) {
+        wlr_log(WLR_ERROR, "%s",
+            "leme: failed to prepare sticky transient adoption");
+        return;
+    }
     if (!leme_view_map(view, &options)) {
+        leme_sticky_discard_transient(&adoption);
         wlr_log(WLR_ERROR, "%s", "leme: failed to map XDG view");
         return;
+    }
+    if (adoption != NULL) {
+        leme_view_apply_layout_box(view,
+            leme_view_policy_center_box(view->box, parent->box,
+                leme_output_usable_box(leme_view_output(parent))));
+        leme_sticky_commit_transient(&adoption);
     }
     if (view->xdg_toplevel->requested.fullscreen ||
             ((rules.fields & LEME_WINDOW_RULE_FULLSCREEN) != 0 &&
@@ -218,6 +238,9 @@ leme_view_handle_commit(struct wl_listener *listener, void *data)
 
     (void)data;
     leme_session_refresh_idle_inhibitors(view->server);
+    if (view->mapped) {
+        leme_render_view_clip_to_geometry(view);
+    }
     if (view->xdg_toplevel->base->initial_commit) {
         wlr_xdg_toplevel_set_size(view->xdg_toplevel, 0, 0);
     }
@@ -307,8 +330,7 @@ leme_view_handle_destroy(struct wl_listener *listener, void *data)
     wl_list_remove(&view->destroy.link);
     free(view);
     if (leme_focused_tags(server) != NULL) {
-        leme_view_arrange(server);
-        leme_tags_refresh_visibility(leme_focused_tags(server));
+        leme_view_refresh_tag_focus(server);
     }
 }
 
@@ -328,6 +350,7 @@ leme_view_handle_new_toplevel(struct wl_listener *listener, void *data)
     view->kind = LEME_VIEW_XDG;
     view->xdg_toplevel = xdg_toplevel;
     view->render_opacity = 1.0f;
+    leme_ownership_init(view);
     wl_list_init(&view->link);
     wl_list_init(&view->tag_link);
     wl_list_init(&view->focus_link);

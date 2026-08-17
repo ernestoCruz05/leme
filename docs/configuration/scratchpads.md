@@ -2,7 +2,9 @@
 
 Scratchpads keep a window available without putting it on a tag. Leme has one
 compositor-wide pool, shared by every output, and shows at most one pool member
-at a time.
+at a time. They use the same durable overlay as sticky floating windows but
+remain a separate feature: `scratchpad_send` refuses sticky windows and
+`toggle_sticky` refuses scratchpad members, so there is no direct conversion.
 
 ## Named scratchpads
 

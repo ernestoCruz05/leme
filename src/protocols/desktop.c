@@ -1,12 +1,15 @@
 #include "protocols/desktop.h"
 
+#include "config/config.h"
 #include "core/server.h"
 #include "input/input.h"
 #include "output/output.h"
 #include "protocols/input.h"
 #include "protocols/session.h"
 #include "shell/layer.h"
+#include "shell/sticky.h"
 #include "shell/view.h"
+#include "shell/xwayland.h"
 #include "workspace/tag.h"
 
 #include <stdlib.h>
@@ -93,15 +96,18 @@ leme_desktop_activation_target_eligible(const struct leme_server *server,
 {
     const struct leme_tags *tags;
 
-    if (server == NULL || !leme_view_protocol_eligible(view)) {
+    if (server == NULL || !leme_ownership_activation_eligible(view)) {
         return false;
+    }
+    if (leme_view_is_sticky(view)) {
+        return leme_view_output(view) != NULL;
     }
     if (leme_view_is_shown_scratchpad(view)) {
         return leme_view_output(view) == leme_output_focused(server);
     }
     tags = leme_focused_tags(server);
     return tags != NULL && !tags->focused_is_candidate &&
-        view->tag != NULL && view->tag->id == tags->focused_id;
+        leme_ownership_tag(view) != NULL && leme_ownership_tag(view)->id == tags->focused_id;
 }
 
 static void
@@ -120,6 +126,9 @@ leme_desktop_handle_activate(struct wl_listener *listener, void *data)
     }
     view = leme_view_from_surface(server, event->surface);
     if (leme_desktop_activation_target_eligible(server, view)) {
+        if (leme_view_is_sticky(view)) {
+            leme_output_set_focused(server, leme_view_output(view), false);
+        }
         leme_view_focus(view);
     }
 }
@@ -417,7 +426,10 @@ leme_desktop_init(struct leme_server *server)
         wlr_server_decoration_manager_create(server->display);
     desktop->cursor_shape =
         wlr_cursor_shape_manager_v1_create(server->display, 1);
-    desktop->xcursor = wlr_xcursor_manager_create(NULL, 24);
+    desktop->xcursor = wlr_xcursor_manager_create(
+        server->config == NULL ? NULL : server->config->cursor.theme,
+        server->config == NULL ? LEME_CURSOR_SIZE_DEFAULT :
+            (uint32_t)server->config->cursor.size);
     if (desktop->activation == NULL ||
             server->xdg_dialog_manager == NULL ||
             desktop->xdg_decoration_manager == NULL ||
@@ -453,6 +465,42 @@ leme_desktop_init(struct leme_server *server)
     desktop->cursor_themed = true;
     wlr_cursor_set_xcursor(server->cursor, desktop->xcursor,
         desktop->cursor_name);
+    leme_xwayland_set_root_cursor(server, desktop->xcursor,
+        desktop->cursor_name, desktop->cursor_scale);
+    return true;
+}
+
+bool
+leme_desktop_apply_cursor_config(struct leme_server *server,
+    const struct leme_config *config)
+{
+    struct leme_desktop *desktop =
+        server == NULL ? NULL : server->desktop;
+    struct wlr_xcursor_manager *replacement;
+    struct wlr_xcursor_manager *previous;
+
+    if (desktop == NULL || desktop->xcursor == NULL || config == NULL) {
+        return false;
+    }
+    replacement = wlr_xcursor_manager_create(config->cursor.theme,
+        (uint32_t)config->cursor.size);
+    if (replacement == NULL ||
+            !wlr_xcursor_manager_load(replacement, desktop->cursor_scale) ||
+            wlr_xcursor_manager_get_xcursor(replacement, "left_ptr",
+                desktop->cursor_scale) == NULL) {
+        wlr_xcursor_manager_destroy(replacement);
+        return false;
+    }
+    previous = desktop->xcursor;
+    desktop->xcursor = replacement;
+    (void)leme_desktop_load_cursor_scales(server);
+    if (desktop->cursor_themed && desktop->cursor_name != NULL) {
+        wlr_cursor_set_xcursor(server->cursor, replacement,
+            desktop->cursor_name);
+    }
+    leme_xwayland_set_root_cursor(server, replacement,
+        desktop->cursor_name, desktop->cursor_scale);
+    wlr_xcursor_manager_destroy(previous);
     return true;
 }
 
@@ -464,17 +512,19 @@ leme_desktop_finish(struct leme_server *server)
     if (desktop == NULL) {
         return;
     }
-    while (!wl_list_empty(&desktop->xdg_decorations)) {
-        struct leme_xdg_decoration *wrapper = wl_container_of(
-            desktop->xdg_decorations.next, wrapper, link);
+    struct leme_xdg_decoration *xdg;
+    struct leme_xdg_decoration *xdg_next;
 
-        leme_desktop_xdg_decoration_finish(wrapper);
+    wl_list_for_each_safe(xdg, xdg_next,
+            &desktop->xdg_decorations, link) {
+        leme_desktop_xdg_decoration_finish(xdg);
     }
-    while (!wl_list_empty(&desktop->server_decorations)) {
-        struct leme_server_decoration *wrapper = wl_container_of(
-            desktop->server_decorations.next, wrapper, link);
+    struct leme_server_decoration *server_decoration;
+    struct leme_server_decoration *server_decoration_next;
 
-        leme_desktop_server_decoration_finish(wrapper);
+    wl_list_for_each_safe(server_decoration, server_decoration_next,
+            &desktop->server_decorations, link) {
+        leme_desktop_server_decoration_finish(server_decoration);
     }
     if (desktop->request_activate.link.next != NULL) {
         wl_list_remove(&desktop->request_activate.link);

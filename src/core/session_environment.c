@@ -1,5 +1,6 @@
 #include "core/session_environment.h"
 
+#include "config/config.h"
 #include "core/server.h"
 #include "shell/xwayland.h"
 
@@ -41,6 +42,28 @@ leme_session_environment_set(struct leme_server *server)
     return unsetenv("DISPLAY") == 0;
 }
 
+/* O bloco env só é aplicado depois do fork; o Xwayland herda este ambiente. */
+void
+leme_session_environment_cursor(const struct leme_server *server)
+{
+    char size[16];
+    int written;
+
+    if (server == NULL || server->config == NULL) {
+        return;
+    }
+    written = snprintf(size, sizeof(size), "%d", server->config->cursor.size);
+    if (written < 0 || (size_t)written >= sizeof(size) ||
+            setenv("XCURSOR_SIZE", size, 1) < 0) {
+        wlr_log(WLR_ERROR, "%s", "leme: failed to export XCURSOR_SIZE");
+        return;
+    }
+    if (server->config->cursor.theme != NULL &&
+            setenv("XCURSOR_THEME", server->config->cursor.theme, 1) < 0) {
+        wlr_log(WLR_ERROR, "%s", "leme: failed to export XCURSOR_THEME");
+    }
+}
+
 static bool
 leme_session_environment_has_systemd(void)
 {
@@ -67,7 +90,9 @@ leme_session_environment_run(const char *display)
     static char session_desktop[] = "XDG_SESSION_DESKTOP";
     static char session_type[] = "XDG_SESSION_TYPE";
     static char leme_socket[] = "LEME_SOCKET";
-    char *arguments[10];
+    static char cursor_size[] = "XCURSOR_SIZE";
+    static char cursor_theme[] = "XCURSOR_THEME";
+    char *arguments[12];
     size_t count = 0;
     pid_t process;
     int result;
@@ -86,6 +111,12 @@ leme_session_environment_run(const char *display)
     arguments[count++] = session_type;
     if (getenv("LEME_SOCKET") != NULL) {
         arguments[count++] = leme_socket;
+    }
+    if (getenv("XCURSOR_SIZE") != NULL) {
+        arguments[count++] = cursor_size;
+    }
+    if (getenv("XCURSOR_THEME") != NULL) {
+        arguments[count++] = cursor_theme;
     }
     arguments[count] = NULL;
 

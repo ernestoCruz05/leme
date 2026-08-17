@@ -4,9 +4,11 @@ The `env` block sets variables for programs launched by Leme. It does not change
 
 ```scfg
 env {
-    XCURSOR_THEME Adwaita
+    MOZ_ENABLE_WAYLAND 1
 }
 ```
+
+The pointer theme and size belong in the [cursor](cursor.md) block instead. XWayland does not inherit what `env` sets.
 
 The `exec` block starts each argument vector once after startup:
 

@@ -277,6 +277,11 @@ leme_view_refresh_tag_focus(struct leme_server *server)
 {
     leme_view_arrange(server);
     leme_tags_refresh_visibility(leme_focused_tags(server));
+    /* A reconciliação de saídas não passa por aqui, e não pode passar. */
+    if (server->focused_view == NULL) {
+        leme_view_focus(leme_sticky_focus_candidate(server,
+            leme_output_focused(server)));
+    }
 }
 
 static bool
@@ -369,7 +374,7 @@ leme_view_drop_to_output(struct leme_view *view,
     }
     leme_layout_discard_detached(detach);
     view->detached = false;
-    leme_layout_add_view(&view->tag->layout, NULL, view);
+    leme_layout_add_view(&leme_ownership_tag(view)->layout, NULL, view);
     leme_render_view_update_layer(view);
     leme_view_arrange(view->server);
     leme_tags_refresh_visibility(destination);
@@ -424,20 +429,20 @@ leme_view_map(struct leme_view *view,
     bool visible_destination;
 
     if (view == NULL || view->mapped || options == NULL ||
-            (!options->scratchpad_direct &&
+            (!options->durable_direct &&
                 (options->tags == NULL || options->tag_id == 0))) {
         return false;
     }
-    if (!options->scratchpad_direct && !options->floating &&
+    if (!options->durable_direct && !options->floating &&
             !options->unmanaged) {
         leme_input_pointer_grab_cancel_tiled(view->server);
     }
     view->mapped = true;
     view->floating = options->floating || options->unmanaged ||
-        options->scratchpad_direct;
+        options->durable_direct;
     view->unmanaged = options->unmanaged;
-    /* Criar a cena pode falhar, ao contrário de dar posse a uma etiqueta.
-     * Prepara-se antes de comprometer a vista com a etiqueta, para que um
+    /* Criar a cena pode falhar, ao contrário de dar posse a uma tag.
+     * Prepara-se antes de comprometer a vista com a tag, para que um
      * map falhado não deixe efeitos secundários. */
     leme_render_view_create(view);
     if (view->render_tree == NULL) {
@@ -446,9 +451,18 @@ leme_view_map(struct leme_view *view,
         view->unmanaged = false;
         return false;
     }
-    if (options->scratchpad_direct) {
+    if (options->durable_direct) {
         wlr_scene_node_set_enabled(&view->render_tree->node, false);
         leme_render_view_set_activated(view, false);
+        return true;
+    }
+    if (options->unmanaged) {
+        leme_ownership_set_unmanaged_output(view,
+            options->tags->output);
+        leme_view_set_initial_floating_box(view, options->parent);
+        leme_render_view_set_activated(view, false);
+        leme_render_view_set_box(view, view->box);
+        leme_render_view_animate(view, LEME_ANIMATION_OPEN);
         return true;
     }
     if (!leme_tags_assign_view_to(
@@ -470,7 +484,7 @@ leme_view_map(struct leme_view *view,
     }
     visible_destination = options->tags == leme_focused_tags(view->server) &&
         !options->tags->focused_is_candidate &&
-        view->tag->id == options->tags->focused_id;
+        leme_ownership_tag(view)->id == options->tags->focused_id;
     if (!view->unmanaged && visible_destination) {
         leme_view_focus(view);
     }
@@ -485,7 +499,7 @@ leme_view_unmap(struct leme_view *view)
 {
     struct leme_server *server;
     const bool hidden = view != NULL &&
-        view->scratchpad_state == LEME_SCRATCHPAD_HIDDEN;
+        leme_view_is_scratchpad(view) && !leme_view_is_shown_scratchpad(view);
 
     if (view == NULL || !view->mapped) {
         return;
@@ -498,6 +512,7 @@ leme_view_unmap(struct leme_view *view)
         leme_render_view_animate(view, LEME_ANIMATION_CLOSE);
     }
     leme_scratchpad_handle_unmap(view);
+    leme_sticky_handle_unmap(view);
     leme_input_pointer_grab_cancel_view(view);
     leme_view_focus_history_remove(view);
     view->mapped = false;
@@ -506,8 +521,7 @@ leme_view_unmap(struct leme_view *view)
     }
     leme_tags_remove_view(view);
     leme_render_view_destroy(view);
-    leme_view_arrange(server);
-    leme_tags_refresh_visibility(leme_focused_tags(server));
+    leme_view_refresh_tag_focus(server);
     leme_publication_invalidate(server);
 }
 
@@ -519,7 +533,7 @@ leme_view_destroy_core(struct leme_view *view)
     }
     leme_toplevel_untrack(view);
     leme_view_unmap(view);
-    if (view->tag != NULL) {
+    if (leme_ownership_tag(view) != NULL) {
         leme_tags_remove_view(view);
     }
     leme_render_view_destroy(view);
@@ -531,16 +545,12 @@ leme_view_destroy_core(struct leme_view *view)
     leme_publication_invalidate(view->server);
 }
 
-void
-leme_view_focus(struct leme_view *view)
+static void
+leme_view_focus_eligible(struct leme_view *view)
 {
     struct leme_server *server;
     struct wlr_keyboard *keyboard;
 
-    if (view == NULL || !view->mapped ||
-            view->scratchpad_state == LEME_SCRATCHPAD_HIDDEN) {
-        return;
-    }
     server = view->server;
     if (leme_session_locked(server)) {
         return;
@@ -556,15 +566,18 @@ leme_view_focus(struct leme_view *view)
         leme_view_set_activated(view, true);
         server->focused_view = view;
     }
-    if (view->tag != NULL) {
-        view->tag->focused_view = view;
+    if (leme_ownership_tag(view) != NULL) {
+        leme_ownership_tag(view)->focused_view = view;
     }
-    if (!view->unmanaged && view->tag != NULL &&
-            view->scratchpad_state == LEME_SCRATCHPAD_NONE) {
+    if (leme_ownership_tag(view) != NULL || leme_view_is_sticky(view)) {
         leme_view_focus_history_remove(view);
         wl_list_insert(&server->focus_history, &view->focus_link);
     }
-    leme_render_view_focus(view);
+    if (leme_view_is_sticky(view)) {
+        leme_sticky_raise_group(view);
+    } else {
+        leme_render_view_focus(view);
+    }
     keyboard = wlr_seat_get_keyboard(server->seat);
     if (keyboard != NULL) {
         wlr_seat_keyboard_notify_enter(server->seat,
@@ -573,6 +586,25 @@ leme_view_focus(struct leme_view *view)
     }
     leme_input_protocols_update_keyboard_focus(server);
     leme_publication_invalidate(server);
+}
+
+void
+leme_view_focus(struct leme_view *view)
+{
+    if (view != NULL && leme_ownership_focus_eligible(view)) {
+        leme_view_focus_eligible(view);
+    }
+}
+
+void
+leme_view_focus_unmanaged_xwayland(struct leme_view *view)
+{
+    if (view != NULL && view->mapped && view->unmanaged &&
+            view->kind == LEME_VIEW_XWAYLAND &&
+            leme_ownership_kind(view) == LEME_VIEW_OWNER_NONE &&
+            leme_ownership_effective_output(view) != NULL) {
+        leme_view_focus_eligible(view);
+    }
 }
 
 void
@@ -591,7 +623,7 @@ leme_view_focus_next(struct leme_server *server)
     if (tag == NULL || wl_list_empty(&tag->views)) {
         return;
     }
-    start = server->focused_view == NULL || server->focused_view->tag != tag ?
+    start = server->focused_view == NULL || leme_ownership_tag(server->focused_view) != tag ?
         tag->views.next : server->focused_view->tag_link.next;
     link = start;
     do {
@@ -655,7 +687,7 @@ leme_view_focus_direction(
     }
     if (server->focused_view != NULL && server->focused_view->mapped &&
             !server->focused_view->unmanaged &&
-            server->focused_view->tag == current) {
+            leme_ownership_tag(server->focused_view) == current) {
         origin = server->focused_view;
     }
     target = leme_tags_directional_view(tags, origin, direction, false);
@@ -681,8 +713,13 @@ leme_view_focus_previous(struct leme_server *server)
         return false;
     }
     wl_list_for_each(view, &server->focus_history, focus_link) {
+        const bool current_tag = leme_ownership_tag(view) == current;
+        const bool visible_sticky = leme_view_is_sticky(view) &&
+            leme_ownership_effective_output(view) ==
+                leme_output_focused(server);
+
         if (view != server->focused_view && view->mapped &&
-                !view->unmanaged && view->tag == current) {
+                !view->unmanaged && (current_tag || visible_sticky)) {
             leme_view_focus(view);
             return server->focused_view == view;
         }
@@ -712,12 +749,16 @@ leme_view_move_direction(
     if (leme_view_is_scratchpad(view)) {
         return false;
     }
+    if (leme_view_is_sticky(view)) {
+        return leme_sticky_apply_box(view,
+            leme_layout_move_box(view->box, direction, amount), false);
+    }
     tags = leme_focused_tags(server);
     if (tags == NULL || tags->focused_is_candidate) {
         return false;
     }
     current = tags->table[tags->focused_id];
-    if (view->tag == NULL || view->tag != current) {
+    if (leme_ownership_tag(view) == NULL || leme_ownership_tag(view) != current) {
         return false;
     }
     if (view->floating) {
@@ -751,18 +792,18 @@ leme_view_begin_tiled_drag(struct leme_view *view,
 
     if (view == NULL || detach == NULL || *detach != NULL ||
             !view->mapped || view->unmanaged || view->floating ||
-            view->detached || view->fullscreen || view->tag == NULL ||
-            !leme_layout_drag_supported(&view->tag->layout)) {
+            view->detached || view->fullscreen || leme_ownership_tag(view) == NULL ||
+            !leme_layout_drag_supported(&leme_ownership_tag(view)->layout)) {
         return false;
     }
     tags = leme_focused_tags(view->server);
     if (tags == NULL || tags->focused_is_candidate ||
             tags->focused_id == 0 || tags->focused_id > tags->max_tags ||
-            tags->table[tags->focused_id] != view->tag) {
+            tags->table[tags->focused_id] != leme_ownership_tag(view)) {
         return false;
     }
     box = view->box;
-    *detach = leme_layout_detach_view(&view->tag->layout.root, view);
+    *detach = leme_layout_detach_view(&leme_ownership_tag(view)->layout.root, view);
     if (*detach == NULL) {
         return false;
     }
@@ -780,11 +821,11 @@ leme_view_commit_tiled_drag(struct leme_view *view,
     enum leme_direction direction)
 {
     if (view == NULL || detach == NULL || *detach == NULL ||
-            !view->detached || view->tag == NULL || target == NULL ||
-            target->tag != view->tag || !target->mapped ||
+            !view->detached || leme_ownership_tag(view) == NULL || target == NULL ||
+            leme_ownership_tag(target) != leme_ownership_tag(view) || !target->mapped ||
             target->floating || target->detached || target->fullscreen ||
             !leme_layout_insert_detached(
-                &view->tag->layout.root, detach, target, direction)) {
+                &leme_ownership_tag(view)->layout.root, detach, target, direction)) {
         return false;
     }
     view->detached = false;
@@ -804,8 +845,8 @@ leme_view_restore_tiled_drag(struct leme_view *view,
     if (view == NULL || detach == NULL) {
         return false;
     }
-    restored = *detach == NULL || (view->tag != NULL &&
-        leme_layout_restore_view(&view->tag->layout.root, detach));
+    restored = *detach == NULL || (leme_ownership_tag(view) != NULL &&
+        leme_layout_restore_view(&leme_ownership_tag(view)->layout.root, detach));
     if (!restored) {
         wlr_log(WLR_ERROR, "%s",
             "leme: tiled drag transaction could not be restored");
@@ -849,10 +890,11 @@ leme_view_close(struct leme_view *view)
 bool
 leme_view_set_floating(struct leme_view *view, bool floating)
 {
-    if (view == NULL || leme_view_is_scratchpad(view)) {
+    if (view == NULL || leme_view_is_scratchpad(view) ||
+            leme_view_is_sticky(view)) {
         return false;
     }
-    if (view->tag == NULL || view->floating == floating || view->fullscreen) {
+    if (leme_ownership_tag(view) == NULL || view->floating == floating || view->fullscreen) {
         return view->floating == floating;
     }
     leme_input_pointer_grab_cancel_tiled(view->server);
@@ -860,15 +902,15 @@ leme_view_set_floating(struct leme_view *view, bool floating)
         leme_input_pointer_grab_cancel_view(view);
     }
     if (floating) {
-        leme_layout_remove_view(&view->tag->layout, view);
+        leme_layout_remove_view(&leme_ownership_tag(view)->layout, view);
         view->floating = true;
         if (view->box.width <= 0 || view->box.height <= 0) {
             leme_view_set_initial_floating_box(view, NULL);
         }
     } else {
         view->floating = false;
-        leme_layout_add_view(&view->tag->layout,
-            view->tag->focused_view, view);
+        leme_layout_add_view(&leme_ownership_tag(view)->layout,
+            leme_ownership_tag(view)->focused_view, view);
     }
     leme_view_update_tiled(view);
     leme_render_view_update_layer(view);
@@ -893,7 +935,10 @@ leme_view_set_fullscreen(struct leme_view *view, bool fullscreen)
         leme_view_ack_fullscreen(view, false);
         return false;
     }
-    if (view->tag == NULL) {
+    if (fullscreen && leme_view_is_sticky(view)) {
+        return leme_sticky_enter_fullscreen(view);
+    }
+    if (leme_ownership_tag(view) == NULL) {
         return false;
     }
     if (view->fullscreen == fullscreen) {
@@ -923,7 +968,6 @@ leme_view_set_fullscreen(struct leme_view *view, bool fullscreen)
     }
     leme_render_view_set_activated(view, view == view->server->focused_view);
     leme_tags_refresh_visibility(leme_focused_tags(view->server));
-    leme_render_workspace_transition_restack_scratchpad(leme_view_output(view));
     return true;
 }
 
@@ -935,12 +979,14 @@ leme_view_resize(struct leme_view *view,
     int limit;
 
     if (view == NULL || view->fullscreen || amount <= 0 ||
-            (!leme_view_is_shown_scratchpad(view) && view->tag == NULL)) {
+            (!leme_view_is_shown_scratchpad(view) &&
+                !leme_view_is_sticky(view) &&
+                leme_ownership_tag(view) == NULL)) {
         return false;
     }
     if (!view->floating) {
         leme_input_pointer_grab_cancel_tiled(view->server);
-        if (!leme_layout_resize(&view->tag->layout, view, edge, amount,
+        if (!leme_layout_resize(&leme_ownership_tag(view)->layout, view, edge, amount,
                 leme_output_usable_box(leme_view_output(view)))) {
             return false;
         }
@@ -982,6 +1028,9 @@ leme_view_resize(struct leme_view *view,
     if (leme_view_is_shown_scratchpad(view)) {
         return leme_scratchpad_apply_shown_box(view, view->box, true);
     }
+    if (leme_view_is_sticky(view)) {
+        return leme_sticky_apply_box(view, view->box, true);
+    }
     leme_render_view_set_box(view, view->box);
     return true;
 }
@@ -995,6 +1044,9 @@ leme_view_apply_interactive_box(
             (leme_view_is_scratchpad(view) &&
                 !leme_view_is_shown_scratchpad(view))) {
         return false;
+    }
+    if (leme_view_is_sticky(view)) {
+        return leme_sticky_apply_box(view, box, resizing);
     }
     view->box = box;
     if (resizing && view->kind == LEME_VIEW_XDG) {

@@ -237,7 +237,7 @@ leme_scratchpad_hidden_claim(const struct leme_scratchpad_manager *manager,
     struct leme_view *view;
 
     wl_list_for_each(view, &manager->pool, scratchpad_link) {
-        if (view->scratchpad_state == LEME_SCRATCHPAD_HIDDEN &&
+        if (leme_view_is_scratchpad(view) && !leme_view_is_shown_scratchpad(view) &&
                 leme_scratchpad_claim_matches(view, name)) {
             return view;
         }
@@ -254,7 +254,7 @@ leme_scratchpad_hidden_identity(const struct leme_scratchpad_manager *manager,
     wl_list_for_each(view, &manager->pool, scratchpad_link) {
         const char *candidate = leme_view_identity(view);
 
-        if (view->scratchpad_state == LEME_SCRATCHPAD_HIDDEN &&
+        if (leme_view_is_scratchpad(view) && !leme_view_is_shown_scratchpad(view) &&
                 view->scratchpad_name == NULL && candidate != NULL &&
                 strcmp(candidate, identity) == 0) {
             return view;
@@ -272,8 +272,8 @@ leme_scratchpad_focused_tagged_identity(const struct leme_server *server,
     wl_list_for_each(view, &server->focus_history, focus_link) {
         const char *candidate = leme_view_identity(view);
 
-        if (view->mapped && !view->unmanaged && view->tag != NULL &&
-                view->scratchpad_state == LEME_SCRATCHPAD_NONE &&
+        if (view->mapped && !view->unmanaged && leme_ownership_tag(view) != NULL &&
+                !leme_view_is_scratchpad(view) &&
                 view->scratchpad_name == NULL && candidate != NULL &&
                 strcmp(candidate, identity) == 0) {
             return view;
@@ -292,32 +292,6 @@ leme_scratchpad_saturate_int(int64_t value)
         return INT32_MIN;
     }
     return (int)value;
-}
-
-static struct leme_box
-leme_scratchpad_reanchor_box(const struct leme_view *view,
-    struct leme_output *output)
-{
-    const struct leme_box area = leme_output_usable_box(output);
-    struct leme_box box = view->box;
-    double x_fraction = 0.0;
-    double y_fraction = 0.0;
-    const int64_t old_x = (int64_t)view->scratchpad_anchor_area.x;
-    const int64_t old_y = (int64_t)view->scratchpad_anchor_area.y;
-
-    if (view->scratchpad_anchor_area.width > 0) {
-        x_fraction = (double)((int64_t)box.x - old_x) /
-            (double)view->scratchpad_anchor_area.width;
-    }
-    if (view->scratchpad_anchor_area.height > 0) {
-        y_fraction = (double)((int64_t)box.y - old_y) /
-            (double)view->scratchpad_anchor_area.height;
-    }
-    box.x = leme_scratchpad_saturate_int((int64_t)area.x +
-        (int64_t)llround(x_fraction * (double)area.width));
-    box.y = leme_scratchpad_saturate_int((int64_t)area.y +
-        (int64_t)llround(y_fraction * (double)area.height));
-    return leme_view_policy_clamp_box(box, area);
 }
 
 static void
@@ -376,7 +350,7 @@ leme_scratchpad_restore_tag_focus(struct leme_server *server)
         for (struct wl_list *link = server->focus_history.next;
                 link != &server->focus_history; link = link->next) {
             view = wl_container_of(link, view, focus_link);
-            if (view->mapped && !view->unmanaged && view->tag == current &&
+            if (view->mapped && !view->unmanaged && leme_ownership_tag(view) == current &&
                     (fullscreen == NULL || view == fullscreen)) {
                 current->focused_view = view;
                 break;
@@ -393,17 +367,17 @@ leme_scratchpad_hide(struct leme_scratchpad_manager *manager,
     const bool focused = manager->server->focused_view == view;
     struct leme_output *output;
 
-    if (view->scratchpad_state != LEME_SCRATCHPAD_SHOWN ||
+    if (!leme_view_is_shown_scratchpad(view) ||
             manager->shown != view) {
         return;
     }
-    output = manager->shown_output;
+    output = leme_ownership_effective_output(manager->shown);
     leme_scratchpad_finish_outputs(output, NULL);
     leme_render_view_finish_animation(view);
     leme_capture_invalidate_view(view);
     manager->shown = NULL;
-    manager->shown_output = NULL;
-    view->scratchpad_state = LEME_SCRATCHPAD_HIDDEN;
+    (void)leme_ownership_present_durable(view,
+        LEME_DURABLE_HIDDEN, NULL);
     if (promote) {
         leme_scratchpad_promote(manager, view);
     }
@@ -440,7 +414,7 @@ leme_scratchpad_show(struct leme_scratchpad_manager *manager,
     const struct leme_scratchpad_config *scratchpad)
 {
     struct leme_output *previous = manager->shown == NULL ? NULL :
-        manager->shown_output;
+        leme_ownership_effective_output(manager->shown);
 
     if (manager->shown != NULL && manager->shown != view) {
         leme_scratchpad_hide(manager, manager->shown, false);
@@ -452,14 +426,15 @@ leme_scratchpad_show(struct leme_scratchpad_manager *manager,
     }
     leme_render_view_finish_animation(view);
     const struct leme_box box = scratchpad == NULL ?
-        leme_scratchpad_reanchor_box(view, output) :
+        leme_view_policy_reanchor_box(view->box,
+            view->scratchpad_anchor_area, leme_output_usable_box(output)) :
         leme_scratchpad_named_box(scratchpad, output);
 
     view->floating = true;
     view->fullscreen = false;
-    view->scratchpad_state = LEME_SCRATCHPAD_SHOWN;
+    (void)leme_ownership_present_durable(view,
+        LEME_DURABLE_OUTPUT, output);
     manager->shown = view;
-    manager->shown_output = output;
     leme_scratchpad_promote(manager, view);
     leme_render_view_update_layer(view);
     leme_scratchpad_set_box(view, box, scratchpad != NULL);
@@ -471,7 +446,7 @@ leme_scratchpad_show(struct leme_scratchpad_manager *manager,
 }
 
 static bool
-leme_scratchpad_direct_prepare(struct leme_scratchpad_manager *manager,
+leme_durable_direct_prepare(struct leme_scratchpad_manager *manager,
     struct leme_view *view, struct leme_output *output,
     const struct leme_scratchpad_config *scratchpad)
 {
@@ -479,7 +454,7 @@ leme_scratchpad_direct_prepare(struct leme_scratchpad_manager *manager,
         leme_scratchpad_named_box(scratchpad, output);
 
     if (output != NULL) {
-        leme_scratchpad_finish_outputs(manager->shown_output, output);
+        leme_scratchpad_finish_outputs(leme_ownership_effective_output(manager->shown), output);
         leme_render_view_finish_animation(view);
         leme_scratchpad_set_box(view, box, true);
         view->scratchpad_anchor_area = leme_output_usable_box(output);
@@ -493,7 +468,7 @@ leme_scratchpad_direct_prepare(struct leme_scratchpad_manager *manager,
 }
 
 static void
-leme_scratchpad_direct_abort_map(struct leme_view *view)
+leme_durable_direct_abort_map(struct leme_view *view)
 {
     leme_render_view_destroy(view);
     view->mapped = false;
@@ -502,12 +477,11 @@ leme_scratchpad_direct_abort_map(struct leme_view *view)
 }
 
 static void
-leme_scratchpad_direct_commit(struct leme_scratchpad_manager *manager,
+leme_durable_direct_commit(struct leme_scratchpad_manager *manager,
     struct leme_view *view, char *claim, struct leme_output *output)
 {
     if (output == NULL) {
         view->scratchpad_name = claim;
-        view->scratchpad_state = LEME_SCRATCHPAD_HIDDEN;
         leme_scratchpad_promote(manager, view);
         leme_render_set_view_visible(view, false);
         return;
@@ -516,9 +490,7 @@ leme_scratchpad_direct_commit(struct leme_scratchpad_manager *manager,
         leme_scratchpad_hide(manager, manager->shown, false);
     }
     view->scratchpad_name = claim;
-    view->scratchpad_state = LEME_SCRATCHPAD_SHOWN;
     manager->shown = view;
-    manager->shown_output = output;
     leme_scratchpad_promote(manager, view);
     leme_render_view_update_layer(view);
     leme_render_set_view_visible(view, true);
@@ -564,11 +536,10 @@ leme_scratchpad_finish(struct leme_server *server)
             leme_scratchpad_unlink(view);
             free(view->scratchpad_name);
             view->scratchpad_name = NULL;
-            view->scratchpad_state = LEME_SCRATCHPAD_NONE;
+            leme_ownership_clear(view);
         }
     }
     manager->shown = NULL;
-    manager->shown_output = NULL;
     wl_list_init(&manager->pool);
     wl_list_init(&manager->pending);
     manager->server = NULL;
@@ -577,38 +548,25 @@ leme_scratchpad_finish(struct leme_server *server)
 bool
 leme_view_is_scratchpad(const struct leme_view *view)
 {
-    return view != NULL && view->scratchpad_state != LEME_SCRATCHPAD_NONE;
+    return leme_ownership_is_durable(view, LEME_DURABLE_SCRATCHPAD);
 }
 
 bool
 leme_view_is_shown_scratchpad(const struct leme_view *view)
 {
-    return view != NULL && view->scratchpad_state == LEME_SCRATCHPAD_SHOWN;
-}
+    const struct leme_durable_owner *durable =
+        leme_ownership_durable(view);
 
-bool
-leme_view_protocol_eligible(const struct leme_view *view)
-{
-    const struct leme_scratchpad_manager *manager;
-
-    if (view == NULL || !view->mapped || view->unmanaged) {
-        return false;
-    }
-    if (view->tag != NULL && !leme_view_is_scratchpad(view)) {
-        return true;
-    }
-    if (!leme_view_is_shown_scratchpad(view) || view->server == NULL) {
-        return false;
-    }
-    manager = &view->server->scratchpads;
-    return manager->server == view->server && manager->shown == view &&
-        manager->shown_output != NULL;
+    return durable != NULL && durable->reason == LEME_DURABLE_SCRATCHPAD &&
+        durable->presentation == LEME_DURABLE_OUTPUT &&
+        durable->output != NULL && view->server != NULL &&
+        view->server->scratchpads.shown == view;
 }
 
 bool
 leme_scratchpad_send(struct leme_server *server, struct leme_view *view)
 {
-    struct leme_tag_detach *detach = NULL;
+    struct leme_ownership_transition *transition = NULL;
     struct leme_output *source;
     struct leme_scratchpad_manager *manager;
     struct leme_box anchor;
@@ -618,7 +576,7 @@ leme_scratchpad_send(struct leme_server *server, struct leme_view *view)
         return false;
     }
     manager = &server->scratchpads;
-    if (view->scratchpad_state == LEME_SCRATCHPAD_SHOWN) {
+    if (leme_view_is_shown_scratchpad(view)) {
         if (manager->shown != view) {
             return false;
         }
@@ -626,8 +584,8 @@ leme_scratchpad_send(struct leme_server *server, struct leme_view *view)
         leme_publication_invalidate(server);
         return true;
     }
-    if (view->scratchpad_state != LEME_SCRATCHPAD_NONE ||
-            view->scratchpad_name != NULL || view->tag == NULL) {
+    if (leme_view_is_scratchpad(view) ||
+            view->scratchpad_name != NULL || leme_ownership_tag(view) == NULL) {
         return false;
     }
     source = leme_view_output(view);
@@ -636,7 +594,9 @@ leme_scratchpad_send(struct leme_server *server, struct leme_view *view)
     }
     anchor = leme_output_usable_box(source);
     leme_scratchpad_transition_reset(server);
-    if (!leme_tags_prepare_detach(view, &detach)) {
+    if (!leme_ownership_prepare_tag_to_durable(view,
+            LEME_DURABLE_SCRATCHPAD, LEME_DURABLE_HIDDEN,
+            NULL, &transition)) {
         return false;
     }
 
@@ -652,9 +612,8 @@ leme_scratchpad_send(struct leme_server *server, struct leme_view *view)
     /* commit_started: a cauda de posse e desenho não pode falhar. */
     leme_scratchpad_transition_commit_started(server);
     leme_capture_invalidate_view(view);
-    leme_tags_commit_detach(view, &detach);
+    leme_ownership_commit(&transition);
     view->floating = true;
-    view->scratchpad_state = LEME_SCRATCHPAD_HIDDEN;
     leme_scratchpad_promote(manager, view);
     leme_render_view_update_layer(view);
     leme_render_set_view_visible(view, false);
@@ -669,14 +628,14 @@ leme_scratchpad_claim_tagged(struct leme_scratchpad_manager *manager,
     struct leme_view *view, const char *name)
 {
     struct leme_server *server = manager->server;
-    struct leme_tag_detach *detach = NULL;
+    struct leme_ownership_transition *transition = NULL;
     struct leme_output *source;
     struct leme_box anchor;
     char *claim;
 
     if (view == NULL || view->server != server || !view->mapped ||
-            view->unmanaged || view->scratchpad_state != LEME_SCRATCHPAD_NONE ||
-            view->scratchpad_name != NULL || view->tag == NULL) {
+            view->unmanaged || leme_view_is_scratchpad(view) ||
+            view->scratchpad_name != NULL || leme_ownership_tag(view) == NULL) {
         return false;
     }
     source = leme_view_output(view);
@@ -689,7 +648,9 @@ leme_scratchpad_claim_tagged(struct leme_scratchpad_manager *manager,
     }
     anchor = leme_output_usable_box(source);
     leme_scratchpad_transition_reset(server);
-    if (!leme_tags_prepare_detach(view, &detach)) {
+    if (!leme_ownership_prepare_tag_to_durable(view,
+            LEME_DURABLE_SCRATCHPAD, LEME_DURABLE_HIDDEN,
+            NULL, &transition)) {
         free(claim);
         return false;
     }
@@ -706,10 +667,9 @@ leme_scratchpad_claim_tagged(struct leme_scratchpad_manager *manager,
     /* commit_started: a reclamação e toda a preparação do desligar estão
      * concluídas. */
     leme_scratchpad_transition_commit_started(server);
-    leme_tags_commit_detach(view, &detach);
+    leme_ownership_commit(&transition);
     view->scratchpad_name = claim;
     view->floating = true;
-    view->scratchpad_state = LEME_SCRATCHPAD_HIDDEN;
     leme_scratchpad_promote(manager, view);
     leme_render_view_update_layer(view);
     leme_render_set_view_visible(view, false);
@@ -750,7 +710,7 @@ leme_scratchpad_toggle_named(struct leme_server *server, const char *name,
     }
     if (manager->shown != NULL &&
             leme_scratchpad_claim_matches(manager->shown, name)) {
-        if (manager->shown_output == output) {
+        if (leme_ownership_effective_output(manager->shown) == output) {
             leme_scratchpad_hide(manager, manager->shown, false);
         } else {
             leme_scratchpad_show(manager, manager->shown, output, scratchpad);
@@ -797,7 +757,7 @@ leme_scratchpad_toggle_unnamed(struct leme_server *server,
     }
     manager = &server->scratchpads;
     if (manager->shown != NULL && manager->shown->scratchpad_name == NULL) {
-        if (manager->shown_output == output) {
+        if (leme_ownership_effective_output(manager->shown) == output) {
             leme_scratchpad_hide(manager, manager->shown, false);
         } else {
             leme_scratchpad_show(manager, manager->shown, output, NULL);
@@ -819,7 +779,9 @@ leme_scratchpad_retrieve(struct leme_server *server,
     struct leme_tags *destination)
 {
     struct leme_scratchpad_manager *manager;
+    struct leme_ownership_transition *transition = NULL;
     struct leme_view *view;
+    struct leme_view *views[1];
     const uint16_t id = destination == NULL ? 0 : destination->focused_id;
 
     if (server == NULL || destination == NULL || destination->server != server ||
@@ -834,12 +796,17 @@ leme_scratchpad_retrieve(struct leme_server *server,
     view = manager->shown == NULL ? leme_scratchpad_newest_unnamed(manager) :
         manager->shown;
     leme_scratchpad_transition_reset(server);
-    if (view == NULL || !leme_tags_prepare_floating_attach(destination, id)) {
+    if (view == NULL) {
+        return false;
+    }
+    views[0] = view;
+    if (!leme_ownership_prepare_durable_group_to_tag(views,
+            LEME_ARRAY_LENGTH(views), view, destination, id, &transition)) {
         return false;
     }
 
     leme_scratchpad_finish_outputs(manager->shown == view ?
-        manager->shown_output : NULL, destination->output);
+        leme_ownership_effective_output(manager->shown) : NULL, destination->output);
     leme_render_view_finish_animation(view);
     leme_input_pointer_grab_cancel_view(view);
     /* commit_started: ligar ao flutuante não aloca nem reporta falhas. */
@@ -847,13 +814,11 @@ leme_scratchpad_retrieve(struct leme_server *server,
     leme_scratchpad_unlink(view);
     if (manager->shown == view) {
         manager->shown = NULL;
-        manager->shown_output = NULL;
     }
-    view->scratchpad_state = LEME_SCRATCHPAD_NONE;
     free(view->scratchpad_name);
     view->scratchpad_name = NULL;
     view->floating = true;
-    leme_tags_attach_floating(destination, view, id);
+    leme_ownership_commit(&transition);
     leme_render_view_update_layer(view);
     leme_render_set_view_visible(view, true);
     leme_scratchpad_set_box(view, view->box, false);
@@ -872,10 +837,11 @@ leme_scratchpad_try_adopt_map(struct leme_view *view)
     const struct leme_scratchpad_config *scratchpad;
     const char *identity;
     struct leme_output *output;
+    struct leme_ownership_transition *transition = NULL;
     char *claim;
     const struct leme_view_map_options options = {
         .floating = true,
-        .scratchpad_direct = true,
+        .durable_direct = true,
     };
 
     if (view == NULL || view->server == NULL || view->mapped ||
@@ -911,12 +877,18 @@ leme_scratchpad_try_adopt_map(struct leme_view *view)
     if (!leme_scratchpad_output_valid(view->server, output)) {
         output = NULL;
     }
-    if (!leme_scratchpad_direct_prepare(manager, view, output, scratchpad)) {
-        leme_scratchpad_direct_abort_map(view);
+    if (!leme_ownership_prepare_none_to_durable(view,
+            LEME_DURABLE_SCRATCHPAD,
+            output == NULL ? LEME_DURABLE_HIDDEN : LEME_DURABLE_OUTPUT,
+            output, &transition) ||
+            !leme_durable_direct_prepare(manager, view, output, scratchpad)) {
+        leme_ownership_discard(&transition);
+        leme_durable_direct_abort_map(view);
         free(claim);
         return LEME_SCRATCHPAD_MAP_FAILED;
     }
-    leme_scratchpad_direct_commit(manager, view, claim, output);
+    leme_ownership_commit(&transition);
+    leme_durable_direct_commit(manager, view, claim, output);
     leme_scratchpad_pending_destroy(pending);
     if (output != NULL) {
         leme_render_view_animate(view, LEME_ANIMATION_OPEN);
@@ -947,8 +919,8 @@ leme_scratchpad_handle_identity_change(struct leme_view *view)
             view->scratchpad_name = NULL;
         }
     }
-    if (!view->mapped || view->scratchpad_state != LEME_SCRATCHPAD_NONE ||
-            view->tag == NULL || identity == NULL) {
+    if (!view->mapped || leme_view_is_scratchpad(view) ||
+            leme_ownership_tag(view) == NULL || identity == NULL) {
         return;
     }
     manager = &view->server->scratchpads;
@@ -988,13 +960,10 @@ leme_scratchpad_handle_output_destroy(struct leme_server *server,
     if (manager->server != server) {
         return;
     }
-    if (manager->shown_output == output) {
-        if (manager->shown != NULL) {
-            leme_scratchpad_hide(manager, manager->shown, false);
-            hidden = true;
-        } else {
-            manager->shown_output = NULL;
-        }
+    if (manager->shown != NULL &&
+            leme_ownership_effective_output(manager->shown) == output) {
+        leme_scratchpad_hide(manager, manager->shown, false);
+        hidden = true;
     }
     if (manager->pending.next != NULL) {
         wl_list_for_each(pending, &manager->pending, link) {
@@ -1018,10 +987,10 @@ leme_scratchpad_reconcile_outputs(struct leme_server *server)
     }
     manager = &server->scratchpads;
     if (manager->server != server || manager->shown == NULL ||
-            manager->shown_output == NULL) {
+            leme_ownership_effective_output(manager->shown) == NULL) {
         return;
     }
-    if (!leme_scratchpad_output_valid(server, manager->shown_output)) {
+    if (!leme_scratchpad_output_valid(server, leme_ownership_effective_output(manager->shown))) {
         leme_scratchpad_hide(manager, manager->shown, false);
         leme_publication_invalidate(server);
     }
@@ -1040,8 +1009,8 @@ leme_scratchpad_handle_usable_area(struct leme_output *output)
     manager = &output->server->scratchpads;
     view = manager->shown;
     if (manager->server != output->server || view == NULL ||
-            manager->shown_output != output ||
-            view->scratchpad_state != LEME_SCRATCHPAD_SHOWN) {
+            leme_ownership_effective_output(manager->shown) != output ||
+            !leme_view_is_shown_scratchpad(view)) {
         return;
     }
     box = leme_view_policy_clamp_box(view->box, leme_output_usable_box(output));
@@ -1060,9 +1029,9 @@ leme_scratchpad_apply_shown_box(struct leme_view *view,
         return false;
     }
     manager = &view->server->scratchpads;
-    output = manager->shown_output;
+    output = leme_ownership_effective_output(manager->shown);
     if (manager->server != view->server || manager->shown != view ||
-            view->scratchpad_state != LEME_SCRATCHPAD_SHOWN ||
+            !leme_view_is_shown_scratchpad(view) ||
             !leme_scratchpad_output_valid(view->server, output)) {
         return false;
     }
@@ -1083,17 +1052,21 @@ leme_scratchpad_move_shown(struct leme_view *view,
         return false;
     }
     manager = &view->server->scratchpads;
-    previous = manager->shown_output;
+    previous = leme_ownership_effective_output(manager->shown);
     if (manager->server != view->server || manager->shown != view ||
-            view->scratchpad_state != LEME_SCRATCHPAD_SHOWN ||
+            !leme_view_is_shown_scratchpad(view) ||
             !leme_scratchpad_output_valid(view->server, output)) {
         return false;
     }
     leme_scratchpad_finish_outputs(previous, output);
     leme_render_view_finish_animation(view);
-    manager->shown_output = output;
+    if (!leme_ownership_present_durable(view,
+            LEME_DURABLE_OUTPUT, output)) {
+        return false;
+    }
     if (!leme_scratchpad_apply_shown_box(view, view->box, false)) {
-        manager->shown_output = previous;
+        (void)leme_ownership_present_durable(view,
+            LEME_DURABLE_OUTPUT, previous);
         return false;
     }
     leme_output_set_focused(view->server, output, false);
@@ -1170,18 +1143,17 @@ leme_scratchpad_handle_unmap(struct leme_view *view)
         return;
     }
     leme_capture_invalidate_view(view);
-    if (view->scratchpad_state == LEME_SCRATCHPAD_NONE) {
+    if (!leme_view_is_scratchpad(view)) {
         return;
     }
     manager = &view->server->scratchpads;
     if (manager->shown == view) {
         manager->shown = NULL;
-        manager->shown_output = NULL;
     }
     leme_scratchpad_unlink(view);
     free(view->scratchpad_name);
     view->scratchpad_name = NULL;
-    view->scratchpad_state = LEME_SCRATCHPAD_NONE;
+    leme_ownership_clear(view);
 }
 
 size_t
