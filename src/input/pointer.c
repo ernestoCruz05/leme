@@ -1,7 +1,10 @@
 #include "input/input.h"
 #include "input/internal.h"
+#include "input/public.h"
+#include "public/server.h"
 
 #include "config/config.h"
+#include "config/live.h"
 #include "core/server.h"
 #include "output/output.h"
 #include "protocols/data.h"
@@ -34,6 +37,7 @@
 struct leme_pointer {
   struct leme_server *server;
   struct wlr_input_device *device;
+  struct leme_public_id public_id;
   struct wl_listener destroy;
   struct wl_list link;
 };
@@ -645,7 +649,9 @@ static void leme_input_pointer_status(const struct wlr_input_device *device,
   }
 }
 
-static void leme_input_configure_pointer(struct wlr_input_device *device,
+static void leme_input_configure_pointer(struct leme_server *server,
+                                         struct wlr_input_device *device,
+                                         struct leme_public_id public_id,
                                          const struct leme_config *config) {
   struct leme_pointer_settings settings;
   struct libinput_device *libinput_device;
@@ -660,6 +666,49 @@ static void leme_input_configure_pointer(struct wlr_input_device *device,
     return;
   }
   settings = leme_input_pointer_settings(config, device->name);
+  if (server != NULL && server->config_store != NULL) {
+    size_t count = 0;
+    const struct leme_scoped_override *ovs =
+        leme_config_store_overrides(server->config_store, &count);
+    for (size_t i = 0; i < count; i++) {
+      if (ovs[i].has_target && ovs[i].target.kind == LEME_PUBLIC_INPUT &&
+          ovs[i].target.id.serial == public_id.serial &&
+          ovs[i].path_count == 1 && ovs[i].path != NULL &&
+          ovs[i].path[0] != NULL) {
+        if (strcmp(ovs[i].path[0], "accel_profile") == 0) {
+          struct leme_public_text text = {0};
+          if (leme_public_as_text(ovs[i].value, &text)) {
+            if (text.length == 4 && memcmp(text.data, "flat", 4) == 0) {
+              settings.profile = LEME_POINTER_ACCEL_FLAT;
+            } else if (text.length == 8 &&
+                       memcmp(text.data, "adaptive", 8) == 0) {
+              settings.profile = LEME_POINTER_ACCEL_ADAPTIVE;
+            }
+          }
+        } else if (strcmp(ovs[i].path[0], "accel_speed") == 0) {
+          double sp = 0;
+          if (leme_public_as_number(ovs[i].value, &sp)) {
+            settings.speed = sp;
+          }
+        } else if (strcmp(ovs[i].path[0], "natural_scroll") == 0) {
+          bool b = false;
+          if (leme_public_as_bool(ovs[i].value, &b)) {
+            settings.natural_scroll = b;
+          }
+        } else if (strcmp(ovs[i].path[0], "left_handed") == 0) {
+          bool b = false;
+          if (leme_public_as_bool(ovs[i].value, &b)) {
+            settings.left_handed = b;
+          }
+        } else if (strcmp(ovs[i].path[0], "tap") == 0) {
+          bool b = false;
+          if (leme_public_as_bool(ovs[i].value, &b)) {
+            settings.tap = b;
+          }
+        }
+      }
+    }
+  }
   profile = settings.profile == LEME_POINTER_ACCEL_FLAT
                 ? LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT
                 : LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
@@ -705,8 +754,10 @@ void leme_input_apply_pointer_config(struct leme_server *server,
   }
   leme_input_workspace_gesture_cancel(server);
   wl_list_for_each(pointer, &server->pointers, link) {
-    leme_input_configure_pointer(pointer->device, config);
+    leme_input_configure_pointer(server, pointer->device, pointer->public_id,
+                                 config);
   }
+  leme_public_server_invalidate(server);
 }
 
 static void leme_input_handle_pointer_destroy(struct wl_listener *listener,
@@ -722,8 +773,16 @@ static void leme_input_handle_pointer_destroy(struct wl_listener *listener,
   wlr_cursor_detach_input_device(server->cursor, pointer->device);
   wl_list_remove(&pointer->destroy.link);
   wl_list_remove(&pointer->link);
+  if (server->config_store != NULL) {
+    struct leme_control_target target = {
+        .kind = LEME_PUBLIC_INPUT,
+        .id = pointer->public_id,
+    };
+    leme_config_store_drop_target(server->config_store, &target);
+  }
   free(pointer);
   leme_input_update_capabilities(server);
+  leme_public_server_invalidate(server);
 }
 
 void leme_input_pointer_add(struct leme_server *server,
@@ -735,11 +794,75 @@ void leme_input_pointer_add(struct leme_server *server,
   }
   pointer->server = server;
   pointer->device = device;
-  leme_input_configure_pointer(device, server->config);
+  if (leme_public_model_available(server->public_model) &&
+      leme_public_model_issue_id(server->public_model, &pointer->public_id) !=
+          LEME_PUBLIC_OK) {
+    leme_public_model_disable(server->public_model);
+  }
+  leme_input_configure_pointer(server, device, pointer->public_id,
+                               server->config);
   pointer->destroy.notify = leme_input_handle_pointer_destroy;
   wl_signal_add(&device->events.destroy, &pointer->destroy);
   wl_list_insert(&server->pointers, &pointer->link);
   wlr_cursor_attach_input_device(server->cursor, device);
+  leme_public_server_invalidate(server);
+}
+
+enum leme_public_status
+leme_input_public_pointers(const struct leme_server *server,
+                           leme_public_input_visitor visit, void *context) {
+  if (server == NULL || visit == NULL || server->pointers.next == NULL)
+    return LEME_PUBLIC_INVALID;
+  if (leme_session_locked(server))
+    return LEME_PUBLIC_LOCKED;
+  if (!leme_public_model_available(server->public_model))
+    return LEME_PUBLIC_UNAVAILABLE;
+  const struct leme_pointer *pointer = NULL;
+  wl_list_for_each(pointer, &server->pointers, link) {
+    struct leme_public_input_info info = {
+        .id = pointer->public_id,
+        .name = pointer->device->name,
+        .seat = server->seat == NULL ? NULL : server->seat->name,
+        .libinput = wlr_input_device_is_libinput(pointer->device)};
+    struct libinput_device *device =
+        info.libinput ? wlr_libinput_get_device_handle(pointer->device) : NULL;
+    if (device != NULL) {
+      info.has_ids = true;
+      info.vendor = libinput_device_get_id_vendor(device);
+      info.product = libinput_device_get_id_product(device);
+      const uint32_t profiles =
+          libinput_device_config_accel_get_profiles(device);
+      info.adaptive = (profiles & LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE) != 0;
+      info.flat = (profiles & LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT) != 0;
+      const enum libinput_config_accel_profile profile =
+          libinput_device_config_accel_get_profile(device);
+      if (profile == LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE)
+        info.accel_profile = "adaptive";
+      if (profile == LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT)
+        info.accel_profile = "flat";
+      info.has_accel = libinput_device_config_accel_is_available(device) != 0;
+      if (info.has_accel)
+        info.accel_speed = libinput_device_config_accel_get_speed(device);
+      info.has_natural_scroll =
+          libinput_device_config_scroll_has_natural_scroll(device) != 0;
+      if (info.has_natural_scroll)
+        info.natural_scroll =
+            libinput_device_config_scroll_get_natural_scroll_enabled(device) !=
+            0;
+      info.has_left_handed =
+          libinput_device_config_left_handed_is_available(device) != 0;
+      if (info.has_left_handed)
+        info.left_handed = libinput_device_config_left_handed_get(device) != 0;
+      info.has_tap = libinput_device_config_tap_get_finger_count(device) > 0;
+      if (info.has_tap)
+        info.tap = libinput_device_config_tap_get_enabled(device) ==
+                   LIBINPUT_CONFIG_TAP_ENABLED;
+    }
+    const enum leme_public_status status = visit(context, &info);
+    if (status != LEME_PUBLIC_OK)
+      return status;
+  }
+  return LEME_PUBLIC_OK;
 }
 
 static void leme_input_follow_pointer_output(struct leme_server *server) {
@@ -1440,6 +1563,7 @@ void leme_input_pointer_events_init(struct leme_server *server) {
 }
 
 void leme_input_pointers_finish(struct leme_server *server) {
+  leme_public_server_invalidate(server);
   struct leme_pointer *pointer;
   struct leme_pointer *temporary;
 
@@ -1462,4 +1586,115 @@ void leme_input_pointers_finish(struct leme_server *server) {
   wl_list_remove(&server->cursor_swipe_update.link);
   wl_list_remove(&server->cursor_swipe_end.link);
   wl_list_remove(&server->request_set_cursor.link);
+}
+
+bool leme_input_pointer_resolve_id(const struct leme_server *server,
+                                   struct leme_public_id id,
+                                   struct leme_input_target_info *info) {
+  if (server == NULL || info == NULL || server->pointers.next == NULL) {
+    return false;
+  }
+  const struct leme_pointer *pointer = NULL;
+  wl_list_for_each(pointer, &server->pointers, link) {
+    if (pointer->public_id.serial == id.serial) {
+      info->exists = true;
+      info->is_keyboard = false;
+      info->is_libinput = wlr_input_device_is_libinput(pointer->device);
+      if (info->is_libinput) {
+        struct libinput_device *dev =
+            wlr_libinput_get_device_handle(pointer->device);
+        if (dev != NULL) {
+          const uint32_t profiles =
+              libinput_device_config_accel_get_profiles(dev);
+          info->adaptive =
+              (profiles & LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE) != 0;
+          info->flat = (profiles & LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT) != 0;
+          info->current_accel_profile =
+              libinput_device_config_accel_get_profile(dev);
+          info->has_accel =
+              libinput_device_config_accel_is_available(dev) != 0;
+          if (info->has_accel) {
+            info->current_accel_speed =
+                libinput_device_config_accel_get_speed(dev);
+          }
+          info->has_natural_scroll =
+              libinput_device_config_scroll_has_natural_scroll(dev) != 0;
+          if (info->has_natural_scroll) {
+            info->current_natural_scroll =
+                libinput_device_config_scroll_get_natural_scroll_enabled(dev) !=
+                0;
+          }
+          info->has_left_handed =
+              libinput_device_config_left_handed_is_available(dev) != 0;
+          if (info->has_left_handed) {
+            info->current_left_handed =
+                libinput_device_config_left_handed_get(dev) != 0;
+          }
+          info->has_tap =
+              libinput_device_config_tap_get_finger_count(dev) > 0;
+          if (info->has_tap) {
+            info->current_tap =
+                libinput_device_config_tap_get_enabled(dev) ==
+                LIBINPUT_CONFIG_TAP_ENABLED;
+          }
+        }
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+enum libinput_config_status leme_input_apply_pointer_setting(
+    struct leme_server *server, struct leme_public_id id,
+    const struct leme_input_setting_val *val) {
+  if (server == NULL || val == NULL || server->pointers.next == NULL) {
+    return LIBINPUT_CONFIG_STATUS_UNSUPPORTED;
+  }
+  struct leme_pointer *pointer = NULL;
+  wl_list_for_each(pointer, &server->pointers, link) {
+    if (pointer->public_id.serial == id.serial) {
+      if (!wlr_input_device_is_libinput(pointer->device)) {
+        return LIBINPUT_CONFIG_STATUS_UNSUPPORTED;
+      }
+      struct libinput_device *dev =
+          wlr_libinput_get_device_handle(pointer->device);
+      if (dev == NULL) {
+        return LIBINPUT_CONFIG_STATUS_UNSUPPORTED;
+      }
+      switch (val->key) {
+      case LEME_INPUT_SETTING_ACCEL_PROFILE:
+        return libinput_device_config_accel_set_profile(dev, val->profile);
+      case LEME_INPUT_SETTING_ACCEL_SPEED:
+        return libinput_device_config_accel_set_speed(dev, val->speed);
+      case LEME_INPUT_SETTING_NATURAL_SCROLL:
+        return libinput_device_config_scroll_set_natural_scroll_enabled(
+            dev, val->boolean ? 1 : 0);
+      case LEME_INPUT_SETTING_LEFT_HANDED:
+        return libinput_device_config_left_handed_set(dev, val->boolean ? 1 : 0);
+      case LEME_INPUT_SETTING_TAP:
+        return libinput_device_config_tap_set_enabled(
+            dev, val->boolean ? LIBINPUT_CONFIG_TAP_ENABLED
+                              : LIBINPUT_CONFIG_TAP_DISABLED);
+      default:
+        return LIBINPUT_CONFIG_STATUS_UNSUPPORTED;
+      }
+    }
+  }
+  return LIBINPUT_CONFIG_STATUS_UNSUPPORTED;
+}
+
+bool leme_input_resolve_target(const struct leme_server *server,
+                               struct leme_public_id id,
+                               struct leme_input_target_info *info) {
+  if (server == NULL || info == NULL) {
+    return false;
+  }
+  if (leme_input_pointer_resolve_id(server, id, info)) {
+    return true;
+  }
+  if (leme_input_keyboard_resolve_id(server, id, info)) {
+    return true;
+  }
+  return false;
 }

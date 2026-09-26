@@ -4,7 +4,8 @@ project(
   default_options: ['c_std=c17', 'warning_level=3', 'werror=true'],
 )
 
-add_project_arguments('-D_POSIX_C_SOURCE=200809L', '-DWLR_USE_UNSTABLE', language: 'c')
+add_project_arguments('-D_POSIX_C_SOURCE=200809L', '-DWLR_USE_UNSTABLE',
+  '-DLEME_PUBLIC_BUILD_VERSION="@0@"'.format(meson.project_version()), language: 'c')
 
 leme_version_header = vcs_tag(
   input: 'src/version.h.in',
@@ -61,9 +62,18 @@ output_power_header = custom_target(
   command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'],
 )
 
+leme_public_math_dep = cc.find_library('m', required: true)
+leme_public_core_sources = files(
+  'src/public/value.c',
+  'src/public/arena.c',
+  'src/public/utf8.c',
+  'src/public/budget.c',
+)
+
 leme_sources = files(
   'src/core/server.c',
   'src/core/command.c',
+  'src/core/command_parse.c',
   'src/core/gate.c',
   'src/core/process.c',
   'src/core/session_environment.c',
@@ -79,21 +89,38 @@ leme_sources = files(
   'src/config/scfg_parse.c',
   'src/config/scfg_source.c',
   'src/config/validate.c',
+  'src/config/candidate.c',
+  'src/config/live.c',
+  'src/config/prepare.c',
   'src/input/gesture_accel.c',
   'src/input/input.c',
   'src/input/keyboard.c',
+  'src/input/public.c',
+  'src/config/public-scalars.c',
+  'src/config/public-rules.c',
+  'src/config/public-bindings.c',
+  'src/config/public-animation.c',
+  'src/config/public-diagnostics.c',
+  'src/config/public.c',
   'src/input/pointer.c',
   'src/input/swipe_tracker.c',
+  'src/input/control.c',
   'src/output/output.c',
+  'src/output/public.c',
   'src/output/placement.c',
+  'src/output/control.c',
   'src/render/graphics.c',
   'src/workspace/tag.c',
+  'src/workspace/public.c',
+  'src/workspace/control.c',
   'src/workspace/layout.c',
   'src/shell/policy.c',
   'src/shell/ownership.c',
   'src/shell/scratchpad.c',
   'src/shell/sticky.c',
   'src/shell/view.c',
+  'src/shell/public.c',
+  'src/shell/control.c',
   'src/shell/xdg.c',
   'src/shell/layer.c',
   'src/shell/layer_layout.c',
@@ -123,6 +150,14 @@ leme_sources = files(
   'src/ipc/state.c',
 )
 leme_sources += [output_power_header]
+leme_sources += leme_public_core_sources
+leme_public_model_sources = files('src/public/schema.c', 'src/public/model.c', 'src/public/model-cache.c', 'src/public/identity.c')
+leme_control_core_sources = files('src/control/limits.c', 'src/control/memory.c', 'src/control/decode.c', 'src/control/number.c', 'src/control/request.c', 'src/control/registry.c', 'src/control/registry-value.c', 'src/control/types.c', 'src/control/control.c', 'src/control/expr.c', 'src/control/validate.c', 'src/control/eval.c', 'src/control/eval-scalar.c', 'src/control/eval-lookup.c', 'src/control/eval-collection.c', 'src/control/action.c', 'src/control/targets.c', 'src/control/execute.c', 'src/control/command.c', 'src/core/command_parse.c')
+leme_control_ipc_sources = files('src/control/reply.c', 'src/ipc/frame.c', 'src/ipc/queue.c', 'src/ipc/connection.c', 'src/ipc/schedule.c', 'src/control/dispatch.c', 'src/control/watch.c', 'src/control/watch-event.c', 'src/ipc/watch-peer.c')
+leme_sources += files('src/public/json.c', 'src/public/server.c') + leme_public_model_sources + leme_control_core_sources + leme_control_ipc_sources
+
+yyjson_project = subproject('yyjson')
+yyjson_dep = yyjson_project.get_variable('yyjson_dep')
 
 leme_dependencies = [
   wlroots_dep,
@@ -130,6 +165,8 @@ leme_dependencies = [
   xkbcommon_dep,
   libinput_dep,
   pixman_dep,
+  leme_public_math_dep,
+  yyjson_dep,
 ]
 
 leme_exe = executable(
@@ -144,10 +181,84 @@ leme_exe = executable(
   install: true,
 )
 
+timao_language_sources = files(
+  'src/timao/language.c',
+  'src/timao/diagnostic.c',
+  'src/timao/source.c',
+  'src/timao/lexer.c',
+  'src/timao/parser.c',
+  'src/timao/validate.c',
+  'src/timao/pipeline.c',
+  'src/control/number.c',
+  'src/timao/limits.c',
+  'src/timao/heap.c',
+  'src/timao/value.c',
+  'src/timao/marshal.c',
+  'src/timao/eval.c',
+  'src/timao/environment.c',
+  'src/timao/function.c',
+  'src/timao/scalar.c',
+  'src/timao/collection.c',
+  'src/timao/lower.c',
+  'src/timao/source-map.c',
+  'src/timao/bindings.c',
+  'src/timao/host.c',
+  'src/public/json.c',
+  'src/ipc/json.c',
+)
+timao_language_core = static_library('timao-language-core',
+  timao_language_sources, leme_public_core_sources, 'src/control/registry.c',
+  include_directories: leme_inc, dependencies: [leme_public_math_dep, yyjson_dep],
+  install: false)
+
+timao_client_core = static_library('timao-client-core',
+  'src/timao/client.c', 'src/timao/client-request.c', 'src/timao/client-watch.c',
+  'src/timao/client-recovery.c',
+  'src/timao/client-codec.c', 'src/control/registry.c',
+  'src/public/json.c', 'src/ipc/json.c', 'src/control/decode.c', 'src/control/limits.c',
+  'src/control/memory.c', 'src/control/number.c', 'src/ipc/frame.c',
+  leme_public_core_sources,
+  include_directories: leme_inc, dependencies: [leme_public_math_dep, yyjson_dep],
+  install: false)
+
+timao_transport_core = static_library('timao-transport-core',
+  'src/timao/endpoint.c', 'src/timao/transport.c',
+  include_directories: leme_inc, c_args: ['-D_GNU_SOURCE'], install: false)
+
+timao_output_core = static_library('timao-output-core',
+  'src/timao/output.c', 'src/timao/output-write.c',
+  include_directories: leme_inc, install: false)
+
+timao_launch_core = static_library('timao-launch-core',
+  'src/timao/launch.c', include_directories: leme_inc,
+  c_args: ['-D_GNU_SOURCE'], install: false)
+
+timao_runtime_core = static_library('timao-runtime-core',
+  'src/timao/runtime.c', 'src/timao/runtime-signal.c', 'src/timao/runtime-output.c',
+  'src/timao/runtime-host.c', 'src/timao/runtime-request.c', 'src/timao/runtime-watch.c',
+  'src/timao/runtime-launch.c', 'src/timao/runtime-shutdown.c',
+  'src/timao/runtime-display.c',
+  link_with: timao_launch_core,
+  include_directories: leme_inc, install: false)
+
+timao_repl_core = static_library('timao-repl-core',
+  'src/timao/repl.c', 'src/timao/repl-render.c', 'src/timao/repl-history.c',
+  include_directories: leme_inc,
+  c_args: ['-D_GNU_SOURCE'], install: false)
+
+timao_cli_core = static_library('timao-cli-core',
+  'src/timao/cli.c', 'src/timao/cli-args.c', 'src/timao/cli-source.c',
+  'src/timao/cli-diagnostic.c', 'src/timao/cli-repl.c',
+  link_with: timao_repl_core,
+  include_directories: leme_inc, install: false)
+
 timao_exe = executable(
   'timao',
   'src/timao/main.c',
+  link_with: [timao_cli_core, timao_runtime_core, timao_transport_core,
+    timao_output_core, timao_client_core, timao_language_core],
   include_directories: leme_inc,
+  dependencies: [leme_public_math_dep, yyjson_dep],
   install: true,
 )
 

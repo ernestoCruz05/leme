@@ -1,158 +1,79 @@
-# Control protocol
+# JSON control protocol
 
-Leme exposes a Unix socket for scripts and desktop shells. It covers state that is not already published by a Wayland protocol.
+The control socket carries UTF-8 JSON records, each containing one object followed by LF. It supports queries, actions and watches. Native toplevel/workspace publication, panels and session locking use Wayland protocols.
 
-Tags and windows remain in Wayland protocols:
+## Endpoint and negotiation
 
-| Need | Protocol |
-| --- | --- |
-| tag list, names, active and urgent state | `ext-workspace-v1` |
-| window list, titles, app ids, focus, close, fullscreen | `wlr-foreign-toplevel-management-v1` |
-| panels and bars | `wlr-layer-shell-v1` |
-| lock surfaces | `ext-session-lock-v1` |
-
-## Socket
-
-The socket is at `$XDG_RUNTIME_DIR/leme-$WAYLAND_DISPLAY.sock` and has mode `0600`. Leme exports its path as `LEME_SOCKET` to child processes.
-
-At most 16 clients can connect. A request line longer than 1024 bytes is rejected and the connection closes. A client that stops reading is disconnected when its output buffer fills; it cannot stall the compositor.
-
-Access control comes from filesystem ownership and mode. There is no second authentication handshake.
-
-## Requests
-
-Each request is one whitespace-separated line. The verbs are the same tokens accepted in a `binds` block:
-
-```text
-set_layout accordion
-switch_layout
-toggle_floating
-toggle_sticky
-scratchpad_send
-scratchpad_toggle
-scratchpad_toggle drop
-scratchpad_retrieve
-mode game
-```
-
-The socket refuses these commands:
-
-| Command | Reason |
-| --- | --- |
-| `spawn` | prevents process execution through the control interface |
-| `quit` | prevents a client from terminating the session |
-| `switch_vt` | reserves VT switching for local bindings and the seat session |
-
-Replies are one JSON object per request:
+Leme creates `$XDG_RUNTIME_DIR/leme-$WAYLAND_DISPLAY.sock` with mode `0600` and exports its path as `LEME_SOCKET`. Clients must validate the socket owner, permissions and peer credentials, then send a HELLO request before other operations.
 
 ```json
-{"ok":true}
-{"ok":true,"value":"accordion"}
-{"ok":false,"error":"invalid command frobnicate"}
-{"ok":false,"error":"refused: spawn"}
-{"ok":false,"error":"session locked"}
+{"version":1,"id":"h:1","op":"hello"}
 ```
 
-## Queries
-
-`get` walks the state tree. The final token can be a comma-separated field list:
-
-```text
-get
-get mode
-get focused_output
-get focused_output,mode
-get keyboard_layout active,available
-get workspaces DP-1:3 layout
-get config
-```
-
-Each successful query response is an object with `"ok":true` and a `value`
-member. A single field puts its value in `value`. A comma list puts an object
-keyed by the requested fields in `value`. Collections use stable keys rather
-than indexes because adaptive tags can materialize and disappear.
-
-The state tree contains focused output, mode, keyboard layouts, published workspaces, focused-view state, and configuration diagnostics. It does not contain window titles or content.
-
-### Focused view
-
-`get focused_view` puts the focused-view projection in `value`. The projection
-has `floating` first, `scratchpad` second, and `sticky` third:
+HELLO returns a reply carrying the current opaque compositor `instance`, version/capability/limit information, and a null revision. Ordinary requests include that instance. IDs and instance tokens are opaque strings, not timestamps or persistent entity handles. Never reuse an entity reference from another compositor instance.
 
 ```json
-{"ok":true,"value":{"floating":true,"scratchpad":false,"sticky":true}}
+{"version":1,"id":"q:1","instance":"INSTANCE-FROM-HELLO","op":"query","expr":{"call":"count","args":[{"call":"views","args":[]}]}}
 ```
 
-A focused scratchpad has `"scratchpad":true` and `"sticky":false`:
+Successful replies have `type: "reply"`, the original `id`, `instance`, `revision`, `ok: true` and `value`. Failures have `ok: false` and a structured `error` instead of `value`. The error phase identifies where the request failed: decoding, validation, evaluation, preflight or execution. Preserve its details, including which actions were applied, failed or left unattempted. A failed request may have applied some actions.
+
+## Expressions and actions
+
+Expressions use explicit forms such as `{"literal": VALUE}`, `{"call": NAME, "args": [...]}` and item-relative `{"field": ["path", "segments"]}`. Operators and fields are validated before effects. Roots include views, tags, outputs, inputs, session, config, runtime and status. Published views include urgency and explicit ownership information. Remote item scopes and typed entity references are not arbitrary pointer or object access.
+
+`query` is read-only. `act` evaluates and preflights an action plan before applying it. The command adapter accepts the command names in the [client reference](timao.md); it does not expose compositor `spawn`, `quit` or `switch_vt`. If execution fails after some actions have run, those effects remain. The client does not replay queries or actions.
+
+Project only the data needed. Large whole roots and deeply nested/materialized values can exceed clone, work or response limits; a small query of a field may fit when its entire root does not.
+
+## WATCH and UNWATCH
+
+`watch` takes an expression without side effects and returns a subscription owned by the connection. Its acknowledgement precedes the initial snapshot, though both records may arrive in one read. `unwatch` takes that subscription's native token. Another connection cannot cancel it.
 
 ```json
-{"ok":true,"value":{"floating":true,"scratchpad":true,"sticky":false}}
+{"version":1,"id":"w:1","instance":"INSTANCE-FROM-HELLO","op":"watch","expr":{"call":"count","args":[{"call":"views","args":[]}]}}
+{"version":1,"id":"u:1","instance":"INSTANCE-FROM-HELLO","op":"unwatch","subscription":"sub:1"}
 ```
 
-With no focused view, the complete response is:
+Native event records have `type: "event"`, `event`, `subscription`, `sequence`, `instance` and `revision`:
 
-```json
-{"ok":true,"value":null}
-```
+- `snapshot`, `change`: a complete `value`.
+- `reset`: a complete fresh `value`, with `reason: "unlock"` on native unlock resets.
+- `suspended`: `reason: "session_locked"`, null revision, no value or error.
+- `error`: a terminal structured error, not a value.
 
-Each focused-view field is also available as a query:
+Sequences are canonical positive uint64 decimal strings; they increase, but gaps are allowed. Watches coalesce coherent current snapshots using full value equality. They are not a lossless event journal. Safe-root watches have null revisions.
 
-```text
-get focused_view floating
-get focused_view scratchpad
-get focused_view sticky
-get focused_view floating,scratchpad,sticky
-```
+The timao client normalizes these into local `watch:N` identities and generations. After recovery its reset reason can be `reconnect` or `instance_changed`; those client-local events are not new native wire kinds. Local watch IDs never address another process's registrations.
 
-Each query puts a JSON boolean in `value`, or `null` when no view is focused:
+## Locking, connection loss and bounds
 
-| Request | True response | False response | No focused view |
-| --- | --- | --- | --- |
-| `get focused_view floating` | `{"ok":true,"value":true}` | `{"ok":true,"value":false}` | `{"ok":true,"value":null}` |
-| `get focused_view scratchpad` | `{"ok":true,"value":true}` | `{"ok":true,"value":false}` | `{"ok":true,"value":null}` |
-| `get focused_view sticky` | `{"ok":true,"value":true}` | `{"ok":true,"value":false}` | `{"ok":true,"value":null}` |
+Sensitive queries/actions are refused while locked. Sensitive watches discard pending private values and suspend; safe status observations can continue. Unlock publishes a fresh baseline, not stale deltas. Already delivered or executing data cannot be recalled. A connection may be closed if sensitive output has already started.
 
-The comma query puts an object in `value` in `floating`, `scratchpad`, `sticky` order.
-For a focused scratchpad and with no focused view, respectively, the responses
-are:
+Timao attempts recovery after retryable connection failures for watches that were acknowledged, remain uncancelled, and still have a handler, printer or active await. It negotiates HELLO, reads safe status, and registers those watches in creation order. Reconnect attempts use a backoff capped at 8 seconds. Protocol, capability or resource failures can terminate a watch instead.
 
-```json
-{"ok":true,"value":{"floating":true,"scratchpad":true,"sticky":false}}
-{"ok":true,"value":{"floating":null,"scratchpad":null,"sticky":null}}
-```
+Queries and actions are never replayed. If the client sent the final LF of an ACT but received no authoritative reply, the action's outcome may be unknown. Do not assume it failed or retry it automatically.
 
-## Events
+The default limits are 16 clients, 65,536 request bytes and 1,048,576 response bytes excluding LF, JSON depth 64, 4,096 expression nodes, field-path depth 16, 16 outstanding requests, 32 watches, 256 action targets and 100,000 work units. Requests processed in the same IPC scheduler turn share a 5 ms semantic deadline.
 
-`subscribe` with no arguments delivers all events. Naming fields filters the stream:
+Each connection has an 8 MiB memory account, including a 2 MiB output queue limit. Snapshots have a 32 MiB limit. The public model and IPC accounts share a 64 MiB parent budget; these are not separate 64 MiB allowances for each client. Limit checks can reject requests or close connections. The accounting does not measure process RSS, and the semantic deadline does not bound the duration of every syscall or domain operation.
 
-```text
-subscribe
-subscribe keyboard_layout mode
-```
+## Snapshot caching
 
-| Event | Shape |
-| --- | --- |
-| `layout` | `{"event":"layout","workspace":"DP-1:3","layout":"accordion"}` |
-| `keyboard_layout` | `{"event":"keyboard_layout","layout":"us"}` |
-| `mode` | `{"event":"mode","mode":"resize"}` |
-| `focused_output` | `{"event":"focused_output","output":"HDMI-A-1"}` |
-| `view` | `{"event":"view","floating":true,"scratchpad":false,"sticky":true}` |
-| `config` | `{"event":"config","diagnostics":3,"truncated":false}` |
+Leme attempts to cache runtime metadata before opening the control socket.
+Runtime and config roots have separate sealed builders. Leme can reuse an
+unchanged sensitive snapshot after checking the lock state and request budget.
+Config mutations and feature changes update the metadata generation keys. Other
+state changes can reuse metadata whose keys still match.
 
-Events are generated from reconciled state. A client that never subscribes
-receives none. Event JSON is not wrapped in a query response envelope.
+A fresh sensitive capture includes all roots so Leme can compare it with the
+previous baseline. The revision advances when values change, not merely because
+the cache was invalidated. Cached config references are checked against the
+current entity indexes. Queries with different root selections retain separate
+projections of an unchanged baseline.
 
-The `view` event has all three fields in canonical order. When no view is
-focused, all values are null:
+Lock transitions discard the model's sensitive baseline and config cache. Safe
+runtime metadata may remain cached. Cached values count toward memory limits,
+and captures still use the request's work and deadline limits.
 
-```json
-{"event":"view","floating":null,"scratchpad":null,"sticky":null}
-```
-
-## Locked sessions and stale sockets
-
-While locked, commands return `session locked` and events stop. Queries continue to answer because this state tree carries no window content or titles. Unlocking rebuilds the published state.
-
-A compositor killed without cleanup can leave its socket behind. The next Leme instance tests it first. A refused connection is treated as stale and reclaimed. A live connection is left alone, and Leme starts without the control interface rather than taking the socket. Failure to create the socket does not abort compositor startup.
-
-See [`timao`](timao.md) for the client interface.
+For CLI output formats and script usage, see the [`timao` reference](timao.md) and [scripting guide](../guides/writing-timao-scripts.md).

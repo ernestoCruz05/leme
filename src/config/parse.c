@@ -4150,6 +4150,7 @@ struct leme_config *leme_config_load(const char *path, char **error) {
     leme_config_set_error(error, "%s:1: out of memory", path);
     return NULL;
   }
+  config->refcount = 1;
   config->path = strdup(path);
   if (config->path == NULL) {
     leme_config_set_error(error, "%s:1: out of memory", path);

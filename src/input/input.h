@@ -29,6 +29,8 @@ struct xkb_keymap *leme_input_compile_keymap(const struct leme_config *config);
 bool leme_input_apply_keymap(struct leme_server *server,
                              struct xkb_keymap *keymap);
 bool leme_input_cycle_keyboard_layout(struct leme_server *server);
+bool leme_input_select_keyboard_layout(struct leme_server *server,
+                                       const char *label);
 void leme_input_apply_pointer_config(struct leme_server *server,
                                      const struct leme_config *config);
 void leme_input_init(struct leme_server *server);

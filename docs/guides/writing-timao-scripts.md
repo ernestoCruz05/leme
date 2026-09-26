@@ -1,73 +1,81 @@
 # Writing `timao` scripts
 
-`timao` uses the same command vocabulary as keybindings. It is useful for bars, launch scripts, and programs that need to switch modes around a game.
+`timao` uses a prefix language. It parses and checks the forms in the whole source before execution, so a syntax error at the end of a file prevents earlier actions from running. Errors found during execution can follow successful actions. Those earlier effects are not rolled back.
 
-## Read one value
+[`scripts/dev-session.timao`](../../scripts/dev-session.timao) sets up a workspace
+by reusing or launching applications, waiting for their windows, and moving them
+to a selected output and tag. It defaults to a read-only plan. See the
+[script documentation](../../scripts/README.md) for options and limitations.
 
-```sh
-focused_output="$(timao get focused_output)" || exit 1
-mode="$(timao get mode)" || exit 1
-printf 'output=%s mode=%s\n' "$focused_output" "$mode"
-```
-
-A scalar query prints the raw value. `--json` prints the JSON representation instead. In Bash, a comma-separated projection can fill two variables with one query:
+## Read state
 
 ```sh
-{ read -r output; read -r mode; } \
-    < <(timao get focused_output,mode)
+timao eval '(query (count (views)))'
+timao --raw eval '(query (get (session) "mode"))'
+timao eval '(query (get (session) "keyboard_layout"))'
+timao eval '(query (get (config) "diagnostics"))'
 ```
 
-Collections use stable keys rather than numeric indexes:
+Use `query`, `act` and `watch` to send expressions to the compositor. Inside a remote item scope, `.urgent` reads a field of the current item. Use `get` to read a local object. The language does not support `event.value` syntax, anonymous functions, shell substitution or implicit host calls.
 
 ```sh
-timao get workspaces DP-1:3 layout
+timao eval '(query (where (views) .urgent))'
+timao eval '(act (command "focus_tag" (list "2")))'
 ```
 
-## Subscribe to changes
+Local forms include `do`, `let`, `if`, `and`, `or`, `for-each`, and `try` with a `catch` handler. `def` and `defn` are top-level definitions. Values include null, booleans, finite numbers, strings, lists and objects.
 
-Subscribe to everything or name only the events a program needs:
+Bindings and function captures are immutable. Functions can call themselves, but do not see definitions introduced later. Predicates, including those passed to `await`, cannot perform host operations. The language does not load imports or startup hooks.
+
+## Stream changes
+
+A default printer is convenient at the shell:
 
 ```sh
-timao sub layout keyboard_layout
+timao eval '(watch (count (views)))'
 ```
 
-The command runs until the client is killed. A bar can read each JSON event and update only the affected field. See the [control protocol](../reference/control-protocol.md) for event shapes.
+For a custom handler, save this as a file and use `timao run FILE`:
 
-## Select a mode while a program runs
-
-This portable shell script selects `game` mode, runs the program, and restores
-`common` mode when the program exits:
-
-```sh
-#!/bin/sh
-set -eu
-
-restore_mode() {
-    timao mode common >/dev/null 2>&1 || true
-}
-
-timao mode game
-trap restore_mode 0
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
-game-binary "$@"
+```lisp
+(defn show-value (event)
+  (if (or (= (get event "event") "snapshot")
+          (= (get event "event") "change")
+          (= (get event "event") "reset"))
+      (emit (get event "value"))
+      null))
+(def w (watch (count (views))))
+(on w show-value)
 ```
 
-Do not use `exec` for the final command. The shell must remain running so its
-exit trap can restore the mode. The mode must already exist in the scfg file.
-The [keybinding reference](../configuration/keybindings.md) explains
-`escape_exits` and inherited groups.
+Handlers receive events for suspension and resets as well as value changes. Check the `event` field before reading `value`. A registered handler keeps the script running. `cancel` accepts the watch handle or its local `watch:N` ID; canceling the last registration lets the script exit when its body has finished. Unhandled file/eval errors stop its registrations. REPL errors affect the current form or handler.
 
-## Handle failures
+The script body and handlers run serially. Network reads can continue during a request or `await`, but another registered handler will not run inside the current one. Handlers follow delivery order among eligible events on that connection; there is no global ordering across subscriptions.
 
-`timao` exits with:
+`await` takes an unattached watch, a predicate function and a timeout in milliseconds. The predicate receives an event with a value, must return a boolean, and cannot perform host operations. Once waiting begins, `await` cancels its watch on success, timeout or error. The deadline includes time spent in the predicate.
 
-- `0` when Leme accepted the request or returned the query;
-- `1` when Leme returned an error;
-- `2` when the socket was unreachable or usage was invalid.
+## Arguments, output and launch
 
-The socket path comes from `LEME_SOCKET` for programs spawned by Leme. Outside that environment, use the path described in the [control protocol](../reference/control-protocol.md).
+```lisp
+(emit args)
+```
 
-Socket commands cannot spawn processes, quit Leme, or switch VTs. While the session is locked, commands fail and queries continue to answer.
+With `timao run FILE 'one argument' two`, `args` is the immutable list of those two strings. File return values are silent unless emitted. A byte-zero shebang is accepted in files. Use stdin source with `timao run -`; it cannot simultaneously serve as unrelated application input.
+
+```lisp
+(launch (list "application" "literal argument"))
+```
+
+`launch` copies the argument array and uses direct or PATH-based exec. It creates a detached session with standard input, output and error connected to `/dev/null`. It does not invoke a shell unless the argument array explicitly names one.
+
+The result acknowledges exec, not window creation or continued application health. Timao does not supervise or wait for the application to exit, close it when the script ends, or associate a future window with that process. Setup failure and `launch_outcome_unknown` are separate errors. Do not automatically retry an unknown launch outcome.
+
+## Recovery and migration
+
+Replace the old `timao get` entrypoint with explicit query expressions, and `timao sub` with a watch. Stdout now defaults to JSON, not ad-hoc scalar lines; request `--raw` only when its restricted scalar representation is appropriate. Sensitive roots are unavailable while locked; use safe `status` information for lock state rather than assuming all queries remain readable.
+
+Timao attempts to restore acknowledged watches after retryable connection failures while a handler, printer or await still uses them. Queries and actions are not replayed. Preserve the request/instance and diagnostic `details` when reporting partial or uncertain actions. Treat `outcome_unknown` as an action that may have happened, not a request to retry.
+
+A `catch` handler receives the remote error payload when available; local errors provide `code` and `message`. It does not receive all the source and call-site information printed by the CLI. There is no rethrow or exit primitive. If a script catches an error and finishes normally, its exit status can be 0. Scripts that report failures through `emit` need callers to inspect those values.
+
+See the [`timao` reference](../reference/timao.md) for options, limits, output and exit status, and [control protocol](../reference/control-protocol.md) for framing and native identities.

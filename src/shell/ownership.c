@@ -1,4 +1,5 @@
 #include "shell/ownership.h"
+#include "public/server.h"
 
 #include "core/gate.h"
 #include "output/output.h"
@@ -393,6 +394,9 @@ void leme_ownership_commit(struct leme_ownership_transition **slot) {
     }
     break;
   }
+  for (index = 0; index < prepared->view_count; index++) {
+    leme_public_server_invalidate(prepared->views[index]->server);
+  }
   free((void *)prepared->views);
   free(prepared);
 }
@@ -421,6 +425,7 @@ bool leme_ownership_present_durable(struct leme_view *view,
   }
   view->owner.value.durable.presentation = presentation;
   view->owner.value.durable.output = output;
+  leme_public_server_invalidate(view->server);
   return true;
 }
 
@@ -435,6 +440,7 @@ void leme_ownership_clear(struct leme_view *view) {
       .kind = LEME_VIEW_OWNER_NONE,
   };
   view->unmanaged_output = NULL;
+  leme_public_server_invalidate(view->server);
 }
 
 void leme_ownership_set_unmanaged_output(struct leme_view *view,
@@ -453,6 +459,7 @@ void leme_ownership_commit_tag(struct leme_view *view, struct leme_tag *tag) {
       .kind = LEME_VIEW_OWNER_TAG,
       .value.tag = tag,
   };
+  leme_public_server_invalidate(view->server);
 }
 
 void leme_ownership_replace_tag(struct leme_view *view, struct leme_tag *source,
@@ -461,6 +468,7 @@ void leme_ownership_replace_tag(struct leme_view *view, struct leme_tag *source,
          view->owner.kind == LEME_VIEW_OWNER_TAG &&
          view->owner.value.tag == source);
   view->owner.value.tag = destination;
+  leme_public_server_invalidate(view->server);
 }
 
 void leme_ownership_release_tag(struct leme_view *view, struct leme_tag *tag) {
@@ -470,4 +478,5 @@ void leme_ownership_release_tag(struct leme_view *view, struct leme_tag *tag) {
   view->owner = (struct leme_view_owner){
       .kind = LEME_VIEW_OWNER_NONE,
   };
+  leme_public_server_invalidate(view->server);
 }

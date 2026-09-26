@@ -121,6 +121,7 @@ enum leme_layout_kind leme_tags_layout_kind(const struct leme_tags *tags);
 bool leme_tags_swap_list_order(struct leme_tag *tag, struct leme_view *first,
                                struct leme_view *second);
 bool leme_tags_set_layout(struct leme_tags *tags, enum leme_layout_kind kind);
+bool leme_tag_set_layout(struct leme_tag *tag, enum leme_layout_kind kind);
 bool leme_tags_cycle_layout(struct leme_tags *tags);
 void leme_tags_apply_settings(struct leme_tags *tags,
                               const struct leme_config *previous,

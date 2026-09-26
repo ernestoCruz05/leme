@@ -6,6 +6,7 @@
 #include "output/output.h"
 #include "render/render.h"
 #include "core/server.h"
+#include "public/server.h"
 #include "shell/view.h"
 #include "shell/xwayland.h"
 
@@ -86,6 +87,7 @@ void leme_layer_arrange(struct leme_server *server) {
     }
   }
   if (changed) {
+    leme_public_server_invalidate(server);
     leme_view_arrange(server);
     leme_view_refresh_fullscreen(server);
   }

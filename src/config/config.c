@@ -116,6 +116,14 @@ bool leme_config_copy_command(struct leme_command *destination,
   return true;
 }
 
+struct leme_config *leme_config_ref(struct leme_config *config) {
+  if (config == NULL) {
+    return NULL;
+  }
+  config->refcount++;
+  return config;
+}
+
 void leme_config_destroy(struct leme_config *config) {
   size_t mode_index;
   size_t binding_index;
@@ -123,6 +131,20 @@ void leme_config_destroy(struct leme_config *config) {
   size_t index;
 
   if (config == NULL) {
+    return;
+  }
+  if (config->refcount > 1) {
+    config->refcount--;
+    return;
+  }
+  if (config->is_effective_shell) {
+    free(config->cursor.theme);
+    free(config->path);
+    if (config->baseline != NULL) {
+      leme_config_destroy(config->baseline);
+      config->baseline = NULL;
+    }
+    free(config);
     return;
   }
   for (index = 0; index < config->keyboard_layout_count; index++) {
@@ -325,6 +347,7 @@ struct leme_config *leme_config_defaults(void) {
   if (config == NULL) {
     return NULL;
   }
+  config->refcount = 1;
   config->initial_tags = 3;
   config->max_tags = 9;
   config->drop_mode = LEME_DROP_MODE_SIMPLE;

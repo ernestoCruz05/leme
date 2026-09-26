@@ -1,10 +1,12 @@
 #include "config/config.h"
+#include "public/server.h"
 #include "config/internal.h"
 
 #include "core/command.h"
 #include "core/server.h"
 #include "core/session_environment.h"
 #include "input/input.h"
+#include "input/public.h"
 #include "output/output.h"
 #include "protocols/desktop.h"
 #include "render/render.h"
@@ -481,6 +483,8 @@ bool leme_config_apply(struct leme_server *server, struct leme_config *next,
   }
   leme_scratchpad_reconcile_config(server, old, next);
   server->config = next;
+  leme_public_server_config_changed(server);
+  leme_input_public_keymap_committed(server);
   if (old == NULL || old->cursor.size != next->cursor.size ||
       !leme_config_same_text(old->cursor.theme, next->cursor.theme)) {
     leme_session_environment_cursor(server);

@@ -8,6 +8,9 @@
 struct leme_output;
 struct leme_server;
 
+bool leme_workspace_public_urgent(const struct leme_server *server,
+                                  const struct leme_output *output,
+                                  uint16_t number);
 bool leme_workspace_init(struct leme_server *server);
 void leme_workspace_finish(struct leme_server *server);
 void leme_workspace_reconcile(struct leme_server *server);

@@ -1,4 +1,5 @@
 #include "shell/view.h"
+#include "public/server.h"
 
 #include "core/server.h"
 #include "input/input.h"
@@ -222,6 +223,7 @@ static void leme_view_handle_set_title(struct wl_listener *listener,
   struct leme_view *view = wl_container_of(listener, view, set_title);
 
   (void)data;
+  leme_public_server_invalidate(view->server);
   leme_render_view_set_activated(view, view == view->server->focused_view);
 }
 
@@ -231,7 +233,16 @@ static void leme_view_handle_set_app_id(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(view);
+  leme_public_server_invalidate(view->server);
   leme_render_view_set_activated(view, view == view->server->focused_view);
+}
+
+static void leme_view_handle_set_parent(struct wl_listener *listener,
+                                        void *data) {
+  struct leme_view *view = wl_container_of(listener, view, set_parent);
+
+  (void)data;
+  leme_public_server_invalidate(view->server);
 }
 
 static void leme_view_handle_request_fullscreen(struct wl_listener *listener,
@@ -281,6 +292,7 @@ static void leme_view_handle_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&view->commit.link);
   wl_list_remove(&view->set_title.link);
   wl_list_remove(&view->set_app_id.link);
+  wl_list_remove(&view->set_parent.link);
   wl_list_remove(&view->request_fullscreen.link);
   wl_list_remove(&view->request_move.link);
   wl_list_remove(&view->request_resize.link);
@@ -324,6 +336,8 @@ static void leme_view_handle_new_toplevel(struct wl_listener *listener,
   wl_signal_add(&xdg_toplevel->events.set_title, &view->set_title);
   view->set_app_id.notify = leme_view_handle_set_app_id;
   wl_signal_add(&xdg_toplevel->events.set_app_id, &view->set_app_id);
+  view->set_parent.notify = leme_view_handle_set_parent;
+  wl_signal_add(&xdg_toplevel->events.set_parent, &view->set_parent);
   view->request_fullscreen.notify = leme_view_handle_request_fullscreen;
   wl_signal_add(&xdg_toplevel->events.request_fullscreen,
                 &view->request_fullscreen);

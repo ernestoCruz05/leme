@@ -1,5 +1,6 @@
 #include "core/gate.h"
 #include "workspace/tag.h"
+#include "public/server.h"
 
 #include "config/config.h"
 #include "shell/layer.h"
@@ -84,6 +85,7 @@ void leme_tags_apply_settings(struct leme_tags *tags,
   if (tags == NULL || next == NULL) {
     return;
   }
+  leme_public_server_invalidate(tags->server);
   for (id = 1; id <= tags->max_tags; id++) {
     struct leme_tag_settings old_settings;
     struct leme_tag_settings new_settings;
@@ -122,15 +124,10 @@ void leme_tags_apply_settings(struct leme_tags *tags,
   }
 }
 
-bool leme_tags_set_layout(struct leme_tags *tags, enum leme_layout_kind kind) {
-  struct leme_tag *tag;
+bool leme_tag_set_layout(struct leme_tag *tag, enum leme_layout_kind kind) {
   struct leme_view **views;
   size_t count;
 
-  if (tags == NULL || tags->focused_is_candidate) {
-    return false;
-  }
-  tag = tags->table[tags->focused_id];
   if (tag == NULL) {
     return false;
   }
@@ -140,6 +137,9 @@ bool leme_tags_set_layout(struct leme_tags *tags, enum leme_layout_kind kind) {
   count = leme_tags_tiled_views(tag, NULL, 0);
   if (count == 0) {
     leme_layout_set_kind(&tag->layout, kind, NULL, 0);
+    if (tag->owner != NULL && tag->owner->server != NULL) {
+      leme_public_server_invalidate(tag->owner->server);
+    }
     return true;
   }
   views = (struct leme_view **)calloc(count, sizeof(*views));
@@ -152,7 +152,17 @@ bool leme_tags_set_layout(struct leme_tags *tags, enum leme_layout_kind kind) {
   }
   leme_layout_set_kind(&tag->layout, kind, views, count);
   free((void *)views);
+  if (tag->owner != NULL && tag->owner->server != NULL) {
+    leme_public_server_invalidate(tag->owner->server);
+  }
   return true;
+}
+
+bool leme_tags_set_layout(struct leme_tags *tags, enum leme_layout_kind kind) {
+  if (tags == NULL || tags->focused_is_candidate) {
+    return false;
+  }
+  return leme_tag_set_layout(tags->table[tags->focused_id], kind);
 }
 
 bool leme_tags_cycle_layout(struct leme_tags *tags) {
@@ -231,6 +241,7 @@ static struct leme_tag *materialize(struct leme_tags *tags, uint16_t id) {
   }
   wl_list_init(&tag->views);
   tags->table[id] = tag;
+  leme_public_server_invalidate(tags->server);
   return tag;
 }
 
@@ -398,6 +409,7 @@ void leme_tags_commit_set_max(struct leme_tags_resize *resize) {
     resize->table = NULL;
   }
   tags->max_tags = max_tags;
+  leme_public_server_invalidate(tags->server);
   if (tags->previous_valid && tags->previous_id > max_tags) {
     tags->previous_valid = false;
   }
@@ -589,6 +601,7 @@ static bool leme_tags_prune_empty(struct leme_tags *tags,
     tags->previous_is_candidate = true;
   }
   tags->table[id] = NULL;
+  leme_public_server_invalidate(tags->server);
   leme_layout_finish(&tag->layout);
   free(tag);
   return true;
@@ -1107,6 +1120,7 @@ void leme_tags_commit_materialize(struct leme_tag_materialize **slot) {
   if (plan->owned) {
     assert(plan->tags->table[plan->tag->id] == NULL);
     plan->tags->table[plan->tag->id] = plan->tag;
+    leme_public_server_invalidate(plan->tags->server);
     plan->owned = false;
   }
   free(plan);

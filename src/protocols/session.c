@@ -1,4 +1,5 @@
 #include "protocols/session.h"
+#include "public/server.h"
 
 #include "protocols/capture.h"
 
@@ -209,6 +210,7 @@ static void leme_session_handle_unlock(struct wl_listener *listener,
   (void)data;
   session->unlocking = true;
   session->locked = false;
+  leme_public_server_lock_changed(server, false);
   session->abandoned = false;
   wlr_seat_pointer_notify_clear_focus(server->seat);
   wlr_seat_keyboard_notify_clear_focus(server->seat);
@@ -233,6 +235,7 @@ static void leme_session_handle_lock_destroy(struct wl_listener *listener,
     return;
   }
   session->locked = true;
+  leme_public_server_lock_changed(session->server, true);
   leme_capture_invalidate_all(session->server);
   leme_input_pointer_grab_finish(session->server);
   session->abandoned = true;
@@ -255,6 +258,7 @@ static void leme_session_handle_new_lock(struct wl_listener *listener,
   }
   session->lock = lock;
   session->locked = true;
+  leme_public_server_lock_changed(server, true);
   leme_capture_invalidate_all(server);
   leme_input_pointer_grab_finish(server);
   session->abandoned = false;

@@ -1,0 +1,5 @@
+[wrap-git]
+directory = yyjson
+url = https://github.com/ibireme/yyjson.git
+revision = 8b4a38dc994a110abaec8a400615567bd996105f
+patch_directory = yyjson

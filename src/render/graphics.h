@@ -7,5 +7,6 @@ struct leme_server;
 
 bool leme_graphics_init(struct leme_server *server);
 void leme_graphics_finish(struct leme_server *server);
+bool leme_graphics_effects_supported(const struct leme_server *server);
 
 #endif

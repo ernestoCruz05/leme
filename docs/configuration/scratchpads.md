@@ -23,7 +23,7 @@ scratchpad "drop" {
 The name and `identity` must be nonempty, exact, case-sensitive, and unique.
 A name cannot contain any of the six ASCII whitespace characters: space, tab,
 newline, carriage return, form feed, or vertical tab. This keeps the name safe
-for both bindings and whitespace-separated `timao` commands.
+for bindings and native command policy; `timao` preserves each literal argv boundary.
 
 `identity` matches a Wayland app-id or X11 class exactly. It does not match a
 window title or a pattern. `spawn` and `identity` are required. `spawn` is an
@@ -113,7 +113,7 @@ If no matching view exists, a named toggle starts its configured process and
 waits up to 10 seconds for a matching managed view. A spawn failure or timeout
 clears the pending request and records a diagnostic. An unknown named command
 fails without starting a process. Configuration diagnostics are available in
-the session log and through `timao get config`.
+the session log and through `timao eval '(query (get (config) "diagnostics"))'`.
 
 See the [command reference](../reference/commands.md) for all command forms
 and [`timao`](../reference/timao.md) for control-socket use.

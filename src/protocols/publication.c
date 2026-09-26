@@ -1,4 +1,5 @@
 #include "protocols/publication.h"
+#include "public/server.h"
 
 #include "core/server.h"
 #include "protocols/session.h"
@@ -27,6 +28,7 @@ static void leme_publication_handle_idle(void *data) {
 void leme_publication_invalidate(struct leme_server *server) {
   struct wl_event_loop *loop;
 
+  leme_public_server_invalidate(server);
   if (server == NULL || server->display == NULL) {
     return;
   }

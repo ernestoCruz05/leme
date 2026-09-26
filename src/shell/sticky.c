@@ -232,7 +232,7 @@ bool leme_sticky_is_dependent(const struct leme_view *view) {
   return group != NULL && group->root != view;
 }
 
-struct leme_view *leme_sticky_group_root(struct leme_view *view) {
+struct leme_view *leme_sticky_group_root(const struct leme_view *view) {
   struct leme_sticky_group *group = leme_sticky_group(view);
 
   return group == NULL ? NULL : group->root;

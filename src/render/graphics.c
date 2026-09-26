@@ -2,6 +2,7 @@
 
 #include "core/server.h"
 
+#include <wlr/render/pixman.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_buffer.h>
@@ -67,4 +68,17 @@ void leme_graphics_finish(struct leme_server *server) {
   server->single_pixel_buffer_manager = NULL;
   server->alpha_modifier = NULL;
   server->content_type_manager = NULL;
+}
+
+bool leme_graphics_effects_supported(const struct leme_server *server) {
+#ifdef LEME_HAVE_EFFECTS
+  if (server == NULL || server->renderer == NULL ||
+      wlr_renderer_is_pixman(server->renderer)) {
+    return false;
+  }
+  return true;
+#else
+  (void)server;
+  return false;
+#endif
 }

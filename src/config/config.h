@@ -212,6 +212,9 @@ struct leme_workspace_animation_settings {
 };
 
 struct leme_config {
+  size_t refcount;
+  bool is_effective_shell;
+  struct leme_config *baseline;
   uint16_t initial_tags;
   uint16_t max_tags;
   enum leme_drop_mode drop_mode;
@@ -260,6 +263,7 @@ struct leme_config {
 struct leme_server;
 
 struct leme_config *leme_config_defaults(void);
+struct leme_config *leme_config_ref(struct leme_config *config);
 struct leme_config *leme_config_load(const char *path, char **error);
 int leme_config_check(const char *path, FILE *stream);
 bool leme_config_validate(const struct leme_config *config, char **error);

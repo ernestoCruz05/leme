@@ -3,4 +3,7 @@ build-*/
 compile_commands.json
 runtime/
 subprojects/wlroots/
+subprojects/yyjson/
+subprojects/packagecache/
 subprojects/.wraplock
+__pycache__/

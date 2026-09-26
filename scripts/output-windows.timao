@@ -1,0 +1,17 @@
+(defn show-output (monitor)
+  (emit
+    (query
+      (object
+        "output" (get (output monitor) "name")
+        "windows"
+          (map (where (views) (= .output.name monitor))
+            (object
+              "app" .app_id
+              "title" .title
+              "tag" .tag.number
+              "focused" .focused
+              "visible" .visible))))))
+
+(if (= (count args) 1)
+    (show-output (first args))
+    (emit "Usage: timao run scripts/output-windows.timao MONITOR-NAME"))

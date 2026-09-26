@@ -3,6 +3,7 @@
 #include "input/input.h"
 #include "protocols/input.h"
 #include "protocols/publication.h"
+#include "public/server.h"
 #include "protocols/toplevel.h"
 #include "shell/layer.h"
 #include "shell/policy.h"
@@ -214,6 +215,7 @@ void leme_view_clear_focus(struct leme_server *server) {
     wlr_seat_keyboard_notify_clear_focus(server->seat);
     leme_input_protocols_update_keyboard_focus(server);
   }
+  leme_public_server_invalidate(server);
   leme_publication_invalidate(server);
 }
 
@@ -404,6 +406,7 @@ bool leme_view_map(struct leme_view *view,
   if (options->durable_direct) {
     wlr_scene_node_set_enabled(&view->render_tree->node, false);
     leme_render_view_set_activated(view, false);
+    leme_public_server_view_mapped(view);
     return true;
   }
   if (options->unmanaged) {
@@ -421,6 +424,7 @@ bool leme_view_map(struct leme_view *view,
     view->unmanaged = false;
     return false;
   }
+  leme_public_server_view_mapped(view);
   leme_view_update_tiled(view);
   if (view->floating) {
     leme_view_set_initial_floating_box(view, options->parent);
@@ -470,6 +474,7 @@ void leme_view_unmap(struct leme_view *view) {
   leme_tags_remove_view(view);
   leme_render_view_destroy(view);
   leme_view_refresh_tag_focus(server);
+  leme_public_server_invalidate(server);
   leme_publication_invalidate(server);
 }
 
@@ -488,6 +493,9 @@ void leme_view_destroy_core(struct leme_view *view) {
     wl_list_remove(&view->link);
     wl_list_init(&view->link);
   }
+  view->public_meta.urgent = false;
+  view->public_meta.urgent_since = 0;
+  leme_public_server_invalidate(view->server);
   leme_publication_invalidate(view->server);
 }
 
@@ -509,6 +517,9 @@ static void leme_view_focus_eligible(struct leme_view *view) {
     }
     leme_view_set_activated(view, true);
     server->focused_view = view;
+    leme_public_server_view_focused(view, true);
+  } else {
+    leme_public_server_view_focused(view, false);
   }
   if (leme_ownership_tag(view) != NULL) {
     leme_ownership_tag(view)->focused_view = view;
@@ -1015,4 +1026,18 @@ void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box) {
   }
   view->box = box;
   leme_render_view_set_box(view, box);
+}
+
+struct leme_view *leme_view_by_public_id(struct leme_server *server,
+                                         struct leme_public_id id) {
+  if (server == NULL || id.serial == 0) {
+    return NULL;
+  }
+  struct leme_view *view = NULL;
+  wl_list_for_each(view, &server->views, link) {
+    if (view->public_meta.id.serial == id.serial) {
+      return view;
+    }
+  }
+  return NULL;
 }

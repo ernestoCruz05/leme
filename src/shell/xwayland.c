@@ -1,4 +1,5 @@
 #include "shell/xwayland.h"
+#include "public/server.h"
 
 #include "output/output.h"
 #include "render/render.h"
@@ -464,6 +465,7 @@ static void leme_xwayland_handle_set_title(struct wl_listener *listener,
       wl_container_of(listener, wrapper, set_title);
 
   (void)data;
+  leme_public_server_invalidate(wrapper->view->server);
   leme_render_view_set_activated(
       wrapper->view, wrapper->view == wrapper->view->server->focused_view);
 }
@@ -475,6 +477,7 @@ static void leme_xwayland_handle_set_class(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(wrapper->view);
+  leme_public_server_invalidate(wrapper->view->server);
   leme_render_view_set_activated(
       wrapper->view, wrapper->view == wrapper->view->server->focused_view);
 }
@@ -577,6 +580,16 @@ static void leme_xwayland_handle_destroy(struct wl_listener *listener,
   wl_list_remove(&xwayland->destroy.link);
   xwayland->wlr_xwayland = NULL;
   xwayland->is_ready = false;
+}
+
+const struct leme_view *
+leme_xwayland_public_parent(const struct leme_view *view) {
+  if (view == NULL || view->kind != LEME_VIEW_XWAYLAND ||
+      view->xwayland_surface == NULL || view->xwayland_surface->parent == NULL)
+    return NULL;
+  const struct leme_xwayland_view *parent =
+      view->xwayland_surface->parent->data;
+  return parent == NULL ? NULL : parent->view;
 }
 
 void leme_xwayland_init(struct leme_server *server) {

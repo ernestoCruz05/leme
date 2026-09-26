@@ -1,6 +1,7 @@
 #ifndef LEME_VIEW_H
 #define LEME_VIEW_H
 
+#include "public/identity.h"
 #include "shell/ownership.h"
 #include "shell/scratchpad.h"
 #include "workspace/layout.h"
@@ -49,6 +50,7 @@ struct leme_view_popup {
 
 struct leme_view {
   struct leme_server *server;
+  struct leme_public_view_meta public_meta;
   enum leme_view_kind kind;
   struct wlr_xdg_toplevel *xdg_toplevel;
   struct wlr_xwayland_surface *xwayland_surface;
@@ -71,6 +73,7 @@ struct leme_view {
   struct wl_listener commit;
   struct wl_listener set_title;
   struct wl_listener set_app_id;
+  struct wl_listener set_parent;
   struct wl_listener request_fullscreen;
   struct wl_listener request_move;
   struct wl_listener request_resize;
@@ -159,5 +162,7 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
 bool leme_view_apply_interactive_box(struct leme_view *view,
                                      struct leme_box box, bool resizing);
 void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box);
+struct leme_view *leme_view_by_public_id(struct leme_server *server,
+                                         struct leme_public_id id);
 
 #endif

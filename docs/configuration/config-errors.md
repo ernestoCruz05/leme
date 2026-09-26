@@ -68,7 +68,7 @@ When a problem occurs inside a template loop or condition, `leme --config-check`
 
 ```text
 warning: width requires a finite decimal from 0.1 through 1.0
-  --> .dev/tests/fixtures/diagnostics-demo.scfg:14:15
+  --> config.scfg:14:15
     |
  14 |         width 9.0
     |               ^^^
@@ -76,19 +76,19 @@ warning: width requires a finite decimal from 0.1 through 1.0
     = note: expanded from `for pad`, iterations "term" and "editor"
 
 warning: unknown directive `bordr_width` in `style`
-  --> .dev/tests/fixtures/diagnostics-demo.scfg:19:5
+  --> config.scfg:19:5
     |
  19 |     bordr_width 2
     |     ^^^^^^^^^^^
     |
     = help: a directive with a similar name exists: `border_width`
 
-.dev/tests/fixtures/diagnostics-demo.scfg: 2 warnings
+config.scfg: 2 warnings
 ```
 
 A `= note:` line names the loop iteration or branch that generated the directive. When the same problem occurs across multiple iterations of a loop, a single diagnostic note covers them together.
 
-The session log carries the compact one-line form and `timao get config` is unchanged.
+The session log carries the compact one-line form. Query published diagnostics with `timao eval '(query (get (config) "diagnostics"))'`.
 
 ## Environment file diagnostics
 
@@ -121,18 +121,18 @@ follow-up diagnostics.
 The control interface publishes the latest diagnostics:
 
 ```sh
-timao get config
+timao eval '(query (get (config) "diagnostics"))'
 ```
 
-The response includes the configuration path, line-numbered messages, and a
-flag indicating whether the diagnostic list reached its limit.
+The response includes line-numbered diagnostics and truncation information.
+Query the configuration path separately with `timao eval '(query (get (config) "path"))'`.
 
 ## On-screen diagnostics
 
 The `config_errors` block is accepted, but the current build does not draw an
 on-screen report. Its `show`, `position`, and
-`timeout` values have no visible effect. Use the session log or `timao get
-config` until the banner listed on the [roadmap](../../ROADMAP.md) is available.
+`timeout` values have no visible effect. Use the session log or the diagnostics
+query above until the banner listed on the [roadmap](../../ROADMAP.md) is available.
 
 A successful reload is transactional. Leme parses, compiles, and tests the
 replacement before changing the running session. See [startup and

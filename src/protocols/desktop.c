@@ -433,25 +433,37 @@ bool leme_desktop_init(struct leme_server *server) {
   return true;
 }
 
-bool leme_desktop_apply_cursor_config(struct leme_server *server,
-                                      const struct leme_config *config) {
-  struct leme_desktop *desktop = server == NULL ? NULL : server->desktop;
-  struct wlr_xcursor_manager *replacement;
-  struct wlr_xcursor_manager *previous;
+bool leme_desktop_has_cursor(const struct leme_server *server) {
+  return server != NULL && server->desktop != NULL &&
+         server->desktop->xcursor != NULL;
+}
 
-  if (desktop == NULL || desktop->xcursor == NULL || config == NULL) {
-    return false;
+struct wlr_xcursor_manager *
+leme_desktop_prepare_cursor_config(struct leme_server *server,
+                                   const char *theme, int size) {
+  struct leme_desktop *desktop = server == NULL ? NULL : server->desktop;
+  if (!leme_desktop_has_cursor(server) || size < 1 || size > 512) {
+    return NULL;
   }
-  replacement = wlr_xcursor_manager_create(config->cursor.theme,
-                                           (uint32_t)config->cursor.size);
+  struct wlr_xcursor_manager *replacement =
+      wlr_xcursor_manager_create(theme, (uint32_t)size);
   if (replacement == NULL ||
       !wlr_xcursor_manager_load(replacement, desktop->cursor_scale) ||
       wlr_xcursor_manager_get_xcursor(replacement, "left_ptr",
                                       desktop->cursor_scale) == NULL) {
     wlr_xcursor_manager_destroy(replacement);
-    return false;
+    return NULL;
   }
-  previous = desktop->xcursor;
+  return replacement;
+}
+
+void leme_desktop_commit_cursor_config(
+    struct leme_server *server, struct wlr_xcursor_manager *replacement) {
+  struct leme_desktop *desktop = server == NULL ? NULL : server->desktop;
+  if (desktop == NULL || replacement == NULL) {
+    return;
+  }
+  struct wlr_xcursor_manager *previous = desktop->xcursor;
   desktop->xcursor = replacement;
   (void)leme_desktop_load_cursor_scales(server);
   if (desktop->cursor_themed && desktop->cursor_name != NULL) {
@@ -459,7 +471,29 @@ bool leme_desktop_apply_cursor_config(struct leme_server *server,
   }
   leme_xwayland_set_root_cursor(server, replacement, desktop->cursor_name,
                                 desktop->cursor_scale);
-  wlr_xcursor_manager_destroy(previous);
+  if (previous != NULL) {
+    wlr_xcursor_manager_destroy(previous);
+  }
+}
+
+void leme_desktop_discard_cursor_config(
+    struct wlr_xcursor_manager *replacement) {
+  if (replacement != NULL) {
+    wlr_xcursor_manager_destroy(replacement);
+  }
+}
+
+bool leme_desktop_apply_cursor_config(struct leme_server *server,
+                                      const struct leme_config *config) {
+  if (config == NULL) {
+    return false;
+  }
+  struct wlr_xcursor_manager *rep = leme_desktop_prepare_cursor_config(
+      server, config->cursor.theme, config->cursor.size);
+  if (rep == NULL) {
+    return false;
+  }
+  leme_desktop_commit_cursor_config(server, rep);
   return true;
 }
 

@@ -36,6 +36,12 @@ let
     rev = "0.20.2";
     hash = "sha256-VdYymvzYp6/R255AK20j4xTd+JbCZgNiRfgeRJD+UZY=";
   };
+  yyjsonSrc = fetchFromGitHub {
+    owner = "ibireme";
+    repo = "yyjson";
+    rev = "8b4a38dc994a110abaec8a400615567bd996105f";
+    hash = "sha256-1CYnEgUMUc7eqdkv6M/KyL/MdVQBMov9HgLCycF6++w=";
+  };
 in
 stdenv.mkDerivation {
   pname = "leme";
@@ -47,11 +53,13 @@ stdenv.mkDerivation {
     };
 
   postPatch = ''
-    mkdir subprojects/wlroots
-    cp -r ${wlrootsSrc}/* subprojects/wlroots
-    chmod -R u+w subprojects/wlroots
+    mkdir subprojects/wlroots subprojects/yyjson
+    cp -r ${wlrootsSrc}/. subprojects/wlroots
+    cp -r ${yyjsonSrc}/. subprojects/yyjson
+    chmod -R u+w subprojects/wlroots subprojects/yyjson
     patch -d subprojects/wlroots -p1 \
       < subprojects/packagefiles/wlroots-rounded.patch
+    cp subprojects/packagefiles/yyjson/meson.build subprojects/yyjson/meson.build
   '';
 
   nativeBuildInputs = [
@@ -87,6 +95,7 @@ stdenv.mkDerivation {
 
   mesonFlags = [
     "-Deffects=true"
+    "--wrap-mode=nodownload"
   ];
 
   passthru.providedSessions = [ "leme" ];

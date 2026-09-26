@@ -1,0 +1,149 @@
+(def workspace-tag 4)
+(def workspace-layout "dwindle")
+(def startup-timeout-ms 15000)
+
+(def development-apps
+  (list
+    (object "role" "editor" "app_id" "leme-dev-editor"
+      "argv" (list "foot" "--app-id=leme-dev-editor" "--title=Editor" "nvim"))
+    (object "role" "shell" "app_id" "leme-dev-shell"
+      "argv" (list "foot" "--app-id=leme-dev-shell" "--title=Shell"))
+    (object "role" "browser" "app_id" "firefox"
+      "argv" (list "firefox"))))
+
+(def demo-apps
+  (list
+    (object "role" "editor" "app_id" "leme-demo-editor"
+      "argv" (list "foot" "--app-id=leme-demo-editor" "--title=Demo-Editor"))
+    (object "role" "shell" "app_id" "leme-demo-shell"
+      "argv" (list "foot" "--app-id=leme-demo-shell" "--title=Demo-Shell"))
+    (object "role" "browser" "app_id" "leme-demo-browser"
+      "argv" (list "foot" "--app-id=leme-demo-browser" "--title=Demo-Browser"))))
+
+(defn find-window (app-id)
+  (query
+    (first
+      (map
+        (sort-by
+          (where (views)
+            (and (= .app_id app-id) (= .parent null) (= .owner.kind "tag")))
+          .last_focused "desc")
+        .id))))
+
+(defn window-ready (event)
+  (!= (get event "value") null))
+
+(defn ensure-window (app)
+  (let ((app-id (get app "app_id")))
+    (let ((existing (find-window app-id)))
+      (if (!= existing null)
+          (do
+            (emit (object "event" "reuse" "role" (get app "role") "id" existing))
+            existing)
+          (let ((pending
+                  (watch
+                    (first
+                      (map
+                        (sort-by
+                          (where (views)
+                            (and (= .app_id app-id) (= .parent null)
+                                 (= .owner.kind "tag")))
+                          .last_focused "desc")
+                        .id)))))
+            (let ((appeared (find-window app-id)))
+              (if (!= appeared null)
+                  (do (cancel pending) appeared)
+                  (do
+                    (emit (object "event" "launch" "role" (get app "role")
+                                  "argv" (get app "argv")))
+                    (launch (get app "argv"))
+                    (get (await pending window-ready startup-timeout-ms) "value")))))))))
+
+(defn place-window (app target)
+  (let ((id (ensure-window app))
+        (tag-id (get target "tag_id")))
+    (emit (object "event" "normalize-fullscreen" "role" (get app "role")
+                  "result" (act (set-fullscreen (list (view id)) false))))
+    (emit (object "event" "normalize-floating" "role" (get app "role")
+                  "result" (act (set-floating (list (view id)) false))))
+    (emit (object "event" "move" "role" (get app "role")
+                  "result" (act (move-to-tag (list (view id))
+                    (first (where (tags) (= .id tag-id)))))))
+    id))
+
+(defn report-workspace (event)
+  (emit (object "event" "workspace-watch" "update" event)))
+
+(defn observe-workspace (target)
+  (let ((tag-id (get target "tag_id")))
+    (on
+      (watch
+        (object
+          "target_present" (> (count (where (tags) (= .id tag-id))) 0)
+          "windows"
+            (map (where (views) (= .tag.id tag-id))
+              (object "app" .app_id "title" .title
+                      "focused" .focused "visible" .visible))))
+      report-workspace)))
+
+(defn show-plan (apps target)
+  (emit (object "event" "plan" "target" target "layout" workspace-layout
+                "timeout_ms" startup-timeout-ms))
+  (for-each app apps
+    (let ((existing (find-window (get app "app_id"))))
+      (emit (object "event" "planned-app" "role" (get app "role")
+                    "app_id" (get app "app_id")
+                    "decision" (if (= existing null) "launch" "reuse")
+                    "id" existing "argv" (get app "argv")))))
+  (emit (object "event" "plan-complete" "effects_applied" false)))
+
+(defn apply-session (apps target observe)
+  (let ((tag-id (get target "tag_id"))
+        (output-id (get target "output_id")))
+    (emit (object "event" "layout"
+                  "result" (act (set-layout
+                    (list (first (where (tags) (= .id tag-id)))) workspace-layout))))
+    (let ((primary-id (place-window (first apps) target)))
+      (for-each app (where apps (!= .role "editor"))
+        (place-window app target))
+      (emit (object "event" "focus-output"
+                    "result" (act (focus-output (first (where (outputs) (= .id output-id)))))))
+      (emit (object "event" "focus-tag"
+                    "result" (act (focus-tag (first (where (tags) (= .id tag-id)))))))
+      (emit (object "event" "focus-primary"
+                    "result" (act (focus (view primary-id)))))
+      (emit (object "event" "session-ready" "target" target
+                    "primary_id" primary-id)))
+    (if observe (observe-workspace target) null)))
+
+(defn run-session (monitor apply observe demo)
+  (let ((target
+          (query
+            (object "output" (get (output monitor) "name")
+                    "enabled" (get (output monitor) "enabled")
+                    "output_id" (get (output monitor) "id")
+                    "tag" workspace-tag
+                    "tag_id" (get (tag monitor workspace-tag) "id"))))
+        (apps (if demo demo-apps development-apps)))
+    (if (get target "enabled")
+        (if apply (apply-session apps target observe) (show-plan apps target))
+        (emit (object "event" "session-blocked" "reason" "output-disabled"
+                      "target" target)))))
+
+(defn valid-arguments ()
+  (and (>= (count args) 1) (<= (count args) 4)
+       (= (count args)
+          (count (where args
+            (contains (list (first args) "--apply" "--watch" "--demo") (item)))))
+       (or (not (contains args "--watch")) (contains args "--apply"))))
+
+(if (valid-arguments)
+    (try
+      (run-session (first args) (contains args "--apply")
+                   (contains args "--watch") (contains args "--demo"))
+      (catch failure
+        (emit (object "event" "session-failed" "error" failure
+                      "automatic_retry" false))))
+    (emit (object "event" "usage"
+                  "command" "timao run scripts/dev-session.timao MONITOR [--demo] [--apply] [--watch]"
+                  "default" "read-only plan; --watch requires --apply")))

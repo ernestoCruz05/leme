@@ -1,4 +1,5 @@
 #include "protocols/toplevel.h"
+#include "public/server.h"
 
 #include "config/config.h"
 #include "core/server.h"
@@ -170,6 +171,7 @@ void leme_toplevel_activate_view(struct leme_view *view) {
     return;
   }
   if (policy == LEME_ACTIVATION_URGENT) {
+    leme_public_server_view_urgent(view);
     leme_workspace_mark_urgent(server, output, leme_ownership_tag(view)->id);
     leme_publication_invalidate(server);
     return;

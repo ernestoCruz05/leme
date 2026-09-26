@@ -2,6 +2,7 @@
 #define LEME_OUTPUT_H
 
 #include "core/leme.h"
+#include "public/identity.h"
 #include "workspace/layout.h"
 #include "workspace/tag.h"
 
@@ -18,6 +19,7 @@ struct wlr_scene_output;
 
 struct leme_output {
   struct leme_server *server;
+  struct leme_public_id public_id;
   struct wlr_output *wlr_output;
   struct wlr_scene_output *scene_output;
   struct leme_tags tags;
@@ -41,6 +43,8 @@ bool leme_output_test_config(struct leme_server *server,
                              const struct leme_config *config);
 bool leme_output_apply_config(struct leme_server *server,
                               const struct leme_config *config, bool startup);
+bool leme_output_has_hardware_delta(struct leme_server *server,
+                                    const struct leme_config *config);
 bool leme_output_set_power(struct leme_output *output, bool on);
 void leme_output_publish_configuration(struct leme_server *server);
 struct leme_box leme_output_usable_box(const struct leme_output *output);
@@ -62,5 +66,7 @@ void leme_output_set_focused(struct leme_server *server,
 struct leme_output *leme_view_output(const struct leme_view *view);
 struct leme_tags *leme_output_tags(struct leme_output *output);
 struct leme_tags *leme_focused_tags(const struct leme_server *server);
+struct leme_output *leme_output_by_public_id(struct leme_server *server,
+                                             struct leme_public_id id);
 
 #endif

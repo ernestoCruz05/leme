@@ -42,7 +42,7 @@ bool leme_sticky_init(struct leme_server *server);
 void leme_sticky_finish(struct leme_server *server);
 bool leme_view_is_sticky(const struct leme_view *view);
 bool leme_sticky_is_dependent(const struct leme_view *view);
-struct leme_view *leme_sticky_group_root(struct leme_view *view);
+struct leme_view *leme_sticky_group_root(const struct leme_view *view);
 struct wlr_scene_tree *leme_sticky_render_parent(const struct leme_view *view);
 bool leme_sticky_toggle(struct leme_view *view);
 bool leme_sticky_prepare_transient(struct leme_view *parent,

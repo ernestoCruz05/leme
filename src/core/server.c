@@ -1,12 +1,14 @@
 #include "core/server.h"
 
 #include "config/config.h"
+#include "config/live.h"
 #include "config/render.h"
 #include "ipc/ipc.h"
 #include "protocols/capture.h"
 #include "protocols/data.h"
 #include "protocols/desktop.h"
 #include "protocols/publication.h"
+#include "public/server.h"
 #include "render/graphics.h"
 #include "shell/layer.h"
 #include "output/output.h"
@@ -39,6 +41,7 @@ static void leme_server_handle_session_active(struct wl_listener *listener,
       wl_container_of(listener, server, session_active);
 
   (void)data;
+  leme_public_server_invalidate(server);
   if (server->session != NULL) {
     leme_render_handle_session_active(server, server->session->active);
   }
@@ -126,6 +129,11 @@ bool leme_server_init(struct leme_server *server) {
   if (server->display == NULL) {
     wlr_log(WLR_ERROR, "%s", "leme: failed to create Wayland display");
     return false;
+  }
+
+  if (!leme_public_server_init(server)) {
+    wlr_log(WLR_ERROR, "%s",
+            "leme: public model unavailable; compositor startup continues");
   }
 
   server->backend = wlr_backend_autocreate(
@@ -255,6 +263,9 @@ bool leme_server_init(struct leme_server *server) {
     return false;
   }
 
+  if (!leme_public_server_prepare(server)) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to prepare public runtime metadata");
+  }
   if (!leme_ipc_init(server)) {
     return false;
   }
@@ -277,7 +288,10 @@ int leme_server_run(struct leme_server *server) {
 }
 
 void leme_server_finish(struct leme_server *server) {
-  if (server == NULL || server->display == NULL) {
+  if (server == NULL)
+    return;
+  if (server->display == NULL) {
+    leme_public_server_finish(server);
     return;
   }
   leme_input_workspace_gesture_cancel(server);
@@ -317,6 +331,9 @@ void leme_server_finish(struct leme_server *server) {
     server->backend = NULL;
   }
 
+  if (server->config_store != NULL) {
+    leme_config_live_finish(server);
+  }
   leme_config_destroy(server->config);
   server->config = NULL;
 
@@ -344,6 +361,7 @@ void leme_server_finish(struct leme_server *server) {
     server->renderer = NULL;
   }
 
+  leme_public_server_finish(server);
   if (server->display != NULL) {
     wl_display_destroy(server->display);
     server->display = NULL;

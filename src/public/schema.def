@@ -1,0 +1,485 @@
+PUBLIC_SCALAR(STRING, "string", LEME_PUBLIC_STRING, NONE)
+PUBLIC_SCALAR(NONEMPTY, "string", LEME_PUBLIC_STRING, NONEMPTY)
+PUBLIC_SCALAR(COLOR, "string", LEME_PUBLIC_STRING, COLOR)
+PUBLIC_SCALAR(DECIMAL, "string", LEME_PUBLIC_STRING, DECIMAL)
+PUBLIC_SCALAR(BOOLEAN, "boolean", LEME_PUBLIC_BOOLEAN, NONE)
+PUBLIC_SCALAR(TRUE, "boolean", LEME_PUBLIC_BOOLEAN, TRUE)
+PUBLIC_SCALAR(ANY, "any", LEME_PUBLIC_NULL, ANY)
+PUBLIC_NUMBER(NUMBER, false, false, 0, false, 0, NONE)
+PUBLIC_NUMBER(INTEGER, true, true, -(double)LEME_PUBLIC_SAFE_INTEGER, true, (double)LEME_PUBLIC_SAFE_INTEGER, NONE)
+PUBLIC_NUMBER(COUNT, true, true, 0, true, (double)LEME_PUBLIC_SAFE_INTEGER, NONE)
+PUBLIC_NUMBER(ORDER, true, true, 1, true, (double)LEME_PUBLIC_SAFE_INTEGER, NONE)
+PUBLIC_NUMBER(SIGNED_PX, true, true, INT32_MIN, true, INT32_MAX, NONE)
+PUBLIC_NUMBER(PIXELS, true, true, 0, true, INT32_MAX, NONE)
+PUBLIC_NUMBER(POSITIVE_INT, true, true, 1, true, INT32_MAX, NONE)
+PUBLIC_NUMBER(U16, true, true, 0, true, UINT16_MAX, NONE)
+PUBLIC_NUMBER(RATIO, false, true, 0, true, 1, NONE)
+PUBLIC_NUMBER(POSITIVE_NUMBER, false, true, DBL_TRUE_MIN, false, 0, NONE)
+PUBLIC_NUMBER(OPEN_RATIO, false, true, DBL_TRUE_MIN, true, 0x1.fffffffffffffp-1, NONE)
+PUBLIC_NUMBER(POINTER_SPEED, false, true, -1, true, 1, NONE)
+PUBLIC_NUMBER(TAG_NUMBER, true, true, 1, true, 64, NONE)
+PUBLIC_NUMBER(BLUR, true, true, 0, true, 64, NONE)
+PUBLIC_NUMBER(CURSOR_SIZE, true, true, 1, true, 512, NONE)
+PUBLIC_NUMBER(SCALE, false, true, 0.5, true, 4.0, NONE)
+PUBLIC_NUMBER(LAYOUT_RATIO, false, true, 0.1, true, 0.9, NONE)
+PUBLIC_NUMBER(NMASTER, true, true, 1, true, 16, NONE)
+PUBLIC_NUMBER(COLLAPSE, true, true, 10, true, 400, NONE)
+PUBLIC_NUMBER(FINGERS, true, true, 0, true, INT32_MAX, FINGERS)
+PUBLIC_NUMBER(DURATION, true, true, 0, true, 1000, NONE)
+PUBLIC_NUMBER(SCALE_FROM, false, true, 0.1, true, 2.0, NONE)
+PUBLIC_NUMBER(SCRATCH_SIZE, false, true, 0.1, true, 1.0, NONE)
+PUBLIC_ENUM(VIEW_TYPE, "view")
+PUBLIC_ENUM(TAG_TYPE, "tag")
+PUBLIC_ENUM(OUTPUT_TYPE, "output")
+PUBLIC_ENUM(INPUT_TYPE, "input")
+PUBLIC_ENUM(ENTITY_TYPE, "view", "tag", "output", "input")
+PUBLIC_ENUM(VIEW_KIND, "wayland", "xwayland")
+PUBLIC_ENUM(OWNER_KIND, "tag", "sticky", "scratchpad", "unassigned")
+PUBLIC_ENUM(INPUT_KIND, "keyboard", "pointer")
+PUBLIC_ENUM(TRANSFORM, "normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270")
+PUBLIC_ENUM(CONFIG_TRANSFORM, "normal", "90", "180", "270")
+PUBLIC_ENUM(PROFILE, "adaptive", "flat")
+PUBLIC_ENUM(LAYOUT, "dwindle", "master_stack", "accordion")
+PUBLIC_ENUM(DROP_MODE, "simple", "edges")
+PUBLIC_ENUM(COVERS, "none", "top", "overlay")
+PUBLIC_ENUM(ACTIVATION, "follow", "urgent", "ignore")
+PUBLIC_ENUM(GESTURE_MODE, "single", "scrub", "free")
+PUBLIC_ENUM(BANNER_POSITION, "top", "bottom")
+PUBLIC_ENUM(RELATION, "left_of", "right_of", "top_of", "bottom_of")
+PUBLIC_ENUM(ANIMATION_KIND, "easing", "spring")
+PUBLIC_ENUM(ANIMATION_EFFECT, "fade", "scale")
+PUBLIC_ENUM(WORKSPACE_STYLE, "full_slide", "glide_fade")
+PUBLIC_ENUM(SEVERITY, "error", "warning")
+PUBLIC_ENUM(ACCESS, "safe", "sensitive")
+PUBLIC_ENUM(EFFECT_CLASS, "read", "action")
+PUBLIC_ENUM(ARGUMENT_SCOPE, "outer", "item")
+PUBLIC_ENUM(OPERATOR_EFFECT, "pure", "action")
+PUBLIC_ENUM(STABILITY, "api-versioned")
+PUBLIC_REFERENCE(REF_VIEW, VIEW)
+PUBLIC_REFERENCE(REF_TAG, TAG)
+PUBLIC_REFERENCE(REF_OUTPUT, OUTPUT)
+PUBLIC_REFERENCE(REF_INPUT, INPUT)
+PUBLIC_ARRAY(STRINGS, STRING)
+PUBLIC_ARRAY(ENTITY_NAMES, ENTITY_TYPE)
+PUBLIC_UNION(RELATION_TARGETS, ENTITY_TYPE, ENTITY_NAMES)
+PUBLIC_ARRAY(ANY_VALUES, ANY)
+PUBLIC_ARRAY(PROFILES, PROFILE)
+PUBLIC_ARRAY(VIEWS, VIEW)
+PUBLIC_ARRAY(TAGS, TAG)
+PUBLIC_ARRAY(OUTPUTS, OUTPUT)
+PUBLIC_ARRAY(INPUTS, INPUT)
+PUBLIC_ARRAY(MODES, AVAILABLE_MODE)
+PUBLIC_ARRAY(ROOT_DESCRIPTORS, SCHEMA_ROOT)
+PUBLIC_ARRAY(TYPE_DESCRIPTORS, SCHEMA_TYPE)
+PUBLIC_ARRAY(FIELD_DESCRIPTORS, SCHEMA_FIELD)
+PUBLIC_ARRAY(SETTING_DESCRIPTORS, SETTING_FIELD)
+PUBLIC_ARRAY(OPERATORS, SCHEMA_OPERATOR)
+PUBLIC_SCHEMA(REFERENCE, "reference", false,
+  PUBLIC_FIELD("type", ENTITY_TYPE, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Declared entity kind"),
+  PUBLIC_FIELD("id", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque identity for this object lifetime"),
+  PUBLIC_FIELD("instance", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque compositor instance identity")
+)
+PUBLIC_SCHEMA(VIEW, "view", false,
+  PUBLIC_FIELD("type", VIEW_TYPE, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Declared entity kind"),
+  PUBLIC_FIELD("id", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque identity for this object lifetime"),
+  PUBLIC_FIELD("instance", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque compositor instance identity"),
+  PUBLIC_FIELD("kind", VIEW_KIND, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Managed client protocol"),
+  PUBLIC_FIELD("title", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Client title; malformed UTF-8 is repaired"),
+  PUBLIC_FIELD("app_id", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Wayland app ID or XWayland class used for application matching"),
+  PUBLIC_FIELD("x11_class", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "X11 class; null for Wayland views"),
+  PUBLIC_FIELD("x11_instance", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "X11 instance; null for Wayland views"),
+  PUBLIC_FIELD("mapped", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Whether this managed object is currently mapped"),
+  PUBLIC_FIELD("visible", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Presented by Leme; not a pixel-occlusion measurement"),
+  PUBLIC_FIELD("focused", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Has compositor keyboard focus; a focused layer may leave all views false"),
+  PUBLIC_FIELD("floating", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Current logical floating state"),
+  PUBLIC_FIELD("fullscreen", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Current logical fullscreen state"),
+  PUBLIC_FIELD("urgent", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Attention from existing activation policy; does not promise X11 urgency-hint support"),
+  PUBLIC_FIELD("last_focused", ORDER, true, true, "order", SENSITIVE, ALWAYS, NULL,
+      "Order of actual focus transitions; never-focused is null"),
+  PUBLIC_FIELD("urgent_since", ORDER, true, true, "order", SENSITIVE, ALWAYS, NULL,
+      "Order at the start of this activation urgency episode; cleared with urgency"),
+  PUBLIC_FIELD("geometry", BOX, true, true, "logical_px", SENSITIVE, ALWAYS, NULL,
+      "Committed compositor-global logical geometry, not animation interpolation"),
+  PUBLIC_FIELD("output", REF_OUTPUT, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Nullable owner or presentation output; hidden scratchpads have none"),
+  PUBLIC_FIELD("tag", REF_TAG, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Direct owner tag; sticky and scratchpad views have none"),
+  PUBLIC_FIELD("parent", REF_VIEW, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Managed parent when present"),
+  PUBLIC_FIELD("owner", OWNER, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Explicit domain ownership")
+)
+PUBLIC_SCHEMA(OWNER, "owner", false,
+  PUBLIC_FIELD("kind", OWNER_KIND, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Tagged, sticky, scratchpad, or unassigned ownership"),
+  PUBLIC_FIELD("root", REF_VIEW, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Sticky-group root only"),
+  PUBLIC_FIELD("scratchpad_name", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Configured scratchpad name only")
+)
+PUBLIC_SCHEMA(BOX, "box", false,
+  PUBLIC_FIELD("x", SIGNED_PX, false, true, "logical_px", SENSITIVE, ALWAYS, NULL,
+      "Committed x"),
+  PUBLIC_FIELD("y", SIGNED_PX, false, true, "logical_px", SENSITIVE, ALWAYS, NULL,
+      "Committed y"),
+  PUBLIC_FIELD("width", PIXELS, false, true, "logical_px", SENSITIVE, ALWAYS, NULL,
+      "Committed width"),
+  PUBLIC_FIELD("height", PIXELS, false, true, "logical_px", SENSITIVE, ALWAYS, NULL,
+      "Committed height")
+)
+PUBLIC_SCHEMA(TAG, "tag", false,
+  PUBLIC_FIELD("type", TAG_TYPE, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Declared entity kind"),
+  PUBLIC_FIELD("id", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque identity for this object lifetime"),
+  PUBLIC_FIELD("instance", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque compositor instance identity"),
+  PUBLIC_FIELD("output", REF_OUTPUT, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Output attachment owning this logical slot"),
+  PUBLIC_FIELD("number", TAG_NUMBER, false, true, "count", SENSITIVE, ALWAYS, NULL,
+      "Positive configured slot number"),
+  PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Display label; initially the decimal slot number"),
+  PUBLIC_FIELD("active", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Selected slot on this output, regardless of keyboard focus"),
+  PUBLIC_FIELD("pinned", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Pinned into workspace navigation"),
+  PUBLIC_FIELD("materialized", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "A domain workspace currently exists"),
+  PUBLIC_FIELD("navigable", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Included in the narrower navigation set"),
+  PUBLIC_FIELD("layout", LAYOUT, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Resolved layout without materializing candidate slots"),
+  PUBLIC_FIELD("view_count", COUNT, false, true, "count", SENSITIVE, ALWAYS, NULL,
+      "Direct managed tag ownership; excludes sticky and scratchpad views"),
+  PUBLIC_FIELD("urgent", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Independent tag-level attention; not a per-view attribution")
+)
+PUBLIC_SCHEMA(OUTPUT, "output", false,
+  PUBLIC_FIELD("type", OUTPUT_TYPE, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Declared entity kind"),
+  PUBLIC_FIELD("id", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque identity for this object lifetime"),
+  PUBLIC_FIELD("instance", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque compositor instance identity"),
+  PUBLIC_FIELD("name", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Output name when supplied by its backend"),
+  PUBLIC_FIELD("description", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Output description when supplied by its backend"),
+  PUBLIC_FIELD("make", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Output make when supplied by its backend"),
+  PUBLIC_FIELD("model", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Output model when supplied by its backend"),
+  PUBLIC_FIELD("serial", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Output serial when supplied by its backend"),
+  PUBLIC_FIELD("enabled", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Enabled output state"),
+  PUBLIC_FIELD("power_on", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Current output power state"),
+  PUBLIC_FIELD("focused", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Keyboard-focused output"),
+  PUBLIC_FIELD("geometry", BOX, true, true, "logical_px", SENSITIVE, ALWAYS, NULL,
+      "Layout rectangle; null when unavailable"),
+  PUBLIC_FIELD("usable_geometry", BOX, true, true, "logical_px", SENSITIVE, ALWAYS, NULL,
+      "Usable layout rectangle after reservations"),
+  PUBLIC_FIELD("scale", POSITIVE_NUMBER, false, true, "ratio", SENSITIVE, ALWAYS, NULL,
+      "Actual output scale"),
+  PUBLIC_FIELD("transform", TRANSFORM, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Actual named Wayland transform"),
+  PUBLIC_FIELD("current_mode", CURRENT_MODE, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Current or remembered physical mode"),
+  PUBLIC_FIELD("modes", MODES, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Supported modes sorted by width, height, then refresh"),
+  PUBLIC_FIELD("active_tag", REF_TAG, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Selected logical tag when available")
+)
+PUBLIC_SCHEMA(CURRENT_MODE, "current_mode", false,
+  PUBLIC_FIELD("width", POSITIVE_INT, false, true, "physical_px", SENSITIVE, ALWAYS, NULL,
+      "Physical mode width"),
+  PUBLIC_FIELD("height", POSITIVE_INT, false, true, "physical_px", SENSITIVE, ALWAYS, NULL,
+      "Physical mode height"),
+  PUBLIC_FIELD("refresh_mhz", PIXELS, false, true, "millihertz", SENSITIVE, ALWAYS, NULL,
+      "Mode refresh rate; zero means unspecified")
+)
+PUBLIC_SCHEMA(AVAILABLE_MODE, "available_mode", false,
+  PUBLIC_FIELD("width", POSITIVE_INT, false, true, "physical_px", SENSITIVE, ALWAYS, NULL,
+      "Physical mode width"),
+  PUBLIC_FIELD("height", POSITIVE_INT, false, true, "physical_px", SENSITIVE, ALWAYS, NULL,
+      "Physical mode height"),
+  PUBLIC_FIELD("refresh_mhz", PIXELS, false, true, "millihertz", SENSITIVE, ALWAYS, NULL,
+      "Mode refresh rate; zero means unspecified"),
+  PUBLIC_FIELD("preferred", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Backend preferred mode")
+)
+PUBLIC_SCHEMA(INPUT, "input", false,
+  PUBLIC_FIELD("type", INPUT_TYPE, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Declared entity kind"),
+  PUBLIC_FIELD("id", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque identity for this object lifetime"),
+  PUBLIC_FIELD("instance", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque compositor instance identity"),
+  PUBLIC_FIELD("name", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Backend device name"),
+  PUBLIC_FIELD("kind", INPUT_KIND, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Tracked keyboard or pointer"),
+  PUBLIC_FIELD("seat", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Seat name when available"),
+  PUBLIC_FIELD("vendor", U16, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Libinput vendor ID when available"),
+  PUBLIC_FIELD("product", U16, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Libinput product ID when available"),
+  PUBLIC_FIELD("backend", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Device backend name when known"),
+  PUBLIC_FIELD("capabilities", INPUT_CAPABILITIES, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Named per-device capabilities"),
+  PUBLIC_FIELD("settings", INPUT_SETTINGS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Actual applied device settings, not requested defaults")
+)
+PUBLIC_SCHEMA(INPUT_CAPABILITIES, "input_capabilities", false,
+  PUBLIC_FIELD("accel_profiles", PROFILES, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Supported named acceleration profiles"),
+  PUBLIC_FIELD("accel_speed", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Whether this device supports accel speed"),
+  PUBLIC_FIELD("natural_scroll", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Whether this device supports natural scroll"),
+  PUBLIC_FIELD("left_handed", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Whether this device supports left handed"),
+  PUBLIC_FIELD("tap", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Whether this device supports tap"),
+  PUBLIC_FIELD("keyboard_layout", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Whether this device supports keyboard layout")
+)
+PUBLIC_SCHEMA(INPUT_SETTINGS, "input_settings", false,
+  PUBLIC_FIELD("accel_profile", PROFILE, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Actual profile; null if unsupported"),
+  PUBLIC_FIELD("accel_speed", POINTER_SPEED, true, true, "ratio", SENSITIVE, ALWAYS, NULL,
+      "Actual acceleration speed; null if unsupported"),
+  PUBLIC_FIELD("natural_scroll", BOOLEAN, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Applied natural scroll; null if unsupported"),
+  PUBLIC_FIELD("left_handed", BOOLEAN, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Applied left handed; null if unsupported"),
+  PUBLIC_FIELD("tap", BOOLEAN, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Applied tap; null if unsupported"),
+  PUBLIC_FIELD("keyboard_layout", KEYBOARD_LAYOUT, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Keyboard layout state; null for pointers")
+)
+PUBLIC_SCHEMA(KEYBOARD_LAYOUT, "keyboard_layout", false,
+  PUBLIC_FIELD("active", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Active configured layout label when known"),
+  PUBLIC_FIELD("available", STRINGS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Configured layout labels in configuration order")
+)
+PUBLIC_SCHEMA(SESSION, "session", false,
+  PUBLIC_FIELD("locked", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Session privacy lock"),
+  PUBLIC_FIELD("active", BOOLEAN, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Backend session activity when available; not equivalent to unlocked"),
+  PUBLIC_FIELD("mode", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Current configured binding mode"),
+  PUBLIC_FIELD("focused_view", REF_VIEW, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Focused managed view when present"),
+  PUBLIC_FIELD("focused_output", REF_OUTPUT, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Focused output when present"),
+  PUBLIC_FIELD("keyboard_layout", KEYBOARD_LAYOUT, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Current keyboard layout labels")
+)
+PUBLIC_SCHEMA(EFFECTS, "effects", false,
+  PUBLIC_FIELD("build", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Effects support compiled in"),
+  PUBLIC_FIELD("known", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Runtime effectiveness has been verified"),
+  PUBLIC_FIELD("effective", BOOLEAN, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Verified runtime effectiveness, otherwise null")
+)
+PUBLIC_SCHEMA(CAPABILITIES, "capabilities", false,
+  PUBLIC_FIELD("public_model", TRUE, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Public owned-value model is available"),
+  PUBLIC_FIELD("effects", EFFECTS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Separate build and runtime effects facts"),
+  PUBLIC_FIELD("json_control", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Whether json control is implemented in this build"),
+  PUBLIC_FIELD("query", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Whether query is implemented in this build"),
+  PUBLIC_FIELD("actions", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Whether actions is implemented in this build"),
+  PUBLIC_FIELD("config_writes", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Whether config writes is implemented in this build"),
+  PUBLIC_FIELD("watch", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Whether watch is implemented in this build")
+)
+PUBLIC_SCHEMA(STATUS, "status", false,
+  PUBLIC_FIELD("locked", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Whether sensitive operations are locked"),
+  PUBLIC_FIELD("version", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Compositor project version"),
+  PUBLIC_FIELD("api_version", ORDER, false, true, "count", SAFE, ALWAYS, NULL,
+      "Public API version"),
+  PUBLIC_FIELD("capabilities", CAPABILITIES, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Static build and public-control capabilities")
+)
+PUBLIC_SCHEMA(LIMITS, "limits", false,
+  PUBLIC_FIELD("snapshot_bytes", ORDER, false, true, "bytes", SAFE, ALWAYS, NULL,
+      "Configured per-snapshot allocation ceiling"),
+  PUBLIC_FIELD("total_bytes", ORDER, false, true, "bytes", SAFE, ALWAYS, NULL,
+      "Shared aggregate control allocation ceiling"),
+  PUBLIC_FIELD("value_depth", ORDER, false, true, "count", SAFE, ALWAYS, NULL,
+      "Maximum value depth"),
+  PUBLIC_FIELD("field_depth", ORDER, false, true, "count", SAFE, ALWAYS, NULL,
+      "Maximum field-path length")
+)
+PUBLIC_SCHEMA(RUNTIME, "runtime", false,
+  PUBLIC_FIELD("version", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Compositor project version"),
+  PUBLIC_FIELD("api_version", ORDER, false, true, "count", SAFE, ALWAYS, NULL,
+      "Public API version"),
+  PUBLIC_FIELD("capabilities", CAPABILITIES, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Static capabilities only"),
+  PUBLIC_FIELD("limits", LIMITS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Implemented resource ceilings; no future protocol negotiation implied"),
+  PUBLIC_FIELD("schema", SCHEMA, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Authoritative field and operation descriptions")
+)
+PUBLIC_SCHEMA(SCHEMA, "schema", false,
+  PUBLIC_FIELD("roots", ROOT_DESCRIPTORS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Public root registry"),
+  PUBLIC_FIELD("types", TYPE_DESCRIPTORS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Named record definitions"),
+  PUBLIC_FIELD("operators", OPERATORS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Only explicitly registered operators")
+)
+PUBLIC_SCHEMA(SCHEMA_ROOT, "schema_root", false,
+  PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Root name"),
+  PUBLIC_FIELD("type", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Singleton or collection element type"),
+  PUBLIC_FIELD("collection", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Whether the root returns an array"),
+  PUBLIC_FIELD("access", ACCESS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Lock access class")
+)
+PUBLIC_SCHEMA(SCHEMA_TYPE, "schema_type", false,
+  PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Record type name"),
+  PUBLIC_FIELD("fields", FIELD_DESCRIPTORS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Authoritative field definitions"),
+  PUBLIC_FIELD("sparse", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Missing optional assignments are allowed; unknown keys are still rejected")
+)
+PUBLIC_SCHEMA(SCHEMA_OPERATOR, "schema_operator", false,
+  PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Registered operation name"),
+  PUBLIC_FIELD("description", STRING, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Operation documentation"),
+  PUBLIC_FIELD("effect", OPERATOR_EFFECT, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Pure expression or domain action"),
+  PUBLIC_FIELD("available", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Availability of this registered operation"),
+  PUBLIC_FIELD("stability", STABILITY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Public API stability scope"),
+  PUBLIC_FIELD("min_args", COUNT, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Minimum argument count"),
+  PUBLIC_FIELD("max_args", COUNT, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Maximum argument count"),
+  PUBLIC_FIELD("arguments", ANY_VALUES, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Positional argument descriptors"),
+  PUBLIC_FIELD("result", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Result type description"),
+  PUBLIC_FIELD("work", STRING, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Work accounting behavior")
+)
+PUBLIC_SCHEMA(SCHEMA_FIELD, "schema_field", false,
+  PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Field name"),
+  PUBLIC_FIELD("type", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Value kind or union"),
+  PUBLIC_FIELD("nullable", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "A present JSON null is allowed"),
+  PUBLIC_FIELD("required", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "The key must exist"),
+  PUBLIC_FIELD("units", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Value units when applicable"),
+  PUBLIC_FIELD("description", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Field semantics and application behavior"),
+  PUBLIC_FIELD("access", ACCESS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Lock access class"),
+  PUBLIC_FIELD("available", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Build availability of this field"),
+  PUBLIC_FIELD("effective_in_runtime", BOOLEAN, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Runtime effectiveness when known"),
+  PUBLIC_FIELD("writable", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "A registered live setter currently exists"),
+  PUBLIC_FIELD("write_capability", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Capability required by an eventual setter"),
+  PUBLIC_FIELD("minimum", NUMBER, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Inclusive smallest supported numeric value"),
+  PUBLIC_FIELD("maximum", NUMBER, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Inclusive largest supported numeric value"),
+  PUBLIC_FIELD("enum", ANY_VALUES, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Permitted literal enum values; empty means unconstrained"),
+  PUBLIC_FIELD("relation", RELATION_TARGETS, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Declared entity target, or target array for a union; never inferred from literal shape"),
+  PUBLIC_FIELD("items", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Array element type when applicable"),
+  PUBLIC_FIELD("properties", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Nested record type when applicable"),
+  PUBLIC_FIELD("stability", STABILITY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Public API stability scope")
+)
+PUBLIC_SCHEMA(SETTING_FIELD, "setting_field", false,
+  PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Field name"),
+  PUBLIC_FIELD("type", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Value kind or union"),
+  PUBLIC_FIELD("nullable", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "A present JSON null is allowed"),
+  PUBLIC_FIELD("required", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "The key must exist"),
+  PUBLIC_FIELD("units", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Value units when applicable"),
+  PUBLIC_FIELD("description", NONEMPTY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Field semantics and application behavior"),
+  PUBLIC_FIELD("access", ACCESS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Lock access class"),
+  PUBLIC_FIELD("available", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Build availability of this field"),
+  PUBLIC_FIELD("effective_in_runtime", BOOLEAN, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Runtime effectiveness when known"),
+  PUBLIC_FIELD("writable", BOOLEAN, false, true, NULL, SAFE, ALWAYS, NULL,
+      "A registered live setter currently exists"),
+  PUBLIC_FIELD("write_capability", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Capability required by an eventual setter"),
+  PUBLIC_FIELD("minimum", NUMBER, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Inclusive smallest supported numeric value"),
+  PUBLIC_FIELD("maximum", NUMBER, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Inclusive largest supported numeric value"),
+  PUBLIC_FIELD("enum", ANY_VALUES, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Permitted literal enum values; empty means unconstrained"),
+  PUBLIC_FIELD("relation", RELATION_TARGETS, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Declared entity target, or target array for a union; never inferred from literal shape"),
+  PUBLIC_FIELD("items", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Array element type when applicable"),
+  PUBLIC_FIELD("properties", STRING, true, true, NULL, SAFE, ALWAYS, NULL,
+      "Nested record type when applicable"),
+  PUBLIC_FIELD("stability", STABILITY, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Public API stability scope"),
+  PUBLIC_FIELD("path", STRINGS, false, true, NULL, SAFE, ALWAYS, NULL,
+      "Literal normalized configuration path components; * denotes collection entries")
+)
+#include "config/public-settings.def"

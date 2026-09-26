@@ -4,6 +4,7 @@
 #include "core/server.h"
 #include "output/output.h"
 #include "protocols/publication.h"
+#include "public/server.h"
 #include "protocols/session.h"
 #include "shell/view.h"
 #include "workspace/tag.h"
@@ -25,6 +26,21 @@ struct leme_workspace_entry {
   bool seen;
   struct wl_list link;
 };
+
+bool leme_workspace_public_urgent(const struct leme_server *server,
+                                  const struct leme_output *output,
+                                  uint16_t number) {
+  if (server == NULL || output == NULL || number == 0 ||
+      number > output->tags.max_tags || number == output->tags.focused_id ||
+      server->workspace_entries.next == NULL)
+    return false;
+  const struct leme_workspace_entry *entry = NULL;
+  wl_list_for_each(entry, &server->workspace_entries, link) {
+    if (entry->output == output && entry->tag_id == number)
+      return entry->urgent;
+  }
+  return false;
+}
 
 static struct leme_workspace_entry *
 leme_workspace_find(struct leme_server *server,
@@ -145,8 +161,9 @@ void leme_workspace_mark_urgent(struct leme_server *server,
   struct leme_workspace_entry *entry =
       leme_workspace_find(server, output, tag_id);
 
-  if (entry != NULL) {
+  if (entry != NULL && !entry->urgent) {
     entry->urgent = true;
+    leme_public_server_invalidate(server);
   }
 }
 

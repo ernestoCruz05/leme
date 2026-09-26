@@ -27,10 +27,12 @@ struct leme_input_protocols;
 struct leme_layer_surface;
 struct leme_output;
 struct leme_pointer_grab;
+struct leme_public_model;
 struct leme_session;
 struct leme_tearing;
 struct leme_view;
 struct leme_tags;
+struct leme_config_store;
 struct wlr_pointer;
 
 struct leme_workspace_gesture_state {
@@ -120,6 +122,8 @@ struct leme_server {
   struct wl_list outputs;
   struct leme_capture *capture;
   struct leme_ipc *ipc;
+  struct leme_public_model *public_model;
+  uint64_t public_config_generation;
   struct leme_data *data;
   struct leme_desktop *desktop;
   struct leme_xwayland *xwayland;
@@ -162,6 +166,7 @@ struct leme_server {
   const char *socket;
   bool started;
   struct leme_config *config;
+  struct leme_config_store *config_store;
 };
 
 bool leme_server_init(struct leme_server *server);

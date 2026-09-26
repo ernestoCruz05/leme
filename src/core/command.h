@@ -52,7 +52,9 @@ struct leme_command {
 struct leme_server;
 bool leme_command_parse(struct leme_command *command, char *const *params,
                         size_t params_len, char **error);
+void leme_command_finish(struct leme_command *command);
 bool leme_command_execute(struct leme_server *server,
                           const struct leme_command *command);
+bool leme_command_warp_cursor(const struct leme_server *server);
 
 #endif

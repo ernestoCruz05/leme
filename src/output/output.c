@@ -1,7 +1,10 @@
 #include "core/gate.h"
+#include "output/control.h"
 #include "output/output.h"
+#include "public/server.h"
 
 #include "config/config.h"
+#include "config/live.h"
 #include "shell/layer.h"
 #include "shell/layer_layout.h"
 #include "shell/scratchpad.h"
@@ -596,6 +599,9 @@ static bool leme_output_configuration_snapshots(
     return false;
   }
   wl_list_for_each(output, &server->outputs, link) {
+    if (index >= count) {
+      break;
+    }
     const struct wlr_output_configuration_head_v1 *head =
         leme_output_configuration_head_for(configuration, output->wlr_output);
     struct wlr_box box = {0};
@@ -911,6 +917,8 @@ bool leme_output_set_power(struct leme_output *output, bool on) {
     leme_render_output_animations_finish(output);
   }
   if (output->wlr_output->enabled == on) {
+    if (output->power_on != on)
+      leme_public_server_invalidate(server);
     output->power_on = on;
     return true;
   }
@@ -1155,6 +1163,7 @@ void leme_output_publish_configuration(struct leme_server *server) {
   struct wlr_output_configuration_v1 *configuration;
   struct leme_output *output;
 
+  leme_public_server_invalidate(server);
   if (server->output_manager == NULL) {
     return;
   }
@@ -1196,16 +1205,22 @@ leme_output_head_box(const struct wlr_output_configuration_head_v1 *head,
                      struct wlr_box *box) {
   const struct wlr_output_mode *mode = head->state.mode;
   const struct wlr_output *wlr_output = head->state.output;
+  int width = mode != NULL ? mode->width
+              : head->state.custom_mode.width > 0
+                  ? head->state.custom_mode.width
+                  : wlr_output->width;
+  int height = mode != NULL ? mode->height
+               : head->state.custom_mode.height > 0
+                   ? head->state.custom_mode.height
+                   : wlr_output->height;
 
   *box = (struct wlr_box){
       .x = head->state.x,
       .y = head->state.y,
   };
   return leme_output_logical_size(
-             mode != NULL ? mode->width : wlr_output->width,
-             mode != NULL ? mode->height : wlr_output->height,
-             head->state.scale, head->state.transform, &box->width,
-             &box->height) &&
+             width, height, head->state.scale, head->state.transform,
+             &box->width, &box->height) &&
          leme_output_box_edges(box, NULL, NULL);
 }
 
@@ -1409,6 +1424,9 @@ static void leme_output_handle_commit(struct wl_listener *listener,
       WLR_OUTPUT_STATE_MODE | WLR_OUTPUT_STATE_ENABLED |
       WLR_OUTPUT_STATE_SCALE | WLR_OUTPUT_STATE_TRANSFORM;
 
+  if ((event->state->committed & geometry_fields) != 0) {
+    leme_public_server_invalidate(output->server);
+  }
   if ((event->state->committed & geometry_fields) != 0 &&
       output->server->focused_output == output && output->wlr_output->enabled) {
     leme_output_refresh_geometry(output);
@@ -1557,6 +1575,13 @@ static void leme_output_handle_destroy(struct wl_listener *listener,
     leme_session_output_changed(server);
   }
   leme_tags_finish(&output->tags);
+  if (server->config_store != NULL) {
+    struct leme_control_target drop = {
+        .kind = LEME_PUBLIC_OUTPUT,
+        .id = output->public_id,
+    };
+    leme_config_store_drop_target(server->config_store, &drop);
+  }
   free(output);
   if (!wl_list_empty(&server->outputs)) {
     if (!leme_output_apply_config(server, server->config, true)) {
@@ -1566,6 +1591,7 @@ static void leme_output_handle_destroy(struct wl_listener *listener,
   } else {
     leme_output_publish_configuration(server);
   }
+  leme_public_server_invalidate(server);
   leme_publication_invalidate(server);
 }
 
@@ -1607,7 +1633,13 @@ static void leme_output_handle_new(struct wl_listener *listener, void *data) {
     free(output);
     return;
   }
+  if (leme_public_model_available(server->public_model) &&
+      leme_public_model_issue_id(server->public_model, &output->public_id) !=
+          LEME_PUBLIC_OK) {
+    leme_public_model_disable(server->public_model);
+  }
   wl_list_insert(server->outputs.prev, &output->link);
+  leme_public_server_invalidate(server);
   output->frame.notify = leme_output_handle_frame;
   wl_signal_add(&wlr_output->events.frame, &output->frame);
   output->commit.notify = leme_output_handle_commit;
@@ -1718,6 +1750,9 @@ void leme_output_refresh_geometry(struct leme_output *output) {
   if (!leme_output_boxes_equal(next, output->full_box)) {
     leme_render_output_animations_finish(output);
   }
+  if (!leme_output_boxes_equal(next, output->full_box) ||
+      !leme_output_boxes_equal(next, output->usable_box))
+    leme_public_server_invalidate(output->server);
   output->full_box = next;
   output->usable_box = output->full_box;
 }
@@ -1813,4 +1848,59 @@ struct leme_tags *leme_output_tags(struct leme_output *output) {
 
 struct leme_tags *leme_focused_tags(const struct leme_server *server) {
   return leme_output_tags(leme_output_focused(server));
+}
+
+struct leme_output *leme_output_by_public_id(struct leme_server *server,
+                                             struct leme_public_id id) {
+  if (server == NULL || id.serial == 0) {
+    return NULL;
+  }
+  struct leme_output *output = NULL;
+  wl_list_for_each(output, &server->outputs, link) {
+    if (output->public_id.serial == id.serial) {
+      return output;
+    }
+  }
+  return NULL;
+}
+
+bool leme_output_control_test_configuration(
+    struct leme_server *server,
+    struct wlr_output_configuration_v1 *configuration) {
+  return leme_output_configuration_test(server, configuration);
+}
+
+bool leme_output_control_commit_configuration(
+    struct leme_server *server,
+    struct wlr_output_configuration_v1 *configuration) {
+  return leme_output_commit_and_reconcile(server, configuration);
+}
+
+bool leme_output_control_configuration_matches_current(
+    struct leme_server *server,
+    const struct wlr_output_configuration_v1 *configuration) {
+  return leme_output_configuration_matches_current(server, configuration);
+}
+
+bool leme_output_control_heads_overlap(
+    const struct wlr_output_configuration_v1 *configuration) {
+  return leme_output_heads_overlap(configuration);
+}
+
+bool leme_output_has_hardware_delta(struct leme_server *server,
+                                    const struct leme_config *config) {
+  if (server == NULL || server->outputs.next == NULL ||
+      wl_list_empty(&server->outputs)) {
+    return false;
+  }
+  bool mode_fallback = false;
+  struct wlr_output_configuration_v1 *configuration =
+      leme_output_build_persistent(server, config, false, &mode_fallback);
+  if (configuration == NULL) {
+    return true;
+  }
+  bool matches =
+      leme_output_configuration_matches_current(server, configuration);
+  wlr_output_configuration_v1_destroy(configuration);
+  return !matches;
 }

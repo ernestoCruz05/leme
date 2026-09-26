@@ -1,4 +1,5 @@
 #include "render/render.h"
+#include "public/server.h"
 
 #include "config/config.h"
 #include "core/server.h"
@@ -1425,6 +1426,7 @@ void leme_render_view_set_box(struct leme_view *view, struct leme_box box) {
   int border_width;
   size_t index;
 
+  leme_public_server_invalidate(view->server);
   if (view->render_tree == NULL || view->scene_tree == NULL) {
     return;
   }
