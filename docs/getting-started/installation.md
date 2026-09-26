@@ -66,6 +66,7 @@ The install contains:
 /usr/bin/timao
 /usr/share/wayland-sessions/leme.desktop
 /usr/share/xdg-desktop-portal/leme-portals.conf
+/usr/lib/systemd/user/leme-session.target
 ```
 
 Check which executables your shell resolves and which build is installed:

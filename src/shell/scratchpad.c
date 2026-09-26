@@ -337,7 +337,6 @@ static void leme_scratchpad_hide(struct leme_scratchpad_manager *manager,
   output = leme_ownership_effective_output(manager->shown);
   leme_scratchpad_finish_outputs(output, NULL);
   leme_render_view_finish_animation(view);
-  leme_capture_invalidate_view(view);
   manager->shown = NULL;
   (void)leme_ownership_present_durable(view, LEME_DURABLE_HIDDEN, NULL);
   if (promote) {
@@ -559,7 +558,6 @@ bool leme_scratchpad_send(struct leme_server *server, struct leme_view *view) {
     leme_view_ack_fullscreen(view, false);
   }
   leme_scratchpad_transition_commit_started(server);
-  leme_capture_invalidate_view(view);
   leme_ownership_commit(&transition);
   view->floating = true;
   leme_scratchpad_promote(manager, view);

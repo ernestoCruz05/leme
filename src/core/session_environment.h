@@ -4,6 +4,7 @@
 struct leme_server;
 
 void leme_session_environment_publish(struct leme_server *server);
+void leme_session_environment_withdraw(struct leme_server *server);
 void leme_session_environment_cursor(const struct leme_server *server);
 
 #endif

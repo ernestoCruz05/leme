@@ -5,6 +5,7 @@
 #include "output/output.h"
 #include "protocols/session.h"
 #include "protocols/toplevel.h"
+#include "render/render.h"
 #include "shell/view.h"
 
 #include <stdlib.h>
@@ -13,6 +14,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland/xwayland.h>
 
 struct leme_capture {
   struct leme_server *server;
@@ -24,87 +26,122 @@ struct leme_capture {
   struct wl_listener toplevel_request;
 };
 
-static void leme_capture_handle_epoch_destroy(struct wl_listener *listener,
-                                              void *data) {
-  struct leme_view *view =
-      wl_container_of(listener, view, capture_epoch_destroy);
+static const float leme_capture_blank_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
-  (void)data;
-  view->capture_epoch = NULL;
-  view->capture_epoch_destroy_count++;
-  wl_list_remove(&listener->link);
-  wl_list_init(&listener->link);
+static bool leme_capture_view_visible(const struct leme_view *view) {
+  int x = 0;
+  int y = 0;
+
+  return view->render_tree != NULL &&
+         wlr_scene_node_coords(&view->render_tree->node, &x, &y);
 }
 
-static struct wlr_scene_node *
-leme_capture_previous_sibling(struct wlr_scene_node *node) {
-  if (node->link.prev == &node->parent->children) {
-    return NULL;
+static void leme_capture_sync_view(struct leme_view *view) {
+  bool visible;
+
+  if (view->capture_content == NULL || view->capture_blank == NULL) {
+    return;
   }
-  return wl_container_of(node->link.prev, node, link);
+  visible = leme_capture_view_visible(view);
+  if (!visible) {
+    struct leme_box content = leme_render_view_content_box(view, view->box);
+
+    wlr_scene_rect_set_size(view->capture_blank, content.width, content.height);
+  }
+  wlr_scene_node_set_enabled(&view->capture_content->node, visible);
+  wlr_scene_node_set_enabled(&view->capture_blank->node, !visible);
 }
 
-static struct wlr_scene_node *
-leme_capture_next_sibling(struct wlr_scene_node *node) {
-  if (node->link.next == &node->parent->children) {
-    return NULL;
+static struct wlr_scene_tree *
+leme_capture_popup_parent(struct leme_view *view, struct wlr_surface *parent) {
+  struct leme_view_popup *popup;
+
+  if (view->kind == LEME_VIEW_XDG && view->xdg_toplevel != NULL &&
+      view->xdg_toplevel->base->surface == parent) {
+    return view->capture_content;
   }
-  return wl_container_of(node->link.next, node, link);
+  wl_list_for_each(popup, &view->popups, link) {
+    if (popup->wlr_popup->base->surface == parent) {
+      return popup->capture_tree;
+    }
+  }
+  return NULL;
 }
 
-static void leme_capture_place_at_slot(
-    struct wlr_scene_node *node,
-    struct wlr_scene_node
-        *below, // NOLINT(bugprone-easily-swappable-parameters)
-    struct wlr_scene_node *above) {
-  if (below != NULL) {
-    wlr_scene_node_place_above(node, below);
-  } else if (above != NULL) {
-    wlr_scene_node_place_below(node, above);
+void leme_capture_popup_create(struct leme_view_popup *popup) {
+  struct wlr_scene_tree *parent;
+
+  if (popup == NULL || popup->view->capture_scene == NULL ||
+      popup->capture_tree != NULL) {
+    return;
   }
+  parent = leme_capture_popup_parent(popup->view, popup->wlr_popup->parent);
+  if (parent == NULL) {
+    return;
+  }
+  popup->capture_tree =
+      wlr_scene_xdg_surface_create(parent, popup->wlr_popup->base);
 }
 
-static bool leme_capture_epoch_create(struct leme_view *view) {
-  struct wlr_scene_tree *epoch;
-  struct wlr_scene_node *below;
-  struct wlr_scene_node *above;
-
-  if (view->capture_epoch != NULL) {
-    return true;
+void leme_capture_popup_destroy(struct leme_view_popup *popup) {
+  if (popup == NULL || popup->capture_tree == NULL) {
+    return;
   }
-  if (view->render_tree == NULL || view->scene_tree == NULL) {
-    return false;
-  }
-  below = leme_capture_previous_sibling(&view->scene_tree->node);
-  above = leme_capture_next_sibling(&view->scene_tree->node);
-  epoch = wlr_scene_tree_create(view->render_tree);
-  if (epoch == NULL) {
-    return false;
-  }
-  wlr_scene_node_reparent(&view->scene_tree->node, epoch);
-  leme_capture_place_at_slot(&epoch->node, below, above);
-  view->capture_epoch = epoch;
-  view->capture_epoch_destroy.notify = leme_capture_handle_epoch_destroy;
-  wl_signal_add(&epoch->node.events.destroy, &view->capture_epoch_destroy);
-  return true;
+  wlr_scene_node_destroy(&popup->capture_tree->node);
+  popup->capture_tree = NULL;
 }
 
 void leme_capture_invalidate_view(struct leme_view *view) {
-  struct wlr_scene_tree *epoch;
+  struct leme_view_popup *popup;
+  struct wlr_scene *scene;
 
-  if (view == NULL || view->capture_epoch == NULL) {
+  if (view == NULL || view->capture_scene == NULL) {
     return;
   }
-  epoch = view->capture_epoch;
-  view->capture_epoch = NULL;
-  if (view->scene_tree != NULL && view->render_tree != NULL) {
-    struct wlr_scene_node *below = leme_capture_previous_sibling(&epoch->node);
-    struct wlr_scene_node *above = leme_capture_next_sibling(&epoch->node);
+  scene = view->capture_scene;
+  wl_list_for_each(popup, &view->popups, link) { popup->capture_tree = NULL; }
+  view->capture_scene = NULL;
+  view->capture_content = NULL;
+  view->capture_blank = NULL;
+  view->capture_source = NULL;
+  wlr_scene_node_destroy(&scene->tree.node);
+}
 
-    wlr_scene_node_reparent(&view->scene_tree->node, view->render_tree);
-    leme_capture_place_at_slot(&view->scene_tree->node, below, above);
+static bool leme_capture_scene_create(struct leme_view *view) {
+  struct leme_server *server = view->server;
+  struct leme_view_popup *popup;
+  struct wlr_scene *scene = wlr_scene_create();
+
+  if (scene == NULL) {
+    return false;
   }
-  wlr_scene_node_destroy(&epoch->node);
+  view->capture_scene = scene;
+  view->capture_blank =
+      wlr_scene_rect_create(&scene->tree, 0, 0, leme_capture_blank_color);
+  if (view->kind == LEME_VIEW_XDG && view->xdg_toplevel != NULL) {
+    view->capture_content =
+        wlr_scene_xdg_surface_create(&scene->tree, view->xdg_toplevel->base);
+  } else if (view->xwayland_surface != NULL &&
+             view->xwayland_surface->surface != NULL) {
+    view->capture_content = wlr_scene_subsurface_tree_create(
+        &scene->tree, view->xwayland_surface->surface);
+  }
+  if (view->capture_blank == NULL || view->capture_content == NULL) {
+    leme_capture_invalidate_view(view);
+    return false;
+  }
+  wl_list_for_each_reverse(popup, &view->popups, link) {
+    leme_capture_popup_create(popup);
+  }
+  view->capture_source = wlr_ext_image_capture_source_v1_create_with_scene_node(
+      &scene->tree.node, wl_display_get_event_loop(server->display),
+      server->allocator, server->renderer);
+  if (view->capture_source == NULL) {
+    leme_capture_invalidate_view(view);
+    return false;
+  }
+  leme_capture_sync_view(view);
+  return true;
 }
 
 void leme_capture_invalidate_all(struct leme_server *server) {
@@ -118,18 +155,13 @@ void leme_capture_invalidate_all(struct leme_server *server) {
   }
 }
 
-void leme_capture_reconcile_outputs(struct leme_server *server) {
+void leme_capture_sync(struct leme_server *server) {
   struct leme_view *view;
 
   if (server == NULL) {
     return;
   }
-  wl_list_for_each(view, &server->views, link) {
-    if (view->capture_epoch != NULL &&
-        !leme_capture_view_eligible(server, view)) {
-      leme_capture_invalidate_view(view);
-    }
-  }
+  wl_list_for_each(view, &server->views, link) { leme_capture_sync_view(view); }
 }
 
 bool leme_capture_view_eligible(const struct leme_server *server,
@@ -166,7 +198,6 @@ static void leme_capture_handle_toplevel_request(struct wl_listener *listener,
       wl_container_of(listener, capture, toplevel_request);
   struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request
       *request = data;
-  struct wlr_ext_image_capture_source_v1 *source;
   struct leme_server *server = capture->server;
   struct leme_view *view;
 
@@ -177,21 +208,12 @@ static void leme_capture_handle_toplevel_request(struct wl_listener *listener,
   if (!leme_capture_view_eligible(server, view)) {
     return;
   }
-  if (!leme_capture_epoch_create(view)) {
-    wlr_log(WLR_ERROR, "%s", "leme: failed to create a toplevel capture epoch");
-    return;
-  }
-  source = wlr_ext_image_capture_source_v1_create_with_scene_node(
-      &view->capture_epoch->node, wl_display_get_event_loop(server->display),
-      server->allocator, server->renderer);
-  if (source == NULL) {
-    leme_capture_invalidate_view(view);
+  if (view->capture_source == NULL && !leme_capture_scene_create(view)) {
     wlr_log(WLR_ERROR, "%s",
             "leme: failed to create a toplevel capture source");
     return;
   }
-  if (!leme_capture_request_accept(capture, request, source)) {
-    leme_capture_invalidate_view(view);
+  if (!leme_capture_request_accept(capture, request, view->capture_source)) {
     wlr_log(WLR_ERROR, "%s",
             "leme: failed to accept a toplevel capture source");
   }

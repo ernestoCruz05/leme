@@ -27,20 +27,25 @@ Idle inhibitors count only while their surface is mapped and visible on an enabl
 Leme exposes `wlr-screencopy-v1`, `ext-image-copy-capture-v1`, output image sources, and logical output metadata. Shared-memory capture is available, and DMA-BUF capture depends on the renderer and backend.
 
 Capture during a lock sees only committed lock content or the opaque blocker.
-Portal integration offers whole-output sources. Compatible direct clients can
-request a per-window source through
-`ext_foreign_toplevel_image_capture_source_manager_v1`; the source is refused
-while locked or when the window is not currently protocol-eligible. Tagged
-windows, shown scratchpads, and output-presented sticky windows are eligible.
-A hidden mapped scratchpad or suspended sticky window is not: new direct
-capture requests and stale requests are rejected, and an already accepted
-source is invalidated when it hides or changes output. Whole-output capture
-includes presented sticky windows only on their owner output. A window capture is a region of
-the scene, so surfaces drawn over that region appear in the result.
+Compatible clients, including `xdg-desktop-portal-luminous`, can request a
+per-window source through
+`ext_foreign_toplevel_image_capture_source_manager_v1`. New requests are
+refused while locked and for windows that are not currently protocol-eligible.
+Tagged windows, shown scratchpads, and output-presented sticky windows are
+eligible; a hidden mapped scratchpad or suspended sticky window is not.
 
-The current `xdg-desktop-portal-wlr` picker does not expose that direct
-per-window source. Portal consent, source selection, and PipeWire transport
-remain external.
+A window capture contains only that window and its popups. Borders, other
+windows, and layer surfaces drawn over it do not appear. XWayland menus are
+separate X11 windows and are not included. While the window is on a hidden
+tag, in a hidden scratchpad, or in a suspended sticky group, the capture shows
+a black frame of the window's size, and live content returns when the window
+is shown again. The capture ends when the window unmaps or the session locks.
+Whole-output capture includes presented sticky windows only on their owner
+output.
+
+`xdg-desktop-portal-wlr` offers a per-window source only through a custom
+chooser. Portal consent, source selection, and PipeWire transport remain
+external.
 
 ## Graphics and presentation
 

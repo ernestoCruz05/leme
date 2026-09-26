@@ -165,6 +165,7 @@ struct leme_server {
   struct wl_event_source *sigint_source;
   const char *socket;
   bool started;
+  bool session_target;
   struct leme_config *config;
   struct leme_config_store *config_store;
 };

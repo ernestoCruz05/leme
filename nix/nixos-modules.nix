@@ -33,20 +33,13 @@ in
       cfg.package
     ];
 
+    systemd.packages = [ cfg.package ];
+
     xdg.portal = {
       enable = lib.mkDefault true;
 
-      config = {
-        leme = {
-          default = [
-            "gtk"
-          ];
-          "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
-          "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
-        };
-      };
       extraPortals = with pkgs; [
-        xdg-desktop-portal-wlr
+        xdg-desktop-portal-luminous
         xdg-desktop-portal-gtk
       ];
       wlr.enable = lib.mkDefault true;

@@ -347,6 +347,7 @@ bool leme_render_view_popup_create(struct leme_view_popup *popup) {
     return false;
   }
   popup->wlr_popup->base->data = popup->scene_tree;
+  leme_capture_popup_create(popup);
   leme_session_refresh_idle_inhibitors(popup->view->server);
   return true;
 }
@@ -402,6 +403,7 @@ void leme_render_view_popup_unconstrain(struct leme_view_popup *popup,
 }
 
 void leme_render_view_popup_destroy(struct leme_view_popup *popup) {
+  leme_capture_popup_destroy(popup);
   leme_render_view_untrack_root(popup->view, popup->wlr_popup->base->surface);
   popup->wlr_popup->base->data = NULL;
   if (popup->scene_tree != NULL) {

@@ -746,7 +746,7 @@ static bool leme_output_reconcile(struct leme_server *server,
     leme_sticky_commit_outputs(sticky);
   }
   leme_scratchpad_reconcile_outputs(server);
-  leme_capture_reconcile_outputs(server);
+  leme_capture_sync(server);
   if (server->focused_output == NULL ||
       !server->focused_output->wlr_output->enabled) {
     server->focused_output = first;

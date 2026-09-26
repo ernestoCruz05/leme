@@ -294,6 +294,7 @@ void leme_server_finish(struct leme_server *server) {
     leme_public_server_finish(server);
     return;
   }
+  leme_session_environment_withdraw(server);
   leme_input_workspace_gesture_cancel(server);
   leme_xwayland_finish(server);
   if (server->display != NULL) {

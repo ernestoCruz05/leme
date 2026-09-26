@@ -1,5 +1,6 @@
 #include "render/render.h"
 
+#include "protocols/capture.h"
 #include "protocols/data.h"
 #include "shell/layer.h"
 #include "output/output.h"
@@ -225,6 +226,7 @@ void leme_render_output_frame(struct leme_output *output) {
   if (output->scene_output == NULL) {
     return;
   }
+  leme_capture_sync(output->server);
   leme_view_flush_deferred_configures(output->server);
   clock_gettime(CLOCK_MONOTONIC, &now);
   leme_animation_manager_tick(&output->server->animations, &now);

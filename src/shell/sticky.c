@@ -4,7 +4,6 @@
 #include "core/server.h"
 #include "input/input.h"
 #include "output/output.h"
-#include "protocols/capture.h"
 #include "protocols/publication.h"
 #include "render/render.h"
 #include "shell/ownership.h"
@@ -149,7 +148,6 @@ static void leme_sticky_hide_pending_group(struct leme_sticky_group *group,
     if (member == removed) {
       continue;
     }
-    leme_capture_invalidate_view(member->view);
     (void)leme_ownership_present_durable(member->view, LEME_DURABLE_HIDDEN,
                                          NULL);
     member->parent = NULL;
@@ -299,7 +297,6 @@ void leme_sticky_commit_transient(struct leme_sticky_adoption **slot) {
   adoption = *slot;
   *slot = NULL;
   member = adoption->member;
-  leme_capture_invalidate_view(member->view);
   leme_ownership_commit(&adoption->owner);
   member->view->floating = true;
   member->view->sticky_member = member;
@@ -374,7 +371,6 @@ static bool leme_sticky_enter(struct leme_view *view) {
   member->view = view;
   member->anchor_area = leme_output_usable_box(output);
 
-  leme_capture_invalidate_view(view);
   leme_input_pointer_grab_cancel_view(view);
   leme_ownership_commit(&owner);
   view->floating = true;
@@ -425,9 +421,6 @@ static bool leme_sticky_leave(struct leme_view *view) {
           views, view_count, focus, tags, tags->focused_id, &owner)) {
     free((void *)views);
     return false;
-  }
-  for (size_t index = 0; index < view_count; index++) {
-    leme_capture_invalidate_view(views[index]);
   }
   leme_ownership_commit(&owner);
   for (size_t index = 0; index < view_count; index++) {
@@ -563,7 +556,6 @@ bool leme_sticky_move_to_output(struct leme_view *view,
     boxes[index] = leme_view_policy_reanchor_box(
         views[index]->box, views[index]->sticky_member->anchor_area,
         output->usable_box);
-    leme_capture_invalidate_view(views[index]);
   }
   leme_ownership_commit(&transition);
   for (size_t index = 0; index < view_count; index++) {
@@ -602,9 +594,6 @@ bool leme_sticky_move_to_tag(struct leme_view *view, uint16_t tag_id,
           views, view_count, focus, &output->tags, tag_id, &owner)) {
     free((void *)views);
     return false;
-  }
-  for (size_t index = 0; index < view_count; index++) {
-    leme_capture_invalidate_view(views[index]);
   }
   leme_ownership_commit(&owner);
   for (size_t index = 0; index < view_count; index++) {
@@ -823,10 +812,6 @@ void leme_sticky_commit_outputs(struct leme_sticky_output_plan **slot) {
   for (size_t index = 0; index < plan->entry_count; index++) {
     struct leme_sticky_output_entry *entry = &plan->entries[index];
 
-    for (size_t member_index = 0; member_index < entry->view_count;
-         member_index++) {
-      leme_capture_invalidate_view(entry->views[member_index]);
-    }
     leme_ownership_commit(&entry->owner);
     for (size_t member_index = 0; member_index < entry->view_count;
          member_index++) {
@@ -857,10 +842,6 @@ void leme_sticky_commit_outputs(struct leme_sticky_output_plan **slot) {
   for (size_t index = 0; index < plan->attachment_count; index++) {
     struct leme_sticky_pending_attach *attachment = &plan->attachments[index];
 
-    for (size_t view_index = 0; view_index < attachment->view_count;
-         view_index++) {
-      leme_capture_invalidate_view(attachment->views[view_index]);
-    }
     leme_ownership_commit(&attachment->owner);
     for (size_t view_index = 0; view_index < attachment->view_count;
          view_index++) {
@@ -926,7 +907,6 @@ leme_sticky_handle_output_destroy(
       continue;
     }
     wl_list_for_each(member, &group->members, link) {
-      leme_capture_invalidate_view(member->view);
       (void)leme_ownership_present_durable(
           member->view,
           successor == NULL ? LEME_DURABLE_HIDDEN : LEME_DURABLE_OUTPUT,

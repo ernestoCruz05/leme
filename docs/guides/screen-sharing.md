@@ -20,11 +20,16 @@ Leme exposes legacy and modern output capture, logical output metadata, damage, 
 
 ## Test the portal and media stack
 
-The installed portal selector chooses a GTK backend for general desktop portals
-and the wlr backend for Screenshot and ScreenCast. Leme offers whole-output
-sources through that portal stack. Compatible direct protocol clients can use
-Leme's per-window capture source, but `xdg-desktop-portal-wlr` does not expose
-it in the portal picker.
+The installed portal selector uses `xdg-desktop-portal-luminous` for Screenshot
+and ScreenCast when it is installed, and `xdg-desktop-portal-wlr` otherwise. GTK
+handles the other desktop portals. The luminous picker offers outputs and
+individual windows through Leme's per-window capture source. The default
+`xdg-desktop-portal-wlr` choosers offer only outputs; it shares a window only
+through a custom `chooser_cmd` that prints `Window: ` followed by an `lswt`
+identifier.
+
+The portal service needs `graphical-session.target`. See
+[the session target](../troubleshooting/portals-and-capture.md#session-target).
 
 Check the session environment and activated services:
 
@@ -41,6 +46,6 @@ The Wayland socket used by the portal must be the one logged by Leme. A nested o
 
 ## Capture while locked
 
-Capture continues during a lock, but it sees only committed lock content or the opaque blocker. Per-window capture requests are refused while locked and for unmapped windows. A source refused by Leme becomes inert and reports the failure when the client opens its capture session.
+Capture continues during a lock, but it sees only committed lock content or the opaque blocker. Per-window capture requests are refused while locked and for unmapped windows, and an active window capture ends when the session locks. A source refused by Leme becomes inert and reports the failure when the client opens its capture session.
 
 If direct capture works but a portal stream does not, restart the full graphical login before retrying. That clears portals that inherited an old display environment. See [portal troubleshooting](../troubleshooting/portals-and-capture.md).

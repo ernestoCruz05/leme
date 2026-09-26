@@ -275,6 +275,19 @@ install_data(
   'session/leme-portals.conf',
   install_dir: get_option('datadir') / 'xdg-desktop-portal',
 )
+systemd_dep = dependency('systemd', required: false)
+if systemd_dep.found()
+  systemd_user_unit_dir = systemd_dep.get_variable(
+    pkgconfig: 'systemduserunitdir',
+    pkgconfig_define: ['prefix', get_option('prefix')],
+  )
+else
+  systemd_user_unit_dir = get_option('prefix') / 'lib' / 'systemd' / 'user'
+endif
+install_data(
+  'session/leme-session.target',
+  install_dir: systemd_user_unit_dir,
+)
 
 fs = import('fs')
 if fs.is_dir('.dev/tests')

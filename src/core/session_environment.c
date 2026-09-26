@@ -70,6 +70,33 @@ static bool leme_session_environment_has_systemd(void) {
          access(path, F_OK) == 0;
 }
 
+static bool leme_session_environment_spawn(char *const *arguments) {
+  pid_t process;
+  int result;
+  int status;
+
+  result = posix_spawnp(&process, arguments[0], NULL, NULL, arguments, environ);
+  if (result != 0) {
+    return false;
+  }
+  while (waitpid(process, &status, 0) < 0) {
+    if (errno != EINTR) {
+      return false;
+    }
+  }
+  return WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS;
+}
+
+static bool leme_session_environment_target(char *action) {
+  static char command[] = "systemctl";
+  static char user_flag[] = "--user";
+  static char no_block_flag[] = "--no-block";
+  static char target[] = "leme-session.target";
+  char *arguments[] = {command, user_flag, no_block_flag, action, target, NULL};
+
+  return leme_session_environment_spawn(arguments);
+}
+
 static bool leme_session_environment_run(const char *display) {
   static char command[] = "dbus-update-activation-environment";
   static char systemd_flag[] = "--systemd";
@@ -83,9 +110,6 @@ static bool leme_session_environment_run(const char *display) {
   static char cursor_theme[] = "XCURSOR_THEME";
   char *arguments[12];
   size_t count = 0;
-  pid_t process;
-  int result;
-  int status;
 
   arguments[count++] = command;
   if (leme_session_environment_has_systemd()) {
@@ -109,19 +133,11 @@ static bool leme_session_environment_run(const char *display) {
   }
   arguments[count] = NULL;
 
-  result = posix_spawnp(&process, arguments[0], NULL, NULL, arguments, environ);
-  if (result != 0) {
-    return false;
-  }
-  while (waitpid(process, &status, 0) < 0) {
-    if (errno != EINTR) {
-      return false;
-    }
-  }
-  return WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS;
+  return leme_session_environment_spawn(arguments);
 }
 
 void leme_session_environment_publish(struct leme_server *server) {
+  static char start[] = "start";
   const char *bus;
   const char *display;
 
@@ -142,5 +158,26 @@ void leme_session_environment_publish(struct leme_server *server) {
   display = leme_xwayland_display(server);
   if (!leme_session_environment_run(display)) {
     leme_session_environment_error();
+    return;
+  }
+  if (!leme_session_environment_has_systemd()) {
+    return;
+  }
+  if (!leme_session_environment_target(start)) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to start leme-session.target");
+    return;
+  }
+  server->session_target = true;
+}
+
+void leme_session_environment_withdraw(struct leme_server *server) {
+  static char stop[] = "stop";
+
+  if (server == NULL || !server->session_target) {
+    return;
+  }
+  server->session_target = false;
+  if (!leme_session_environment_target(stop)) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to stop leme-session.target");
   }
 }
