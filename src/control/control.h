@@ -13,8 +13,7 @@ struct leme_control_context;
 
 enum leme_control_code leme_control_context_create(
     struct leme_server *server, struct leme_public_model *model,
-    const struct leme_public_source *source,
-    struct leme_public_budget *account,
+    const struct leme_public_source *source, struct leme_public_budget *account,
     const struct leme_control_limits *limits,
     const struct leme_control_domain *domain,
     struct leme_control_context **out);

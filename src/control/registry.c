@@ -2,8 +2,7 @@
 
 #include <string.h>
 
-#define STATIC_TEXT(s)                                                         \
-  { .data = (s), .length = sizeof(s) - 1u }
+#define STATIC_TEXT(s) {.data = (s), .length = sizeof(s) - 1u}
 
 static const struct leme_public_argument args_1_string[] = {
     {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
@@ -137,11 +136,11 @@ static const struct leme_public_argument args_command[] = {
     {STATIC_TEXT("array<string>"), STATIC_TEXT("outer")}};
 
 static const struct leme_public_operation public_operations[] = {
-#define CONTROL_OP(id, name_str, is_act, min_a, max_a, args_arr, args_cnt,    \
+#define CONTROL_OP(id, name_str, is_act, min_a, max_a, args_arr, args_cnt,     \
                    res_str, desc_str, work_str)                                \
   {                                                                            \
-      .name = STATIC_TEXT(name_str),                                          \
-      .documentation = STATIC_TEXT(desc_str),                                 \
+      .name = STATIC_TEXT(name_str),                                           \
+      .documentation = STATIC_TEXT(desc_str),                                  \
       .action = (is_act),                                                      \
       .available = true,                                                       \
       .stability = STATIC_TEXT("api-versioned"),                               \
@@ -150,18 +149,18 @@ static const struct leme_public_operation public_operations[] = {
       .arguments = (args_arr),                                                 \
       .argument_count = (args_cnt),                                            \
       .result = STATIC_TEXT(res_str),                                          \
-      .work = STATIC_TEXT(work_str),                                          \
+      .work = STATIC_TEXT(work_str),                                           \
   },
 #include "control/operators.def"
 #undef CONTROL_OP
 };
 
 static const struct leme_control_operator operators[] = {
-#define CONTROL_OP(id, name_str, is_act, min_a, max_a, args_arr, args_cnt,    \
+#define CONTROL_OP(id, name_str, is_act, min_a, max_a, args_arr, args_cnt,     \
                    res_str, desc_str, work_str)                                \
   [LEME_CONTROL_OP_##id] = {                                                   \
       .opcode = LEME_CONTROL_OP_##id,                                          \
-      .name = STATIC_TEXT(name_str),                                          \
+      .name = STATIC_TEXT(name_str),                                           \
       .effect =                                                                \
           (is_act) ? LEME_CONTROL_EFFECT_ACTION : LEME_CONTROL_EFFECT_PURE,    \
       .min_args = (min_a),                                                     \
@@ -169,8 +168,8 @@ static const struct leme_control_operator operators[] = {
       .arguments = (args_arr),                                                 \
       .argument_count = (args_cnt),                                            \
       .result = STATIC_TEXT(res_str),                                          \
-      .description = STATIC_TEXT(desc_str),                                   \
-      .work = STATIC_TEXT(work_str),                                          \
+      .description = STATIC_TEXT(desc_str),                                    \
+      .work = STATIC_TEXT(work_str),                                           \
       .available = true,                                                       \
   },
 #include "control/operators.def"

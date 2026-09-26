@@ -14,9 +14,9 @@ struct leme_control_evaluation {
   const struct leme_public_value *value;
 };
 
-enum leme_control_code
-eval_set_error(struct evaluator *ev, const char *path,
-               enum leme_control_code code, const char *msg) {
+enum leme_control_code eval_set_error(struct evaluator *ev, const char *path,
+                                      enum leme_control_code code,
+                                      const char *msg) {
   if (ev->error != NULL) {
     ev->error->code = code;
     ev->error->phase = LEME_CONTROL_EVALUATE;
@@ -27,9 +27,8 @@ eval_set_error(struct evaluator *ev, const char *path,
   return code;
 }
 
-enum leme_control_code
-eval_node(struct evaluator *ev, uint32_t node_idx,
-          const struct leme_public_value **out) {
+enum leme_control_code eval_node(struct evaluator *ev, uint32_t node_idx,
+                                 const struct leme_public_value **out) {
   if (leme_control_charge(&ev->meter, 1) != LEME_CONTROL_OK)
     return eval_set_error(ev, "/expr", LEME_CONTROL_RESOURCE_LIMIT,
                           "evaluation budget exceeded");
@@ -62,10 +61,10 @@ eval_node(struct evaluator *ev, uint32_t node_idx,
       const struct leme_public_value *next =
           leme_public_get(cur, node->as.field.components[i]);
       if (next == NULL && ev->snapshot != NULL) {
-        const struct leme_public_value *type_val =
-            leme_public_get(cur, (struct leme_public_text){.data = "type", .length = 4});
-        const struct leme_public_value *id_val =
-            leme_public_get(cur, (struct leme_public_text){.data = "id", .length = 2});
+        const struct leme_public_value *type_val = leme_public_get(
+            cur, (struct leme_public_text){.data = "type", .length = 4});
+        const struct leme_public_value *id_val = leme_public_get(
+            cur, (struct leme_public_text){.data = "id", .length = 2});
         if (type_val != NULL && id_val != NULL &&
             leme_public_kind(type_val) == LEME_PUBLIC_STRING &&
             leme_public_kind(id_val) == LEME_PUBLIC_STRING) {
@@ -78,20 +77,23 @@ eval_node(struct evaluator *ev, uint32_t node_idx,
           if (type_text.length == 4 && memcmp(type_text.data, "view", 4) == 0) {
             ent = LEME_PUBLIC_VIEW;
             known_ent = true;
-          } else if (type_text.length == 6 && memcmp(type_text.data, "output", 6) == 0) {
+          } else if (type_text.length == 6 &&
+                     memcmp(type_text.data, "output", 6) == 0) {
             ent = LEME_PUBLIC_OUTPUT;
             known_ent = true;
-          } else if (type_text.length == 3 && memcmp(type_text.data, "tag", 3) == 0) {
+          } else if (type_text.length == 3 &&
+                     memcmp(type_text.data, "tag", 3) == 0) {
             ent = LEME_PUBLIC_TAG;
             known_ent = true;
-          } else if (type_text.length == 5 && memcmp(type_text.data, "input", 5) == 0) {
+          } else if (type_text.length == 5 &&
+                     memcmp(type_text.data, "input", 5) == 0) {
             ent = LEME_PUBLIC_INPUT;
             known_ent = true;
           }
           if (known_ent) {
             const struct leme_public_value *resolved = NULL;
-            if (leme_public_snapshot_find(ev->snapshot, ent, id_text, &resolved) ==
-                    LEME_PUBLIC_OK &&
+            if (leme_public_snapshot_find(ev->snapshot, ent, id_text,
+                                          &resolved) == LEME_PUBLIC_OK &&
                 resolved != NULL) {
               cur = resolved;
               next = leme_public_get(cur, node->as.field.components[i]);
@@ -131,11 +133,12 @@ static enum leme_public_status evaluation_work(void *context, size_t units) {
              : LEME_PUBLIC_LIMIT;
 }
 
-enum leme_control_code leme_control_evaluate(
-    struct leme_control_context *context,
-    const struct leme_control_program *program,
-    const struct leme_public_snapshot *snapshot,
-    struct leme_control_evaluation **out, struct leme_control_error *error) {
+enum leme_control_code
+leme_control_evaluate(struct leme_control_context *context,
+                      const struct leme_control_program *program,
+                      const struct leme_public_snapshot *snapshot,
+                      struct leme_control_evaluation **out,
+                      struct leme_control_error *error) {
   return leme_control_evaluate_work(context, program, snapshot, NULL, out,
                                     error);
 }
@@ -266,12 +269,13 @@ done:
   return LEME_CONTROL_OK;
 }
 
-const struct leme_public_value *
-leme_control_evaluation_value(const struct leme_control_evaluation *evaluation) {
+const struct leme_public_value *leme_control_evaluation_value(
+    const struct leme_control_evaluation *evaluation) {
   return evaluation != NULL ? evaluation->value : NULL;
 }
 
-void leme_control_evaluation_destroy(struct leme_control_evaluation *evaluation) {
+void leme_control_evaluation_destroy(
+    struct leme_control_evaluation *evaluation) {
   if (evaluation == NULL)
     return;
   if (evaluation->builder != NULL)

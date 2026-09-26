@@ -582,10 +582,9 @@ static enum leme_public_status values_equal_checked(
     }
     for (size_t i = 0; i < left->data.array.count; ++i) {
       bool item_equal = false;
-      enum leme_public_status st =
-          values_equal_checked(left->data.array.items[i],
-                               right->data.array.items[i], work, depth + 1,
-                               &item_equal);
+      enum leme_public_status st = values_equal_checked(
+          left->data.array.items[i], right->data.array.items[i], work,
+          depth + 1, &item_equal);
       if (st != LEME_PUBLIC_OK)
         return st;
       if (!item_equal) {
@@ -631,9 +630,10 @@ static enum leme_public_status values_equal_checked(
   return LEME_PUBLIC_OK;
 }
 
-enum leme_public_status leme_public_equal_checked(
-    const struct leme_public_value *left, const struct leme_public_value *right,
-    const struct leme_public_work *work, bool *out) {
+enum leme_public_status
+leme_public_equal_checked(const struct leme_public_value *left,
+                          const struct leme_public_value *right,
+                          const struct leme_public_work *work, bool *out) {
   if (out == NULL)
     return LEME_PUBLIC_INVALID;
   bool result = false;

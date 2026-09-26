@@ -63,9 +63,9 @@ enum leme_public_status leme_public_model_cached_root(
     enum leme_public_root root, const struct leme_public_work *work,
     struct leme_public_capture_diagnostic *diagnostic,
     struct leme_public_cached_root **out);
-enum leme_public_status leme_public_snapshot_project(
-    struct leme_public_model *model, uint32_t roots,
-    struct leme_public_snapshot **out);
+enum leme_public_status
+leme_public_snapshot_project(struct leme_public_model *model, uint32_t roots,
+                             struct leme_public_snapshot **out);
 
 enum leme_public_status
 leme_public_system_entropy(void *context, unsigned char *out, size_t count);

@@ -27,9 +27,10 @@ void leme_swipe_tracker_push(struct leme_swipe_tracker *tracker, double delta,
                              uint32_t time_msec);
 double leme_swipe_tracker_velocity(const struct leme_swipe_tracker *tracker,
                                    uint32_t now_msec);
-double leme_swipe_tracker_projected_position(
-    const struct leme_swipe_tracker *tracker, double current_position,
-    uint32_t now_msec);
+double
+leme_swipe_tracker_projected_position(const struct leme_swipe_tracker *tracker,
+                                      double current_position,
+                                      uint32_t now_msec);
 bool leme_swipe_tracker_threshold_reached(double projected, double threshold,
                                           bool forward);
 

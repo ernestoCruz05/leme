@@ -33,7 +33,8 @@ void leme_json_init(struct leme_json *json);
 void leme_json_init_limit(struct leme_json *json, size_t limit);
 void leme_json_init_budget(struct leme_json *json,
                            struct leme_public_budget *account, size_t limit);
-void leme_json_init_fixed(struct leme_json *json, char *buffer, size_t capacity);
+void leme_json_init_fixed(struct leme_json *json, char *buffer,
+                          size_t capacity);
 void leme_json_set_meter(struct leme_json *json, void *meter,
                          bool (*charge)(void *meter, size_t units));
 void leme_json_append(struct leme_json *json, const char *text, size_t length);

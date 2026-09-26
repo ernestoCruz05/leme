@@ -29,13 +29,10 @@ enum leme_control_code leme_control_normalize_targets(
     struct leme_control_context *context,
     const struct leme_control_program *program,
     const struct leme_public_snapshot *snapshot,
-    struct leme_control_intent **out_intents,
-    size_t *out_count,
-    struct leme_public_builder **out_builder,
-    struct leme_control_error *error);
+    struct leme_control_intent **out_intents, size_t *out_count,
+    struct leme_public_builder **out_builder, struct leme_control_error *error);
 
-void leme_control_intents_destroy(
-    struct leme_control_intent *intents,
-    size_t count);
+void leme_control_intents_destroy(struct leme_control_intent *intents,
+                                  size_t count);
 
 #endif

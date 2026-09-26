@@ -96,8 +96,7 @@ static int leme_ipc_handle_listen(int fd, uint32_t len, void *data) {
     return 0;
   }
 
-  struct wl_event_loop *loop =
-      wl_display_get_event_loop(ipc->server->display);
+  struct wl_event_loop *loop = wl_display_get_event_loop(ipc->server->display);
   struct leme_control_peer *peer = NULL;
   enum leme_control_code code =
       leme_control_peer_open(ipc->context, loop, client_fd, &peer);
@@ -126,7 +125,8 @@ static bool leme_ipc_build_path(const struct leme_server *server, char *path,
       server->socket[0] == '\0') {
     return false;
   }
-  int written = snprintf(path, size, "%s/leme-%s.sock", runtime, server->socket);
+  int written =
+      snprintf(path, size, "%s/leme-%s.sock", runtime, server->socket);
   return written >= 0 && (size_t)written < size;
 }
 
@@ -158,7 +158,8 @@ static bool leme_ipc_probe_and_prepare(const char *path) {
     return false;
   }
 
-  int conn = connect(probe_fd, (const struct sockaddr *)&address, sizeof(address));
+  int conn =
+      connect(probe_fd, (const struct sockaddr *)&address, sizeof(address));
   int conn_err = errno;
   close(probe_fd);
 
@@ -270,8 +271,8 @@ bool leme_ipc_init(struct leme_server *server) {
   }
 
   enum leme_control_code code = leme_control_context_create(
-      server, server->public_model, &ipc->public_source, account,
-      &ipc->limits, &ipc->control_domain, &ipc->context);
+      server, server->public_model, &ipc->public_source, account, &ipc->limits,
+      &ipc->control_domain, &ipc->context);
   leme_public_budget_unref(account);
   if (code != LEME_CONTROL_OK) {
     goto fail;

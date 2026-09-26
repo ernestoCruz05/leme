@@ -71,8 +71,7 @@ size_t leme_control_queue_bytes(const struct leme_control_queue *queue);
 bool leme_control_queue_is_empty(const struct leme_control_queue *queue);
 
 void leme_control_queue_set_completion(
-    struct leme_control_queue *queue,
-    leme_control_queue_completion_fn callback,
+    struct leme_control_queue *queue, leme_control_queue_completion_fn callback,
     void *user_data);
 
 #include "control/control.h"

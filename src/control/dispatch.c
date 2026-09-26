@@ -224,15 +224,13 @@ static void plan_write_details_json(const struct leme_control_plan *plan,
   leme_json_object_end(json);
 }
 
-static bool serialize_action_reply(
-    struct leme_control_frame *frame,
-    struct leme_public_text req_id,
-    struct leme_public_text inst,
-    const char *rev_data, size_t rev_len,
-    bool ok,
-    const char *warning_code,
-    const struct leme_control_error *error,
-    const struct leme_control_plan *plan) {
+static bool serialize_action_reply(struct leme_control_frame *frame,
+                                   struct leme_public_text req_id,
+                                   struct leme_public_text inst,
+                                   const char *rev_data, size_t rev_len,
+                                   bool ok, const char *warning_code,
+                                   const struct leme_control_error *error,
+                                   const struct leme_control_plan *plan) {
   size_t capacity = 0;
   char *buf = leme_control_frame_buffer(frame, &capacity);
   if (buf == NULL || capacity == 0) {
@@ -314,18 +312,19 @@ static bool serialize_action_reply(
   return true;
 }
 
-static enum leme_control_code dispatch_request(
-    struct leme_control_context *context,
-    struct leme_control_peer *peer,
-    const struct leme_control_request *request,
-    struct leme_control_frame **out_frame) {
+static enum leme_control_code
+dispatch_request(struct leme_control_context *context,
+                 struct leme_control_peer *peer,
+                 const struct leme_control_request *request,
+                 struct leme_control_frame **out_frame) {
   if (context == NULL || request == NULL || out_frame == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
   *out_frame = NULL;
 
   struct leme_public_budget *account = leme_control_context_account(context);
-  const struct leme_control_limits *limits = leme_control_context_limits(context);
+  const struct leme_control_limits *limits =
+      leme_control_context_limits(context);
   struct leme_control_meter meter = {
       .remaining = limits->work_units,
       .deadline_ns = leme_control_context_deadline(context),
@@ -349,11 +348,9 @@ static enum leme_control_code dispatch_request(
           .phase = LEME_CONTROL_EVALUATE,
           .message = "out of memory",
       };
-      return leme_control_reply_create_error(account, limits->response_bytes,
-                                             req_id.data, req_id.length,
-                                             inst.data, inst.length,
-                                             NULL, 0,
-                                             &err, out_frame);
+      return leme_control_reply_create_error(
+          account, limits->response_bytes, req_id.data, req_id.length,
+          inst.data, inst.length, NULL, 0, &err, out_frame);
     }
 
     struct leme_public_value *caps = NULL;
@@ -412,7 +409,8 @@ static enum leme_control_code dispatch_request(
     leme_public_put_int(b, hello_val, LEME_PUBLIC_TEXT("api_version"), 1);
     leme_public_put_cstr(b, hello_val, LEME_PUBLIC_TEXT("version"),
                          LEME_PUBLIC_BUILD_VERSION);
-    leme_public_object_set(b, hello_val, LEME_PUBLIC_TEXT("capabilities"), caps);
+    leme_public_object_set(b, hello_val, LEME_PUBLIC_TEXT("capabilities"),
+                           caps);
     leme_public_object_set(b, hello_val, LEME_PUBLIC_TEXT("limits"), lim_val);
 
     const struct leme_public_value *const roots[] = {hello_val};
@@ -431,12 +429,8 @@ static enum leme_control_code dispatch_request(
     }
 
     enum leme_control_code code = leme_control_reply_create_value_metered(
-        account, limits->response_bytes,
-        req_id.data, req_id.length,
-        inst.data, inst.length,
-        NULL, 0,
-        hello_val, &meter,
-        out_frame);
+        account, limits->response_bytes, req_id.data, req_id.length, inst.data,
+        inst.length, NULL, 0, hello_val, &meter, out_frame);
 
     leme_public_builder_destroy(b);
     return code;
@@ -451,7 +445,8 @@ static enum leme_control_code dispatch_request(
       enum leme_control_code rep_code = leme_control_reply_create_error(
           account, limits->response_bytes, req_id.data, req_id.length,
           inst.data, inst.length, NULL, 0, &err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+          *out_frame != NULL) {
         leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_QUERY,
                                         false, req_id.data, req_id.length);
       }
@@ -484,9 +479,11 @@ static enum leme_control_code dispatch_request(
         enum leme_control_code rep_code = leme_control_reply_create_error(
             account, limits->response_bytes, req_id.data, req_id.length,
             inst.data, inst.length, NULL, 0, &err, out_frame);
-        if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+        if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+            *out_frame != NULL) {
           leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_QUERY,
-                                          sensitive, req_id.data, req_id.length);
+                                          sensitive, req_id.data,
+                                          req_id.length);
         }
         return rep_code;
       }
@@ -506,7 +503,8 @@ static enum leme_control_code dispatch_request(
       enum leme_control_code rep_code = leme_control_reply_create_error(
           account, limits->response_bytes, req_id.data, req_id.length,
           inst.data, inst.length, rev_str, rev_len, &err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+          *out_frame != NULL) {
         leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_QUERY,
                                         sensitive, req_id.data, req_id.length);
       }
@@ -528,11 +526,8 @@ static enum leme_control_code dispatch_request(
     }
 
     code = leme_control_reply_create_value_metered(
-        account, limits->response_bytes,
-        req_id.data, req_id.length,
-        inst.data, inst.length,
-        rev_str, rev_len,
-        val, &meter, out_frame);
+        account, limits->response_bytes, req_id.data, req_id.length, inst.data,
+        inst.length, rev_str, rev_len, val, &meter, out_frame);
     if (code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
       leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_QUERY,
                                       sensitive, req_id.data, req_id.length);
@@ -555,7 +550,8 @@ static enum leme_control_code dispatch_request(
       enum leme_control_code rep_code = leme_control_reply_create_error(
           account, limits->response_bytes, req_id.data, req_id.length,
           inst.data, inst.length, NULL, 0, &err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+          *out_frame != NULL) {
         leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
                                         false, req_id.data, req_id.length);
       }
@@ -588,7 +584,8 @@ static enum leme_control_code dispatch_request(
       enum leme_control_code rep_code = leme_control_reply_create_error(
           account, limits->response_bytes, req_id.data, req_id.length,
           inst.data, inst.length, NULL, 0, &err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+          *out_frame != NULL) {
         leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
                                         false, req_id.data, req_id.length);
       }
@@ -605,7 +602,8 @@ static enum leme_control_code dispatch_request(
       enum leme_control_code rep_code = leme_control_reply_create_error(
           account, limits->response_bytes, req_id.data, req_id.length,
           inst.data, inst.length, NULL, 0, &err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+          *out_frame != NULL) {
         leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
                                         false, req_id.data, req_id.length);
       }
@@ -699,9 +697,8 @@ static enum leme_control_code dispatch_request(
       leme_control_program_destroy(prog);
       enum leme_json_error f_err = succ_failed ? succ_err : err_json_err;
       struct leme_control_error mem_err = {
-          .code = (f_err == LEME_JSON_ERROR_LIMIT)
-                      ? LEME_CONTROL_RESOURCE_LIMIT
-                      : LEME_CONTROL_OUT_OF_MEMORY,
+          .code = (f_err == LEME_JSON_ERROR_LIMIT) ? LEME_CONTROL_RESOURCE_LIMIT
+                                                   : LEME_CONTROL_OUT_OF_MEMORY,
           .phase = LEME_CONTROL_PREFLIGHT,
           .message = "failed to build result",
           .effects_applied = false,
@@ -710,7 +707,8 @@ static enum leme_control_code dispatch_request(
       enum leme_control_code rep_code = leme_control_reply_create_error(
           account, limits->response_bytes, req_id.data, req_id.length,
           inst.data, inst.length, NULL, 0, &mem_err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+          *out_frame != NULL) {
         leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
                                         false, req_id.data, req_id.length);
       }
@@ -721,8 +719,8 @@ static enum leme_control_code dispatch_request(
     size_t frame_capacity = max_len + 2;
 
     struct leme_control_frame *reserved_frame = NULL;
-    enum leme_control_code frame_code =
-        leme_control_frame_create_capacity(account, frame_capacity, &reserved_frame);
+    enum leme_control_code frame_code = leme_control_frame_create_capacity(
+        account, frame_capacity, &reserved_frame);
     if (frame_code == LEME_CONTROL_OK && peer != NULL) {
       frame_code = leme_control_peer_reserve_reply(peer, frame_capacity - 1);
     }
@@ -743,7 +741,8 @@ static enum leme_control_code dispatch_request(
       enum leme_control_code rep_code = leme_control_reply_create_error(
           account, limits->response_bytes, req_id.data, req_id.length,
           inst.data, inst.length, NULL, 0, &mem_err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL && *out_frame != NULL) {
+      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
+          *out_frame != NULL) {
         leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
                                         false, req_id.data, req_id.length);
       }
@@ -762,8 +761,8 @@ static enum leme_control_code dispatch_request(
       size_t post_rev_len = 0;
       if (leme_control_plan_effects_applied(plan)) {
         leme_public_model_invalidate(model);
-        if (leme_public_model_capture_work(model, source, roots, &work, &post_snap) ==
-            LEME_PUBLIC_OK) {
+        if (leme_public_model_capture_work(model, source, roots, &work,
+                                           &post_snap) == LEME_PUBLIC_OK) {
           struct leme_public_text post_rev =
               leme_public_snapshot_revision(post_snap);
           post_rev_data = post_rev.data;
@@ -771,22 +770,23 @@ static enum leme_control_code dispatch_request(
         }
       }
 
-      if (!serialize_action_reply(reserved_frame, req_id, inst,
-                                  post_rev_data, post_rev_len,
-                                  false, NULL, &err, plan)) {
+      if (!serialize_action_reply(reserved_frame, req_id, inst, post_rev_data,
+                                  post_rev_len, false, NULL, &err, plan)) {
         leme_control_frame_destroy(reserved_frame);
         reserved_frame = NULL;
       }
       if (reserved_frame != NULL) {
-        leme_control_frame_set_metadata(reserved_frame, LEME_CONTROL_FRAME_ACTION,
-                                        true, req_id.data, req_id.length);
+        leme_control_frame_set_metadata(reserved_frame,
+                                        LEME_CONTROL_FRAME_ACTION, true,
+                                        req_id.data, req_id.length);
       }
       if (post_snap != NULL) {
         leme_public_snapshot_unref(post_snap);
       }
       leme_control_plan_destroy(plan);
       *out_frame = reserved_frame;
-      return reserved_frame != NULL ? LEME_CONTROL_OK : LEME_CONTROL_RESOURCE_LIMIT;
+      return reserved_frame != NULL ? LEME_CONTROL_OK
+                                    : LEME_CONTROL_RESOURCE_LIMIT;
     }
 
     if (leme_control_plan_effects_applied(plan))
@@ -807,8 +807,7 @@ static enum leme_control_code dispatch_request(
       rev_len = post_rev.length;
     }
 
-    if (!serialize_action_reply(reserved_frame, req_id, inst,
-                                rev_data, rev_len,
+    if (!serialize_action_reply(reserved_frame, req_id, inst, rev_data, rev_len,
                                 true, warning_code, NULL, plan)) {
       leme_control_frame_destroy(reserved_frame);
       reserved_frame = NULL;
@@ -826,7 +825,8 @@ static enum leme_control_code dispatch_request(
     leme_control_plan_destroy(plan);
     leme_control_program_destroy(prog);
     *out_frame = reserved_frame;
-    return reserved_frame != NULL ? LEME_CONTROL_OK : LEME_CONTROL_RESOURCE_LIMIT;
+    return reserved_frame != NULL ? LEME_CONTROL_OK
+                                  : LEME_CONTROL_RESOURCE_LIMIT;
   }
 
   (void)peer;
@@ -837,24 +837,26 @@ static enum leme_control_code dispatch_request(
   };
   (void)snprintf(err.expr_path, sizeof(err.expr_path), "/op");
   return leme_control_reply_create_error(account, limits->response_bytes,
-                                         req_id.data, req_id.length,
-                                         inst.data, inst.length, NULL, 0,
-                                         &err, out_frame);
+                                         req_id.data, req_id.length, inst.data,
+                                         inst.length, NULL, 0, &err, out_frame);
 }
 
-enum leme_control_code leme_control_dispatch_request(
-    struct leme_control_context *context, struct leme_control_peer *peer,
-    const struct leme_control_request *request,
-    struct leme_control_frame **out_frame) {
+enum leme_control_code
+leme_control_dispatch_request(struct leme_control_context *context,
+                              struct leme_control_peer *peer,
+                              const struct leme_control_request *request,
+                              struct leme_control_frame **out_frame) {
   if (context == NULL || request == NULL || out_frame == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
   const uint64_t previous = leme_control_context_deadline(context);
-  const struct leme_control_limits *limits = leme_control_context_limits(context);
+  const struct leme_control_limits *limits =
+      leme_control_context_limits(context);
   if (previous == 0 && limits->deadline_ns != 0) {
     const uint64_t now = monotonic_now_ns(NULL);
     const uint64_t deadline = limits->deadline_ns > UINT64_MAX - now
-        ? UINT64_MAX : now + limits->deadline_ns;
+                                  ? UINT64_MAX
+                                  : now + limits->deadline_ns;
     leme_control_context_set_deadline(context, deadline);
   }
   const enum leme_control_code code =

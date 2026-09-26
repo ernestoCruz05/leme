@@ -256,14 +256,15 @@ bool leme_config_validate(const struct leme_config *config, char **error) {
   if (config->gestures.workspace_switch.mode != LEME_WORKSPACE_GESTURE_SINGLE &&
       config->gestures.workspace_switch.mode != LEME_WORKSPACE_GESTURE_SCRUB &&
       config->gestures.workspace_switch.mode != LEME_WORKSPACE_GESTURE_FREE) {
-    leme_config_set_error(error, "config: invalid gestures workspace_switch mode");
+    leme_config_set_error(error,
+                          "config: invalid gestures workspace_switch mode");
     return false;
   }
   if (config->gestures.workspace_switch.fingers == 2 ||
       (config->gestures.workspace_switch.fingers != 0 &&
        config->gestures.workspace_switch.fingers < 3)) {
-    leme_config_set_error(
-        error, "config: invalid gestures workspace_switch fingers");
+    leme_config_set_error(error,
+                          "config: invalid gestures workspace_switch fingers");
     return false;
   }
   if (!isfinite(config->gestures.workspace_switch.distance) ||

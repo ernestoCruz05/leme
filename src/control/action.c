@@ -16,11 +16,12 @@ static uint64_t monotonic_now_ns(void *context) {
   return leme_control_now_ns(context);
 }
 
-enum leme_control_code leme_control_prepare_action(
-    struct leme_control_context *context,
-    const struct leme_control_program *program,
-    const struct leme_public_snapshot *snapshot,
-    struct leme_control_plan **out, struct leme_control_error *error) {
+enum leme_control_code
+leme_control_prepare_action(struct leme_control_context *context,
+                            const struct leme_control_program *program,
+                            const struct leme_public_snapshot *snapshot,
+                            struct leme_control_plan **out,
+                            struct leme_control_error *error) {
   if (context == NULL || program == NULL || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
@@ -44,9 +45,9 @@ enum leme_control_code leme_control_prepare_action(
   struct leme_control_intent *intents = NULL;
   size_t intent_count = 0;
   struct leme_public_builder *args_builder = NULL;
-  enum leme_control_code code = leme_control_normalize_targets(
-      context, program, snapshot, &intents, &intent_count, &args_builder,
-      error);
+  enum leme_control_code code =
+      leme_control_normalize_targets(context, program, snapshot, &intents,
+                                     &intent_count, &args_builder, error);
   if (code != LEME_CONTROL_OK) {
     return code;
   }
@@ -61,8 +62,7 @@ enum leme_control_code leme_control_prepare_action(
     if (error != NULL) {
       error->code = LEME_CONTROL_OUT_OF_MEMORY;
       error->phase = LEME_CONTROL_PREFLIGHT;
-      (void)snprintf(error->message, sizeof(error->message),
-                     "out of memory");
+      (void)snprintf(error->message, sizeof(error->message), "out of memory");
       (void)snprintf(error->expr_path, sizeof(error->expr_path), "/expr");
       error->effects_applied = false;
     }
@@ -85,8 +85,7 @@ enum leme_control_code leme_control_prepare_action(
       if (error != NULL) {
         error->code = LEME_CONTROL_OUT_OF_MEMORY;
         error->phase = LEME_CONTROL_PREFLIGHT;
-        (void)snprintf(error->message, sizeof(error->message),
-                       "out of memory");
+        (void)snprintf(error->message, sizeof(error->message), "out of memory");
         (void)snprintf(error->expr_path, sizeof(error->expr_path), "/expr");
         error->effects_applied = false;
       }
@@ -363,8 +362,7 @@ build_results_array(const struct leme_control_plan *plan,
       }
     }
     st = leme_public_object_set(builder, row,
-                                LEME_PUBLIC_TEXT("requested_targets"),
-                                req_arr);
+                                LEME_PUBLIC_TEXT("requested_targets"), req_arr);
     if (st != LEME_PUBLIC_OK) {
       return st;
     }
@@ -439,11 +437,9 @@ leme_control_plan_details(const struct leme_control_plan *plan,
   return LEME_CONTROL_OK;
 }
 
-enum leme_control_code
-leme_control_plan_value(const struct leme_control_plan *plan,
-                        struct leme_public_builder *builder,
-                        const char *warning_code,
-                        struct leme_public_value **out) {
+enum leme_control_code leme_control_plan_value(
+    const struct leme_control_plan *plan, struct leme_public_builder *builder,
+    const char *warning_code, struct leme_public_value **out) {
   if (plan == NULL || builder == NULL || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }

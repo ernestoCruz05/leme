@@ -40,18 +40,18 @@ struct leme_workspace_gesture_state {
   bool active;
   bool engaged;
   bool natural_scroll;
-  double dx_accum; /* recognition only */
-  double dy_accum; /* recognition only */
-  double displacement; /* raw engaged travel, in tags */
+  double dx_accum;         /* recognition only */
+  double dy_accum;         /* recognition only */
+  double displacement;     /* raw engaged travel, in tags */
   double initial_position; /* unwrapped visual baseline */
-  double center_position; /* integer focused-tag coordinate */
+  double center_position;  /* integer focused-tag coordinate */
   uint16_t initial_tag_id;
   uint16_t ring[LEME_TAGS_RING_MAX];
   size_t ring_count;
   struct leme_swipe_tracker tracker;
   struct leme_gesture_accel accel;
   struct wlr_pointer *pointer; /* borrowed; cleared by device-destroy cleanup */
-  struct leme_output *output; /* borrowed; cleared before output destruction */
+  struct leme_output *output;  /* borrowed; cleared before output destruction */
 };
 struct wlr_alpha_modifier_v1;
 struct wlr_compositor;

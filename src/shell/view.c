@@ -860,8 +860,7 @@ bool leme_view_set_floating(struct leme_view *view, bool floating) {
  * Com cobertura activa a janela toma o ecrã todo; sem ela fica na área útil,
  * porque uma caixa inteira debaixo de uma barra só seria recortada.
  */
-static struct leme_box
-leme_view_fullscreen_area(const struct leme_view *view) {
+static struct leme_box leme_view_fullscreen_area(const struct leme_view *view) {
   const struct leme_output *output = leme_view_output(view);
 
   return view->server->config != NULL &&

@@ -4,8 +4,8 @@
 #include <math.h>
 #include <string.h>
 
-static enum leme_control_code
-make_bool(struct evaluator *ev, bool b, const struct leme_public_value **out) {
+static enum leme_control_code make_bool(struct evaluator *ev, bool b,
+                                        const struct leme_public_value **out) {
   struct leme_public_value *res = NULL;
   enum leme_public_status status = leme_public_boolean(ev->builder, b, &res);
   if (status != LEME_PUBLIC_OK) {
@@ -123,8 +123,7 @@ eval_ensure_owned(struct evaluator *ev, const struct leme_public_value *val,
   if (val->owner == ev->builder)
     return val;
   struct leme_public_value *cloned = NULL;
-  enum leme_public_status status =
-      leme_public_clone(ev->builder, val, &cloned);
+  enum leme_public_status status = leme_public_clone(ev->builder, val, &cloned);
   if (status != LEME_PUBLIC_OK) {
     enum leme_control_code code =
         (status == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
@@ -138,9 +137,9 @@ eval_ensure_owned(struct evaluator *ev, const struct leme_public_value *val,
   return cloned;
 }
 
-enum leme_control_code
-eval_scalar_call(struct evaluator *ev, const struct leme_control_node *node,
-                 const struct leme_public_value **out) {
+enum leme_control_code eval_scalar_call(struct evaluator *ev,
+                                        const struct leme_control_node *node,
+                                        const struct leme_public_value **out) {
   const struct leme_control_operator *op = node->as.call.op;
   const uint32_t *args = node->as.call.arg_indices;
   size_t arg_count = node->as.call.arg_count;
@@ -424,8 +423,7 @@ eval_scalar_call(struct evaluator *ev, const struct leme_control_node *node,
       code = eval_node(ev, args[2 * p + 1], &vv);
       if (code != LEME_CONTROL_OK)
         return code;
-      const struct leme_public_value *owned =
-          eval_ensure_owned(ev, vv, &code);
+      const struct leme_public_value *owned = eval_ensure_owned(ev, vv, &code);
       if (owned == NULL)
         return code;
       leme_public_object_set(ev->builder, obj, ktext, owned);

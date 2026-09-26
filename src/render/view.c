@@ -1077,8 +1077,7 @@ void leme_render_view_apply_snapshot(const struct leme_view *view,
   if (activated && config != NULL) {
     rules = leme_view_rules_match(config, leme_view_identity(view),
                                   leme_view_title(view));
-    opacity =
-        leme_render_view_opacity(config, true, view->fullscreen, &rules);
+    opacity = leme_render_view_opacity(config, true, view->fullscreen, &rules);
   } else {
     opacity = view->render_opacity;
   }

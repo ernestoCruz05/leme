@@ -100,8 +100,9 @@ bool timao_client_request_identity(const struct timao_client *client,
                                    struct leme_public_text *request_id,
                                    struct leme_public_text *instance);
 struct timao_client_message *timao_client_take(struct timao_client *client);
-struct timao_client_message *timao_client_take_handlers(
-    struct timao_client *client, const uint64_t *watches, size_t count);
+struct timao_client_message *
+timao_client_take_handlers(struct timao_client *client, const uint64_t *watches,
+                           size_t count);
 struct timao_client_message *
 timao_client_take_reply(struct timao_client *client,
                         struct timao_client_ticket ticket);

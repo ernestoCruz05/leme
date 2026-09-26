@@ -144,8 +144,8 @@ void leme_public_model_lock_changed(struct leme_public_model *model,
   model->dirty = true;
   leme_public_snapshot_unref(model->baseline);
   model->baseline = NULL;
-  leme_public_model_clear_cache(model,
-                                LEME_PUBLIC_ALL_ROOTS & ~LEME_PUBLIC_SAFE_ROOTS);
+  leme_public_model_clear_cache(model, LEME_PUBLIC_ALL_ROOTS &
+                                           ~LEME_PUBLIC_SAFE_ROOTS);
   if (model->notify != NULL)
     model->notify(model->notify_context, locked ? LEME_PUBLIC_LOCKED_CHANGED
                                                 : LEME_PUBLIC_UNLOCKED_CHANGED);
@@ -270,8 +270,8 @@ static enum leme_public_status index_root(struct leme_public_snapshot *snapshot,
     index->entries[i] = (struct leme_public_index_entry){.id = id, .row = row};
   }
   if (snapshot->builder->work.step != NULL && index->count > 0) {
-    enum leme_public_status st =
-        snapshot->builder->work.step(snapshot->builder->work.context, index->count);
+    enum leme_public_status st = snapshot->builder->work.step(
+        snapshot->builder->work.context, index->count);
     if (st != LEME_PUBLIC_OK)
       return st;
   }

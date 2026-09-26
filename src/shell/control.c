@@ -44,9 +44,9 @@ struct shell_prepared {
   struct leme_tag_materialize *mat_slot;
 };
 
-static enum leme_control_code set_preflight_error(
-    struct leme_control_error *error, enum leme_control_code code,
-    const char *msg) {
+static enum leme_control_code
+set_preflight_error(struct leme_control_error *error,
+                    enum leme_control_code code, const char *msg) {
   if (error != NULL) {
     error->code = code;
     error->phase = LEME_CONTROL_PREFLIGHT;
@@ -59,9 +59,8 @@ static enum leme_control_code set_preflight_error(
 }
 
 enum leme_control_code leme_shell_control_prepare(
-    struct leme_server *server,
-    const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
+    struct leme_server *server, const struct leme_control_intent *intents,
+    size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
   if (server == NULL || intents == NULL || count == 0 || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
@@ -131,9 +130,8 @@ enum leme_control_code leme_shell_control_prepare(
         leme_output_by_public_id(server, intents[0].destination.id);
     if (dest_output != NULL &&
         dest_output->tags.table[prep->dest_tag_slot] == NULL) {
-      if (!leme_tags_prepare_materialize(&dest_output->tags,
-                                         prep->dest_tag_slot,
-                                         &prep->mat_slot)) {
+      if (!leme_tags_prepare_materialize(
+              &dest_output->tags, prep->dest_tag_slot, &prep->mat_slot)) {
         leme_shell_control_discard(server,
                                    (struct leme_control_prepared *)prep);
         return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
@@ -261,11 +259,10 @@ enum leme_control_code leme_shell_control_prepare(
           struct leme_view *existing = NULL;
           wl_list_for_each(existing, &tag_i->views, tag_link) {
             if (existing->mapped && existing->fullscreen && existing != vi) {
-              leme_shell_control_discard(
-                  server, (struct leme_control_prepared *)prep);
-              return set_preflight_error(
-                  error, LEME_CONTROL_ACTION_FAILED,
-                  "tag already has a fullscreen view");
+              leme_shell_control_discard(server,
+                                         (struct leme_control_prepared *)prep);
+              return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
+                                         "tag already has a fullscreen view");
             }
           }
         }
@@ -312,10 +309,11 @@ enum leme_control_code leme_shell_control_prepare(
   return LEME_CONTROL_OK;
 }
 
-enum leme_control_code leme_shell_control_execute_one(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared, size_t index,
-    enum leme_control_outcome *outcome, struct leme_control_error *error) {
+enum leme_control_code
+leme_shell_control_execute_one(struct leme_server *server,
+                               struct leme_control_prepared *prepared,
+                               size_t index, enum leme_control_outcome *outcome,
+                               struct leme_control_error *error) {
   if (server == NULL || prepared == NULL || outcome == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
@@ -482,9 +480,8 @@ enum leme_control_code leme_shell_control_execute_one(
   }
 }
 
-void leme_shell_control_discard(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared) {
+void leme_shell_control_discard(struct leme_server *server,
+                                struct leme_control_prepared *prepared) {
   (void)server;
   if (prepared == NULL) {
     return;
@@ -520,9 +517,8 @@ struct command_prepared {
 };
 
 static enum leme_control_code command_control_prepare(
-    struct leme_server *server,
-    const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
+    struct leme_server *server, const struct leme_control_intent *intents,
+    size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
   if (server == NULL || intents == NULL || count == 0 || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
@@ -725,10 +721,11 @@ static enum leme_control_code command_control_prepare(
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code command_control_execute_one(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared, size_t index,
-    enum leme_control_outcome *outcome, struct leme_control_error *error) {
+static enum leme_control_code
+command_control_execute_one(struct leme_server *server,
+                            struct leme_control_prepared *prepared,
+                            size_t index, enum leme_control_outcome *outcome,
+                            struct leme_control_error *error) {
   (void)index;
   (void)error;
   if (server == NULL || prepared == NULL || outcome == NULL) {
@@ -770,9 +767,8 @@ static enum leme_control_code command_control_execute_one(
   return LEME_CONTROL_OK;
 }
 
-static void command_control_discard(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared) {
+static void command_control_discard(struct leme_server *server,
+                                    struct leme_control_prepared *prepared) {
   (void)server;
   if (prepared == NULL) {
     return;
@@ -787,10 +783,11 @@ static void command_control_discard(
 static void server_control_discard(void *context,
                                    struct leme_control_prepared *prepared);
 
-static enum leme_control_code server_control_prepare(
-    void *context, const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
-    struct leme_control_prepared **out, struct leme_control_error *error) {
+static enum leme_control_code
+server_control_prepare(void *context, const struct leme_control_intent *intents,
+                       size_t count, struct leme_public_budget *account,
+                       struct leme_control_prepared **out,
+                       struct leme_control_error *error) {
   struct leme_server *server = context;
   if (count == 0 || intents == NULL) {
     *out = NULL;
@@ -878,8 +875,7 @@ static enum leme_control_code server_control_prepare(
     return leme_config_live_prepare(server, intents, count, account, out,
                                     error);
   case LEME_CONTROL_OP_COMMAND:
-    return command_control_prepare(server, intents, count, account, out,
-                                   error);
+    return command_control_prepare(server, intents, count, account, out, error);
   case LEME_CONTROL_OP_RELOAD_CONFIG: {
     const char *path = leme_config_path();
     if (path == NULL) {
@@ -891,7 +887,8 @@ static enum leme_control_code server_control_prepare(
     if (next == NULL) {
       char msg[256];
       (void)snprintf(msg, sizeof(msg), "%s",
-                     cfg_err != NULL ? cfg_err : "failed to load configuration");
+                     cfg_err != NULL ? cfg_err
+                                     : "failed to load configuration");
       enum leme_control_code err_code =
           (cfg_err != NULL && strstr(cfg_err, "not found") != NULL)
               ? LEME_CONTROL_NOT_FOUND
@@ -939,8 +936,8 @@ static enum leme_control_code server_control_execute_one(
       *outcome = LEME_CONTROL_FAILED;
       return LEME_CONTROL_INVALID_ARGUMENT;
     }
-    return server_control_execute_one(
-        server, comp->items[index].prepared, 0, outcome, error);
+    return server_control_execute_one(server, comp->items[index].prepared, 0,
+                                      outcome, error);
   }
 
   switch (*op) {
@@ -972,8 +969,7 @@ static enum leme_control_code server_control_execute_one(
     return leme_config_live_execute_one(server, prepared, index, outcome,
                                         error);
   case LEME_CONTROL_OP_COMMAND:
-    return command_control_execute_one(server, prepared, index, outcome,
-                                       error);
+    return command_control_execute_one(server, prepared, index, outcome, error);
   case LEME_CONTROL_OP_RELOAD_CONFIG: {
     struct leme_config_reload *plan = (struct leme_config_reload *)prepared;
     leme_config_reload_commit(server, plan);
@@ -1048,7 +1044,8 @@ static void server_control_discard(void *context,
   }
 }
 
-struct leme_control_domain leme_server_control_domain(struct leme_server *server) {
+struct leme_control_domain
+leme_server_control_domain(struct leme_server *server) {
   return (struct leme_control_domain){
       .context = server,
       .prepare = server_control_prepare,

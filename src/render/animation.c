@@ -218,10 +218,9 @@ static uint32_t leme_animation_seconds_to_ms(double seconds) {
   return (uint32_t)ms;
 }
 
-double
-leme_animation_spring_displacement_at(const struct leme_animation_spring *spring,
-                                      double displacement, double velocity,
-                                      double seconds) {
+double leme_animation_spring_displacement_at(
+    const struct leme_animation_spring *spring, double displacement,
+    double velocity, double seconds) {
   if (spring == NULL || !isfinite(displacement) || !isfinite(velocity) ||
       !isfinite(seconds) || !(spring->stiffness > 0.0) ||
       !(spring->damping_ratio >= 0.0) || !(spring->epsilon > 0.0)) {
@@ -243,9 +242,8 @@ leme_animation_spring_displacement_at(const struct leme_animation_spring *spring
   }
   if (beta < omega0) {
     const double omega1 = sqrt(omega0 * omega0 - beta * beta);
-    return exp(-beta * seconds) *
-           (displacement * cos(omega1 * seconds) +
-            (slope / omega1) * sin(omega1 * seconds));
+    return exp(-beta * seconds) * (displacement * cos(omega1 * seconds) +
+                                   (slope / omega1) * sin(omega1 * seconds));
   }
   {
     const double omega2 = sqrt(beta * beta - omega0 * omega0);
@@ -255,8 +253,7 @@ leme_animation_spring_displacement_at(const struct leme_animation_spring *spring
   }
 }
 
-uint32_t
-leme_animation_spring_displacement_duration_ms(
+uint32_t leme_animation_spring_displacement_duration_ms(
     const struct leme_animation_spring *spring, double displacement,
     double velocity) {
   double beta;
@@ -349,17 +346,15 @@ leme_animation_spring_displacement_duration_ms(
   }
 
   while ((t_hi < t_ext ||
-          fabs(leme_animation_spring_displacement_at(spring, displacement,
-                                                    velocity, t_hi)) >
-              spring->epsilon) &&
+          fabs(leme_animation_spring_displacement_at(
+              spring, displacement, velocity, t_hi)) > spring->epsilon) &&
          t_hi < 10.0) {
     t_hi *= 1.5;
   }
 
   if (t_ext > 0.0) {
-    if (fabs(leme_animation_spring_displacement_at(spring, displacement,
-                                                   velocity, t_ext)) >
-        spring->epsilon) {
+    if (fabs(leme_animation_spring_displacement_at(
+            spring, displacement, velocity, t_ext)) > spring->epsilon) {
       lo = t_ext;
       hi = t_hi;
     } else if (fabs(displacement) <= spring->epsilon) {
@@ -378,8 +373,8 @@ leme_animation_spring_displacement_duration_ms(
 
   for (iteration = 0; iteration < 32; iteration++) {
     const double mid = (lo + hi) / 2.0;
-    const double y =
-        leme_animation_spring_displacement_at(spring, displacement, velocity, mid);
+    const double y = leme_animation_spring_displacement_at(spring, displacement,
+                                                           velocity, mid);
 
     if (fabs(y) > spring->epsilon) {
       lo = mid;
@@ -396,8 +391,8 @@ leme_animation_spring_value_at(const struct leme_animation_spring *spring,
   if (spring == NULL || seconds <= 0.0) {
     return 0.0;
   }
-  return 1.0 + leme_animation_spring_displacement_at(
-      spring, -1.0, initial_velocity, seconds);
+  return 1.0 + leme_animation_spring_displacement_at(spring, -1.0,
+                                                     initial_velocity, seconds);
 }
 
 uint32_t
@@ -406,8 +401,8 @@ leme_animation_spring_duration_ms(const struct leme_animation_spring *spring,
   if (spring == NULL) {
     return 0;
   }
-  return leme_animation_spring_displacement_duration_ms(
-      spring, -1.0, initial_velocity);
+  return leme_animation_spring_displacement_duration_ms(spring, -1.0,
+                                                        initial_velocity);
 }
 
 static bool
@@ -614,7 +609,8 @@ void leme_animation_manager_tick(struct leme_animation_manager *manager,
       const double elapsed_seconds =
           (double)animation->spec.duration_ms * linear / 1000.0;
       frame = leme_animation_frame_at(&animation->spec, 0.0, 0.0);
-      frame.scalar = animation->spec.to_scalar +
+      frame.scalar =
+          animation->spec.to_scalar +
           leme_animation_spring_displacement_at(
               &animation->spec.spring,
               animation->spec.from_scalar - animation->spec.to_scalar,

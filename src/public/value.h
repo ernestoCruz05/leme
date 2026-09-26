@@ -137,8 +137,9 @@ leme_public_as_text(const struct leme_public_value *value,
                     struct leme_public_text *out);
 bool leme_public_equal(const struct leme_public_value *left,
                        const struct leme_public_value *right);
-enum leme_public_status leme_public_equal_checked(
-    const struct leme_public_value *left, const struct leme_public_value *right,
-    const struct leme_public_work *work, bool *out);
+enum leme_public_status
+leme_public_equal_checked(const struct leme_public_value *left,
+                          const struct leme_public_value *right,
+                          const struct leme_public_work *work, bool *out);
 
 #endif

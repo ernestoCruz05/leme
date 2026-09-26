@@ -28,8 +28,9 @@ bool leme_gesture_accel_restore(struct leme_gesture_accel *state) {
          profile_status == LIBINPUT_CONFIG_STATUS_SUCCESS;
 }
 
-bool leme_gesture_accel_begin_with_ops(struct leme_gesture_accel *state,
-    struct libinput_device *device, const struct leme_gesture_accel_ops *ops) {
+bool leme_gesture_accel_begin_with_ops(
+    struct leme_gesture_accel *state, struct libinput_device *device,
+    const struct leme_gesture_accel_ops *ops) {
   if (state == NULL || device == NULL || ops == NULL) {
     return false;
   }
@@ -38,8 +39,8 @@ bool leme_gesture_accel_begin_with_ops(struct leme_gesture_accel *state,
   }
   if (ops->available == NULL || ops->profiles == NULL ||
       ops->get_profile == NULL || ops->get_speed == NULL ||
-      ops->set_profile == NULL || ops->set_speed == NULL ||
-      ops->ref == NULL || ops->unref == NULL) {
+      ops->set_profile == NULL || ops->set_speed == NULL || ops->ref == NULL ||
+      ops->unref == NULL) {
     return false;
   }
   if (!ops->available(device)) {
@@ -71,16 +72,18 @@ bool leme_gesture_accel_begin_with_ops(struct leme_gesture_accel *state,
   if (ops->set_profile(ref, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT) !=
       LIBINPUT_CONFIG_STATUS_SUCCESS) {
     if (!leme_gesture_accel_restore(state)) {
-      fputs("leme: failed to restore gesture acceleration after override failure\n",
-            stderr);
+      fputs(
+          "leme: failed to restore gesture acceleration after override failure\n",
+          stderr);
     }
     return false;
   }
 
   if (ops->set_speed(ref, 0.0) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
     if (!leme_gesture_accel_restore(state)) {
-      fputs("leme: failed to restore gesture acceleration after override failure\n",
-            stderr);
+      fputs(
+          "leme: failed to restore gesture acceleration after override failure\n",
+          stderr);
     }
     return false;
   }

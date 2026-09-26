@@ -12,10 +12,11 @@ struct leme_server;
 struct leme_config;
 struct leme_config_reload;
 
-enum leme_control_code leme_config_reload_prepare(
-    struct leme_server *server, struct leme_config *next,
-    struct leme_public_budget *account, struct leme_config_reload **out,
-    struct leme_control_error *error);
+enum leme_control_code
+leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
+                           struct leme_public_budget *account,
+                           struct leme_config_reload **out,
+                           struct leme_control_error *error);
 
 void leme_config_reload_commit(struct leme_server *server,
                                struct leme_config_reload *plan);

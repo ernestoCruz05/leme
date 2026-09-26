@@ -18,10 +18,8 @@ struct leme_control_intent_batch {
 
 enum leme_control_code leme_control_command_lower(
     struct leme_control_context *context,
-    const struct leme_public_snapshot *snapshot,
-    struct leme_public_text name,
-    const struct leme_public_value *argv,
-    struct leme_control_intent_batch *out,
+    const struct leme_public_snapshot *snapshot, struct leme_public_text name,
+    const struct leme_public_value *argv, struct leme_control_intent_batch *out,
     struct leme_control_error *error);
 
 void leme_control_intent_batch_destroy(struct leme_public_budget *account,

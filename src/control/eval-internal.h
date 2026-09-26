@@ -22,29 +22,27 @@ struct evaluator {
   const struct leme_public_value *current_item;
 };
 
-enum leme_control_code
-eval_set_error(struct evaluator *ev, const char *path,
-               enum leme_control_code code, const char *msg);
+enum leme_control_code eval_set_error(struct evaluator *ev, const char *path,
+                                      enum leme_control_code code,
+                                      const char *msg);
 
-enum leme_control_code
-eval_node(struct evaluator *ev, uint32_t node_idx,
-          const struct leme_public_value **out);
+enum leme_control_code eval_node(struct evaluator *ev, uint32_t node_idx,
+                                 const struct leme_public_value **out);
 
-enum leme_control_code
-eval_scalar_call(struct evaluator *ev, const struct leme_control_node *node,
-                 const struct leme_public_value **out);
+enum leme_control_code eval_scalar_call(struct evaluator *ev,
+                                        const struct leme_control_node *node,
+                                        const struct leme_public_value **out);
 
-enum leme_control_code
-eval_lookup_call(struct evaluator *ev, const struct leme_control_node *node,
-                 const struct leme_public_value **out);
+enum leme_control_code eval_lookup_call(struct evaluator *ev,
+                                        const struct leme_control_node *node,
+                                        const struct leme_public_value **out);
 
 enum leme_control_code
 eval_collection_call(struct evaluator *ev, const struct leme_control_node *node,
                      const struct leme_public_value **out);
 
-bool
-eval_equal(struct evaluator *ev, const struct leme_public_value *left,
-           const struct leme_public_value *right);
+bool eval_equal(struct evaluator *ev, const struct leme_public_value *left,
+                const struct leme_public_value *right);
 
 const struct leme_public_value *
 eval_ensure_owned(struct evaluator *ev, const struct leme_public_value *val,

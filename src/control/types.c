@@ -27,7 +27,8 @@ leme_control_type_entity(enum leme_public_entity entity,
   return (struct leme_control_type){.kind = LEME_CONTROL_TYPE_ENTITY,
                                     .entity = entity,
                                     .provenance = provenance,
-                                    .schema = leme_public_entity_schema(entity)};
+                                    .schema =
+                                        leme_public_entity_schema(entity)};
 }
 
 struct leme_control_type
@@ -49,7 +50,8 @@ bool leme_control_type_equal(const struct leme_control_type *left,
   if (left->kind != right->kind || left->nullable != right->nullable)
     return false;
   if (left->kind == LEME_CONTROL_TYPE_ENTITY)
-    return left->entity == right->entity && left->provenance == right->provenance;
+    return left->entity == right->entity &&
+           left->provenance == right->provenance;
   if (left->kind == LEME_CONTROL_TYPE_RECORD)
     return left->schema == right->schema;
   if (left->kind == LEME_CONTROL_TYPE_ARRAY)
@@ -146,7 +148,8 @@ leme_control_type_from_value(const struct leme_public_value *value) {
   case LEME_PUBLIC_STRING:
     return leme_control_type_string();
   case LEME_PUBLIC_ARRAY: {
-    static const struct leme_control_type any_t = {.kind = LEME_CONTROL_TYPE_ANY};
+    static const struct leme_control_type any_t = {.kind =
+                                                       LEME_CONTROL_TYPE_ANY};
     return leme_control_type_array(&any_t);
   }
   case LEME_PUBLIC_OBJECT:

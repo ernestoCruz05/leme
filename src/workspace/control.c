@@ -30,9 +30,9 @@ struct workspace_prepared {
   enum leme_layout_kind layout_kind;
 };
 
-static enum leme_control_code set_preflight_error(
-    struct leme_control_error *error, enum leme_control_code code,
-    const char *msg) {
+static enum leme_control_code
+set_preflight_error(struct leme_control_error *error,
+                    enum leme_control_code code, const char *msg) {
   if (error != NULL) {
     error->code = code;
     error->phase = LEME_CONTROL_PREFLIGHT;
@@ -44,9 +44,8 @@ static enum leme_control_code set_preflight_error(
 }
 
 enum leme_control_code leme_workspace_control_prepare(
-    struct leme_server *server,
-    const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
+    struct leme_server *server, const struct leme_control_intent *intents,
+    size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
   if (server == NULL || intents == NULL || count == 0 || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
@@ -154,9 +153,9 @@ enum leme_control_code leme_workspace_control_prepare(
 }
 
 enum leme_control_code leme_workspace_control_execute_one(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared, size_t index,
-    enum leme_control_outcome *outcome, struct leme_control_error *error) {
+    struct leme_server *server, struct leme_control_prepared *prepared,
+    size_t index, enum leme_control_outcome *outcome,
+    struct leme_control_error *error) {
   if (server == NULL || prepared == NULL || outcome == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
@@ -235,9 +234,8 @@ enum leme_control_code leme_workspace_control_execute_one(
   return LEME_CONTROL_UNSUPPORTED;
 }
 
-void leme_workspace_control_discard(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared) {
+void leme_workspace_control_discard(struct leme_server *server,
+                                    struct leme_control_prepared *prepared) {
   (void)server;
   if (prepared == NULL) {
     return;

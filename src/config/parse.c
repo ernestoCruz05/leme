@@ -313,8 +313,7 @@ static bool leme_config_parse_tags(struct leme_config *config,
         continue;
       }
       if (value > 64) {
-        if (!leme_config_reject(config, entry, 0,
-                                "maximum cannot exceed 64")) {
+        if (!leme_config_reject(config, entry, 0, "maximum cannot exceed 64")) {
           return false;
         }
         continue;
@@ -1114,10 +1113,9 @@ static bool leme_config_parse_spring(struct leme_config *config,
     const struct leme_reject_extra extra = {
         .help = "a spring with no damping never settles",
     };
-    if (!leme_config_reject_detailed(config,
-                                     seen[0] != NULL ? seen[0] : entry,
-                                     seen[0] != NULL ? 0 : -1, &extra,
-                                     "damping_ratio must be greater than zero")) {
+    if (!leme_config_reject_detailed(
+            config, seen[0] != NULL ? seen[0] : entry, seen[0] != NULL ? 0 : -1,
+            &extra, "damping_ratio must be greater than zero")) {
       return false;
     }
     ok = false;
@@ -1134,8 +1132,7 @@ static bool leme_config_parse_spring(struct leme_config *config,
     const struct leme_reject_extra extra = {
         .help = "epsilon is an amplitude, and must sit between 0 and 1",
     };
-    if (!leme_config_reject_detailed(config,
-                                     seen[2] != NULL ? seen[2] : entry,
+    if (!leme_config_reject_detailed(config, seen[2] != NULL ? seen[2] : entry,
                                      seen[2] != NULL ? 0 : -1, &extra,
                                      "epsilon must be above 0 and below 1")) {
       return false;
@@ -1455,8 +1452,9 @@ static bool leme_config_parse_workspace_animation(
             .secondary = dir_curve,
             .secondary_label = "first defined here",
         };
-        if (!leme_config_reject_detailed(config, entry, -1, &extra,
-                                         "duplicate workspace animation key curve")) {
+        if (!leme_config_reject_detailed(
+                config, entry, -1, &extra,
+                "duplicate workspace animation key curve")) {
           return false;
         }
         continue;
@@ -2344,12 +2342,8 @@ static bool leme_config_parse_workspace_switch_gesture(
     struct leme_config *config, const struct leme_scfg_directive *directive,
     struct leme_workspace_switch_gesture_settings *settings) {
   static const char *const gesture_keys[] = {
-      "fingers",
-      "distance",
-      "threshold",
-      "deceleration",
-      "velocity_window",
-      "mode",
+      "fingers",      "distance",        "threshold",
+      "deceleration", "velocity_window", "mode",
   };
   const struct leme_scfg_directive *seen[LEME_ARRAY_LENGTH(gesture_keys)] = {0};
   size_t index;
@@ -2408,8 +2402,8 @@ static bool leme_config_parse_workspace_switch_gesture(
       continue;
     }
     if (entry->params_len != 1) {
-      if (!leme_config_reject(config, entry, -1,
-                              "%s requires one value", entry->name)) {
+      if (!leme_config_reject(config, entry, -1, "%s requires one value",
+                              entry->name)) {
         return false;
       }
       continue;
@@ -2425,8 +2419,9 @@ static bool leme_config_parse_workspace_switch_gesture(
         continue;
       }
       if (value == 2) {
-        if (!leme_config_reject(config, entry, 0,
-                                "libinput does not deliver two-finger swipes")) {
+        if (!leme_config_reject(
+                config, entry, 0,
+                "libinput does not deliver two-finger swipes")) {
           return false;
         }
         continue;

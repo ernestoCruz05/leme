@@ -33,9 +33,10 @@ static void set_error(struct leme_control_error *error,
   }
 }
 
-enum leme_control_code leme_control_request_create(
-    struct leme_control_document **document,
-    struct leme_control_request **out, struct leme_control_error *error) {
+enum leme_control_code
+leme_control_request_create(struct leme_control_document **document,
+                            struct leme_control_request **out,
+                            struct leme_control_error *error) {
   if (out == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *out = NULL;

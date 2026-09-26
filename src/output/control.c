@@ -39,9 +39,9 @@ struct output_prepared {
   const struct leme_public_value *patch_args;
 };
 
-static enum leme_control_code set_preflight_error(
-    struct leme_control_error *error, enum leme_control_code code,
-    const char *msg) {
+static enum leme_control_code
+set_preflight_error(struct leme_control_error *error,
+                    enum leme_control_code code, const char *msg) {
   if (error != NULL) {
     error->code = code;
     error->phase = LEME_CONTROL_PREFLIGHT;
@@ -90,9 +90,8 @@ static bool parse_transform(struct leme_public_text text,
 }
 
 static enum leme_control_code prepare_configure_output(
-    struct leme_server *server,
-    const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
+    struct leme_server *server, const struct leme_control_intent *intents,
+    size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
   if (count != 1) {
     return set_preflight_error(error, LEME_CONTROL_CARDINALITY,
@@ -172,9 +171,9 @@ static enum leme_control_code prepare_configure_output(
         return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                    "mode values must be integers");
       }
-      if (mode_width <= 0 || mode_width > INT_MAX ||
-          mode_height <= 0 || mode_height > INT_MAX ||
-          mode_refresh <= 0 || mode_refresh > INT_MAX) {
+      if (mode_width <= 0 || mode_width > INT_MAX || mode_height <= 0 ||
+          mode_height > INT_MAX || mode_refresh <= 0 ||
+          mode_refresh > INT_MAX) {
         return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                    "mode values must be positive integers");
       }
@@ -182,7 +181,8 @@ static enum leme_control_code prepare_configure_output(
         struct wlr_output_mode *m;
         wl_list_for_each(m, &target->wlr_output->modes, link) {
           if (m->width == (int)mode_width && m->height == (int)mode_height) {
-            long long diff = llabs((long long)m->refresh - (long long)mode_refresh);
+            long long diff =
+                llabs((long long)m->refresh - (long long)mode_refresh);
             if (diff <= 1000) {
               hardware_mode = m;
               break;
@@ -217,8 +217,8 @@ static enum leme_control_code prepare_configure_output(
         return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                    "position values must be integers");
       }
-      if (pos_x < -1000000 || pos_x > 1000000 ||
-          pos_y < -1000000 || pos_y > 1000000) {
+      if (pos_x < -1000000 || pos_x > 1000000 || pos_y < -1000000 ||
+          pos_y > 1000000) {
         return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                    "position out of bounds");
       }
@@ -272,7 +272,8 @@ static enum leme_control_code prepare_configure_output(
     if (cand == target) {
       head->state.x = has_position ? (int)pos_x : cand->layout_x;
       head->state.y = has_position ? (int)pos_y : cand->layout_y;
-      head->state.scale = has_scale ? (float)scale_val : cand->wlr_output->scale;
+      head->state.scale =
+          has_scale ? (float)scale_val : cand->wlr_output->scale;
       head->state.transform =
           has_transform ? transform_val : cand->wlr_output->transform;
       if (has_mode) {
@@ -297,13 +298,15 @@ static enum leme_control_code prepare_configure_output(
       head->state.custom_mode.refresh = cand->wlr_output->refresh;
     }
     head->state.adaptive_sync_enabled =
-        cand->wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
+        cand->wlr_output->adaptive_sync_status ==
+        WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
   }
 
   if (leme_output_control_heads_overlap(config)) {
     wlr_output_configuration_v1_destroy(config);
-    return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
-                               "output configuration overlaps with existing output");
+    return set_preflight_error(
+        error, LEME_CONTROL_INVALID_ARGUMENT,
+        "output configuration overlaps with existing output");
   }
 
   if (!leme_output_control_test_configuration(server, config)) {
@@ -312,7 +315,8 @@ static enum leme_control_code prepare_configure_output(
                                "output configuration rejected by backend");
   }
 
-  bool is_noop = leme_output_control_configuration_matches_current(server, config);
+  bool is_noop =
+      leme_output_control_configuration_matches_current(server, config);
 
   struct output_prepared *prep =
       leme_control_alloc(account, sizeof(struct output_prepared));
@@ -335,9 +339,8 @@ static enum leme_control_code prepare_configure_output(
 }
 
 static enum leme_control_code prepare_set_output_power(
-    struct leme_server *server,
-    const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
+    struct leme_server *server, const struct leme_control_intent *intents,
+    size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
   if (count == 0) {
     return set_preflight_error(error, LEME_CONTROL_CARDINALITY,
@@ -386,19 +389,20 @@ static enum leme_control_code prepare_set_output_power(
 }
 
 enum leme_control_code leme_output_control_prepare(
-    struct leme_server *server,
-    const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
+    struct leme_server *server, const struct leme_control_intent *intents,
+    size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
   if (server == NULL || intents == NULL || count == 0 || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
 
   if (intents[0].opcode == LEME_CONTROL_OP_CONFIGURE_OUTPUT) {
-    return prepare_configure_output(server, intents, count, account, out, error);
+    return prepare_configure_output(server, intents, count, account, out,
+                                    error);
   }
   if (intents[0].opcode == LEME_CONTROL_OP_SET_OUTPUT_POWER) {
-    return prepare_set_output_power(server, intents, count, account, out, error);
+    return prepare_set_output_power(server, intents, count, account, out,
+                                    error);
   }
 
   return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
@@ -406,9 +410,9 @@ enum leme_control_code leme_output_control_prepare(
 }
 
 enum leme_control_code leme_output_control_execute_one(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared, size_t index,
-    enum leme_control_outcome *outcome, struct leme_control_error *error) {
+    struct leme_server *server, struct leme_control_prepared *prepared,
+    size_t index, enum leme_control_outcome *outcome,
+    struct leme_control_error *error) {
   if (server == NULL || prepared == NULL || outcome == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
@@ -522,9 +526,8 @@ enum leme_control_code leme_output_control_execute_one(
   return LEME_CONTROL_UNSUPPORTED;
 }
 
-void leme_output_control_discard(
-    struct leme_server *server,
-    struct leme_control_prepared *prepared) {
+void leme_output_control_discard(struct leme_server *server,
+                                 struct leme_control_prepared *prepared) {
   (void)server;
   if (prepared == NULL) {
     return;

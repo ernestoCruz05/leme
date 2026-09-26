@@ -79,9 +79,10 @@ double leme_swipe_tracker_velocity(const struct leme_swipe_tracker *tracker,
   return isfinite(v) ? v : 0.0;
 }
 
-double leme_swipe_tracker_projected_position(
-    const struct leme_swipe_tracker *tracker, double current_position,
-    uint32_t now_msec) {
+double
+leme_swipe_tracker_projected_position(const struct leme_swipe_tracker *tracker,
+                                      double current_position,
+                                      uint32_t now_msec) {
   double v;
   double log_dec;
   double proj;

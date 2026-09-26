@@ -107,9 +107,9 @@ void leme_control_intents_destroy(struct leme_control_intent *intents,
   leme_control_free(intents);
 }
 
-static enum leme_control_code set_preflight_error(
-    struct leme_control_error *error, enum leme_control_code code,
-    const char *msg) {
+static enum leme_control_code
+set_preflight_error(struct leme_control_error *error,
+                    enum leme_control_code code, const char *msg) {
   if (error != NULL) {
     error->code = code;
     error->phase = LEME_CONTROL_PREFLIGHT;
@@ -120,14 +120,14 @@ static enum leme_control_code set_preflight_error(
   return code;
 }
 
-enum leme_control_code leme_control_normalize_targets(
-    struct leme_control_context *context,
-    const struct leme_control_program *program,
-    const struct leme_public_snapshot *snapshot,
-    struct leme_control_intent **out_intents,
-    size_t *out_count,
-    struct leme_public_builder **out_builder,
-    struct leme_control_error *error) {
+enum leme_control_code
+leme_control_normalize_targets(struct leme_control_context *context,
+                               const struct leme_control_program *program,
+                               const struct leme_public_snapshot *snapshot,
+                               struct leme_control_intent **out_intents,
+                               size_t *out_count,
+                               struct leme_public_builder **out_builder,
+                               struct leme_control_error *error) {
   if (context == NULL || program == NULL || out_intents == NULL ||
       out_count == NULL || out_builder == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
@@ -179,12 +179,13 @@ enum leme_control_code leme_control_normalize_targets(
       .limits = limits,
       .error = error,
       .current_item = NULL,
-      .meter = {
-          .remaining = limits != NULL ? limits->work_units : 100000,
-          .deadline_ns = deadline,
-          .context = NULL,
-          .now_ns = monotonic_now_ns,
-      },
+      .meter =
+          {
+              .remaining = limits != NULL ? limits->work_units : 100000,
+              .deadline_ns = deadline,
+              .context = NULL,
+              .now_ns = monotonic_now_ns,
+          },
   };
 
   if (op->opcode == LEME_CONTROL_OP_COMMAND) {
@@ -319,7 +320,8 @@ enum leme_control_code leme_control_normalize_targets(
     intent->args = common_args;
 
     const struct leme_public_value *roots[1] = {common_args};
-    size_t root_count = (common_args != NULL && common_args->owner == b) ? 1 : 0;
+    size_t root_count =
+        (common_args != NULL && common_args->owner == b) ? 1 : 0;
     if (leme_public_builder_seal(b, roots, root_count) != LEME_PUBLIC_OK) {
       leme_control_free(intent);
       leme_public_builder_destroy(b);
@@ -432,8 +434,8 @@ enum leme_control_code leme_control_normalize_targets(
     has_dest = true;
   } else if (root_node->as.call.arg_count == 2) {
     const struct leme_public_value *raw_arg = NULL;
-    enum leme_control_code ev_code = eval_node(
-        &ev, root_node->as.call.arg_indices[1], &raw_arg);
+    enum leme_control_code ev_code =
+        eval_node(&ev, root_node->as.call.arg_indices[1], &raw_arg);
     if (ev_code != LEME_CONTROL_OK) {
       leme_public_builder_destroy(b);
       if (error != NULL) {
@@ -462,8 +464,8 @@ enum leme_control_code leme_control_normalize_targets(
     }
     for (size_t a = 0; a < extra_count; ++a) {
       const struct leme_public_value *val = NULL;
-      enum leme_control_code ev_code = eval_node(
-          &ev, root_node->as.call.arg_indices[a + 1], &val);
+      enum leme_control_code ev_code =
+          eval_node(&ev, root_node->as.call.arg_indices[a + 1], &val);
       if (ev_code != LEME_CONTROL_OK) {
         leme_public_builder_destroy(b);
         if (error != NULL) {
@@ -557,8 +559,9 @@ enum leme_control_code leme_control_normalize_targets(
       return set_preflight_error(error, LEME_CONTROL_RESOURCE_LIMIT,
                                  "preparation work limit exceeded");
     }
-    const struct leme_public_value *elem =
-        tkind == LEME_PUBLIC_OBJECT ? target_val : leme_public_at(target_val, k);
+    const struct leme_public_value *elem = tkind == LEME_PUBLIC_OBJECT
+                                               ? target_val
+                                               : leme_public_at(target_val, k);
     if (elem == NULL || leme_public_kind(elem) != LEME_PUBLIC_OBJECT) {
       leme_control_intents_destroy(intents, num_intents);
       leme_public_builder_destroy(b);

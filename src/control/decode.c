@@ -77,9 +77,10 @@ static bool prescan_json(const char *data, size_t len, size_t max_depth) {
   return !in_string && depth == 0;
 }
 
-static enum leme_control_code
-convert_node(struct leme_public_builder *b, yyjson_val *val,
-             struct leme_public_value **out, struct leme_control_meter *meter) {
+static enum leme_control_code convert_node(struct leme_public_builder *b,
+                                           yyjson_val *val,
+                                           struct leme_public_value **out,
+                                           struct leme_control_meter *meter) {
   if (meter != NULL) {
     const enum leme_control_code charge_code = leme_control_charge(meter, 1);
     if (charge_code != LEME_CONTROL_OK)
@@ -282,8 +283,8 @@ enum leme_control_code leme_control_decode(
   }
 
   struct leme_public_builder *b = NULL;
-  const enum leme_public_status b_status = leme_public_builder_create_budget(
-      account, limits->retained_bytes, &b);
+  const enum leme_public_status b_status =
+      leme_public_builder_create_budget(account, limits->retained_bytes, &b);
   if (b_status != LEME_PUBLIC_OK) {
     yyjson_doc_free(doc);
     if (error != NULL) {

@@ -1271,10 +1271,10 @@ static size_t leme_tags_collect_members(const struct leme_tags *tags,
     return 0;
   }
   for (id = 1; id <= tags->max_tags; id++) {
-    const bool member = tags->table[id] != NULL ||
-                        (tags->focused_is_candidate &&
-                         tags->focused_id == id) ||
-                        id == candidate;
+    const bool member =
+        tags->table[id] != NULL ||
+        (tags->focused_is_candidate && tags->focused_id == id) ||
+        id == candidate;
 
     if (!member) {
       continue;
@@ -1320,16 +1320,14 @@ size_t leme_tags_ring(const struct leme_tags *tags,
     return 0;
   }
   wrap_id = leme_tags_backward_wrap_id(tags);
-  if (!tags->focused_is_candidate &&
-      (direction == LEME_TAG_CHANGE_FORWARD ||
-       direction == LEME_TAG_CHANGE_BACKWARD)) {
+  if (!tags->focused_is_candidate && (direction == LEME_TAG_CHANGE_FORWARD ||
+                                      direction == LEME_TAG_CHANGE_BACKWARD)) {
     uint16_t walk = tags->focused_id;
     size_t step;
 
     for (step = 0; step < tags->max_tags; step++) {
-      walk = direction > 0
-                 ? (walk == tags->max_tags ? 1 : (uint16_t)(walk + 1))
-                 : (walk == 1 ? wrap_id : (uint16_t)(walk - 1));
+      walk = direction > 0 ? (walk == tags->max_tags ? 1 : (uint16_t)(walk + 1))
+                           : (walk == 1 ? wrap_id : (uint16_t)(walk - 1));
       if (tags->table[walk] == NULL) {
         candidate = walk;
         break;

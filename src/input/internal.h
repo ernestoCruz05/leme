@@ -60,9 +60,10 @@ bool leme_input_keyboard_resolve_id(const struct leme_server *server,
 bool leme_input_resolve_target(const struct leme_server *server,
                                struct leme_public_id id,
                                struct leme_input_target_info *info);
-enum libinput_config_status leme_input_apply_pointer_setting(
-    struct leme_server *server, struct leme_public_id id,
-    const struct leme_input_setting_val *val);
+enum libinput_config_status
+leme_input_apply_pointer_setting(struct leme_server *server,
+                                 struct leme_public_id id,
+                                 const struct leme_input_setting_val *val);
 bool leme_input_find_keyboard_layout(const struct leme_server *server,
                                      const char *label, size_t *out_index,
                                      bool *out_ambiguous);

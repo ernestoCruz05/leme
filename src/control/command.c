@@ -35,9 +35,9 @@ static struct leme_public_text dup_text(struct leme_public_budget *account,
   return (struct leme_public_text){.data = buf, .length = src.length};
 }
 
-static enum leme_control_code set_preflight_error(
-    struct leme_control_error *error, enum leme_control_code code,
-    const char *msg) {
+static enum leme_control_code
+set_preflight_error(struct leme_control_error *error,
+                    enum leme_control_code code, const char *msg) {
   if (error != NULL) {
     error->code = code;
     error->phase = LEME_CONTROL_PREFLIGHT;
@@ -49,8 +49,8 @@ static enum leme_control_code set_preflight_error(
   return code;
 }
 
-static struct leme_control_intent *alloc_intents(
-    struct leme_public_budget *account, size_t count) {
+static struct leme_control_intent *
+alloc_intents(struct leme_public_budget *account, size_t count) {
   struct leme_control_intent *intents =
       leme_control_alloc(account, count * sizeof(struct leme_control_intent));
   if (intents != NULL) {
@@ -74,8 +74,7 @@ static const char *layout_kind_name(enum leme_layout_kind kind) {
 static void set_target_id(struct leme_public_budget *account,
                           struct leme_control_intent *intent,
                           enum leme_public_entity kind,
-                          struct leme_public_id id,
-                          uint16_t tag_number,
+                          struct leme_public_id id, uint16_t tag_number,
                           struct leme_public_text id_text) {
   intent->has_target = true;
   intent->target.kind = kind;
@@ -92,8 +91,7 @@ static void set_target_id(struct leme_public_budget *account,
 
 static void set_destination_id(struct leme_control_intent *intent,
                                enum leme_public_entity kind,
-                               struct leme_public_id id,
-                               uint16_t tag_number) {
+                               struct leme_public_id id, uint16_t tag_number) {
   intent->has_destination = true;
   intent->destination.kind = kind;
   intent->destination.id = id;
@@ -146,15 +144,12 @@ void leme_control_intent_batch_destroy(
   }
 }
 
-static enum leme_control_code make_cmd_args(
-    struct leme_public_builder *b,
-    const char *name,
-    const char *arg1_str,
-    int64_t arg1_int,
-    bool has_arg1_int,
-    int64_t arg2_int,
-    bool has_arg2_int,
-    struct leme_public_value **out) {
+static enum leme_control_code make_cmd_args(struct leme_public_builder *b,
+                                            const char *name,
+                                            const char *arg1_str,
+                                            int64_t arg1_int, bool has_arg1_int,
+                                            int64_t arg2_int, bool has_arg2_int,
+                                            struct leme_public_value **out) {
   size_t count = 1;
   if (arg1_str != NULL || has_arg1_int) {
     count++;
@@ -179,9 +174,9 @@ static enum leme_control_code make_cmd_args(
   size_t idx = 1;
   if (arg1_str != NULL) {
     struct leme_public_value *v1 = NULL;
-    if (leme_public_string(b,
-                           (struct leme_public_text){arg1_str, strlen(arg1_str)},
-                           false, &v1) != LEME_PUBLIC_OK) {
+    if (leme_public_string(
+            b, (struct leme_public_text){arg1_str, strlen(arg1_str)}, false,
+            &v1) != LEME_PUBLIC_OK) {
       return LEME_CONTROL_OUT_OF_MEMORY;
     }
     if (leme_public_array_set(b, arr, idx++, v1) != LEME_PUBLIC_OK) {
@@ -213,10 +208,8 @@ static enum leme_control_code make_cmd_args(
 
 enum leme_control_code leme_control_command_lower(
     struct leme_control_context *context,
-    const struct leme_public_snapshot *snapshot,
-    struct leme_public_text name,
-    const struct leme_public_value *argv,
-    struct leme_control_intent_batch *out,
+    const struct leme_public_snapshot *snapshot, struct leme_public_text name,
+    const struct leme_public_value *argv, struct leme_control_intent_batch *out,
     struct leme_control_error *error) {
   if (context == NULL || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
@@ -260,7 +253,8 @@ enum leme_control_code leme_control_command_lower(
 
   char **params = (char **)malloc((argc + 2) * sizeof(char *));
   if (params == NULL) {
-    return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY, "out of memory");
+    return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                               "out of memory");
   }
   params[0] = strndup(name.data, name.length);
   for (size_t i = 0; i < argc; ++i) {
@@ -391,8 +385,8 @@ enum leme_control_code leme_control_command_lower(
       const struct leme_public_value *foc =
           leme_public_get(v, LEME_PUBLIC_TEXT("focused"));
       bool is_foc = false;
-      if (foc != NULL &&
-          leme_public_as_bool(foc, &is_foc) == LEME_PUBLIC_OK && is_foc) {
+      if (foc != NULL && leme_public_as_bool(foc, &is_foc) == LEME_PUBLIC_OK &&
+          is_foc) {
         const struct leme_public_value *id_v =
             leme_public_get(v, LEME_PUBLIC_TEXT("id"));
         if (id_v != NULL && leme_public_kind(id_v) == LEME_PUBLIC_STRING) {
@@ -457,8 +451,8 @@ enum leme_control_code leme_control_command_lower(
       const struct leme_public_value *foc =
           leme_public_get(o, LEME_PUBLIC_TEXT("focused"));
       bool is_foc = false;
-      if (foc != NULL &&
-          leme_public_as_bool(foc, &is_foc) == LEME_PUBLIC_OK && is_foc) {
+      if (foc != NULL && leme_public_as_bool(foc, &is_foc) == LEME_PUBLIC_OK &&
+          is_foc) {
         const struct leme_public_value *id_o =
             leme_public_get(o, LEME_PUBLIC_TEXT("id"));
         if (id_o != NULL && leme_public_kind(id_o) == LEME_PUBLIC_STRING) {
@@ -496,8 +490,7 @@ enum leme_control_code leme_control_command_lower(
       const struct leme_public_value *tag = leme_public_at(tags_root, i);
       const struct leme_public_value *out_ref =
           leme_public_get(tag, LEME_PUBLIC_TEXT("output"));
-      if (out_ref != NULL &&
-          leme_public_kind(out_ref) == LEME_PUBLIC_OBJECT) {
+      if (out_ref != NULL && leme_public_kind(out_ref) == LEME_PUBLIC_OBJECT) {
         const struct leme_public_value *out_id =
             leme_public_get(out_ref, LEME_PUBLIC_TEXT("id"));
         struct leme_public_text out_id_t = {0};
@@ -710,16 +703,15 @@ enum leme_control_code leme_control_command_lower(
       return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
                                  "no focused output");
     }
-    uint16_t target_slot = cmd.type == LEME_COMMAND_FOCUS_NEXT_TAG
-                               ? next_slot
-                               : (cmd.type == LEME_COMMAND_FOCUS_PREVIOUS_TAG
-                                      ? prev_slot
-                                      : cmd.tag_id);
+    uint16_t target_slot =
+        cmd.type == LEME_COMMAND_FOCUS_NEXT_TAG
+            ? next_slot
+            : (cmd.type == LEME_COMMAND_FOCUS_PREVIOUS_TAG ? prev_slot
+                                                           : cmd.tag_id);
     struct leme_public_id target_tag_id = {0};
     struct leme_public_text target_tag_id_text = {0};
     bool found_tag = false;
-    if (tags_root != NULL &&
-        leme_public_kind(tags_root) == LEME_PUBLIC_ARRAY) {
+    if (tags_root != NULL && leme_public_kind(tags_root) == LEME_PUBLIC_ARRAY) {
       size_t t_count = leme_public_length(tags_root);
       for (size_t i = 0; i < t_count; ++i) {
         const struct leme_public_value *tag = leme_public_at(tags_root, i);
@@ -747,8 +739,8 @@ enum leme_control_code leme_control_command_lower(
                   leme_public_as_text(t_id, &target_tag_id_text);
                   uint16_t dummy = 0;
                   if (leme_public_parse_id(model, LEME_PUBLIC_TAG,
-                                           target_tag_id_text,
-                                           &target_tag_id, &dummy)) {
+                                           target_tag_id_text, &target_tag_id,
+                                           &dummy)) {
                     found_tag = true;
                     break;
                   }
@@ -792,8 +784,7 @@ enum leme_control_code leme_control_command_lower(
           const struct leme_public_value *nm =
               leme_public_get(o, LEME_PUBLIC_TEXT("name"));
           struct leme_public_text nm_t = {0};
-          if (nm != NULL &&
-              leme_public_as_text(nm, &nm_t) == LEME_PUBLIC_OK &&
+          if (nm != NULL && leme_public_as_text(nm, &nm_t) == LEME_PUBLIC_OK &&
               cmd.text != NULL) {
             if (nm_t.length == strlen(cmd.text) &&
                 memcmp(nm_t.data, cmd.text, nm_t.length) == 0) {
@@ -864,16 +855,14 @@ enum leme_control_code leme_control_command_lower(
       return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
                                  "no focused view");
     }
-    uint16_t target_slot = cmd.has_direction
-                               ? (cmd.direction == LEME_DIRECTION_LEFT
-                                      ? prev_slot
-                                      : next_slot)
-                               : cmd.tag_id;
+    uint16_t target_slot =
+        cmd.has_direction
+            ? (cmd.direction == LEME_DIRECTION_LEFT ? prev_slot : next_slot)
+            : cmd.tag_id;
     struct leme_public_id target_tag_id = {0};
     struct leme_public_text target_tag_id_text = {0};
     bool found_tag = false;
-    if (tags_root != NULL &&
-        leme_public_kind(tags_root) == LEME_PUBLIC_ARRAY) {
+    if (tags_root != NULL && leme_public_kind(tags_root) == LEME_PUBLIC_ARRAY) {
       size_t t_count = leme_public_length(tags_root);
       for (size_t i = 0; i < t_count; ++i) {
         const struct leme_public_value *tag = leme_public_at(tags_root, i);
@@ -901,8 +890,8 @@ enum leme_control_code leme_control_command_lower(
                   leme_public_as_text(t_id, &target_tag_id_text);
                   uint16_t dummy = 0;
                   if (leme_public_parse_id(model, LEME_PUBLIC_TAG,
-                                           target_tag_id_text,
-                                           &target_tag_id, &dummy)) {
+                                           target_tag_id_text, &target_tag_id,
+                                           &dummy)) {
                     found_tag = true;
                     break;
                   }
@@ -936,8 +925,8 @@ enum leme_control_code leme_control_command_lower(
       set_target_id(account, &intents[1], LEME_PUBLIC_TAG, target_tag_id,
                     target_slot, target_tag_id_text);
       intents[2].opcode = LEME_CONTROL_OP_FOCUS;
-      set_target_id(account, &intents[2], LEME_PUBLIC_VIEW, focused_view_id,
-                    0, focused_view_id_text);
+      set_target_id(account, &intents[2], LEME_PUBLIC_VIEW, focused_view_id, 0,
+                    focused_view_id_text);
     }
     out->intents = intents;
     out->count = count;
@@ -966,8 +955,7 @@ enum leme_control_code leme_control_command_lower(
           const struct leme_public_value *nm =
               leme_public_get(o, LEME_PUBLIC_TEXT("name"));
           struct leme_public_text nm_t = {0};
-          if (nm != NULL &&
-              leme_public_as_text(nm, &nm_t) == LEME_PUBLIC_OK &&
+          if (nm != NULL && leme_public_as_text(nm, &nm_t) == LEME_PUBLIC_OK &&
               cmd.text != NULL) {
             if (nm_t.length == strlen(cmd.text) &&
                 memcmp(nm_t.data, cmd.text, nm_t.length) == 0) {
@@ -1002,8 +990,8 @@ enum leme_control_code leme_control_command_lower(
                                    "out of memory");
       }
       intents[0].opcode = LEME_CONTROL_OP_MOVE_TO_OUTPUT;
-      set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id,
-                    0, focused_view_id_text);
+      set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id, 0,
+                    focused_view_id_text);
       set_destination_id(&intents[0], LEME_PUBLIC_OUTPUT, target_out_id, 0);
       if (cmd.follow) {
         intents[1].opcode = LEME_CONTROL_OP_FOCUS_OUTPUT;
@@ -1079,8 +1067,7 @@ enum leme_control_code leme_control_command_lower(
     }
     intents[0].opcode = LEME_CONTROL_OP_SET_MODE;
     struct leme_public_value *m_val = NULL;
-    leme_public_string(b,
-                       (struct leme_public_text){cmd.text, strlen(cmd.text)},
+    leme_public_string(b, (struct leme_public_text){cmd.text, strlen(cmd.text)},
                        false, &m_val);
     free(cmd.text);
     cmd.text = NULL;
@@ -1144,8 +1131,7 @@ enum leme_control_code leme_control_command_lower(
                     focused_view_id_text);
     }
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "focus_previous_view", NULL, 0, false, 0, false,
-                  &c_args);
+    make_cmd_args(b, "focus_previous_view", NULL, 0, false, 0, false, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);
@@ -1243,8 +1229,7 @@ enum leme_control_code leme_control_command_lower(
     struct leme_public_id target_tag_id = {0};
     struct leme_public_text target_tag_id_text = {0};
     bool found_tag = false;
-    if (tags_root != NULL &&
-        leme_public_kind(tags_root) == LEME_PUBLIC_ARRAY) {
+    if (tags_root != NULL && leme_public_kind(tags_root) == LEME_PUBLIC_ARRAY) {
       size_t t_count = leme_public_length(tags_root);
       for (size_t i = 0; i < t_count; ++i) {
         const struct leme_public_value *tag = leme_public_at(tags_root, i);
@@ -1272,8 +1257,8 @@ enum leme_control_code leme_control_command_lower(
                   leme_public_as_text(t_id, &target_tag_id_text);
                   uint16_t dummy = 0;
                   if (leme_public_parse_id(model, LEME_PUBLIC_TAG,
-                                           target_tag_id_text,
-                                           &target_tag_id, &dummy)) {
+                                           target_tag_id_text, &target_tag_id,
+                                           &dummy)) {
                     found_tag = true;
                     break;
                   }
@@ -1368,8 +1353,8 @@ enum leme_control_code leme_control_command_lower(
     }
     intents[0].opcode = LEME_CONTROL_OP_COMMAND;
     if (has_focused_output) {
-      set_target_id(account, &intents[0], LEME_PUBLIC_OUTPUT,
-                    focused_output_id, 0, focused_output_id_text);
+      set_target_id(account, &intents[0], LEME_PUBLIC_OUTPUT, focused_output_id,
+                    0, focused_output_id_text);
     }
     struct leme_public_value *c_args = NULL;
     make_cmd_args(b, "scratchpad_toggle", cmd.text != NULL ? cmd.text : "", 0,
@@ -1403,8 +1388,7 @@ enum leme_control_code leme_control_command_lower(
     set_target_id(account, &intents[0], LEME_PUBLIC_OUTPUT, focused_output_id,
                   0, focused_output_id_text);
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "scratchpad_retrieve", NULL, 0, false, 0, false,
-                  &c_args);
+    make_cmd_args(b, "scratchpad_retrieve", NULL, 0, false, 0, false, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);

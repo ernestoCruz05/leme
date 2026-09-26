@@ -47,9 +47,8 @@ pending_req_create(struct leme_control_peer *peer) {
     return NULL;
   }
   struct leme_control_pending_req *preq =
-      peer->account != NULL
-          ? leme_control_alloc(peer->account, sizeof(*preq))
-          : malloc(sizeof(*preq));
+      peer->account != NULL ? leme_control_alloc(peer->account, sizeof(*preq))
+                            : malloc(sizeof(*preq));
   if (preq != NULL) {
     memset(preq, 0, sizeof(*preq));
     wl_list_init(&preq->link);
@@ -100,8 +99,7 @@ static void on_peer_frame_complete(struct leme_control_frame *frame,
 static bool peer_has_outstanding_id(const struct leme_control_peer *peer,
                                     const char *id, size_t id_len) {
   for (size_t i = 0; i < 16; i++) {
-    if (peer->outstanding[i].active &&
-        peer->outstanding[i].id_len == id_len &&
+    if (peer->outstanding[i].active && peer->outstanding[i].id_len == id_len &&
         memcmp(peer->outstanding[i].id, id, id_len) == 0) {
       return true;
     }
@@ -109,8 +107,8 @@ static bool peer_has_outstanding_id(const struct leme_control_peer *peer,
   return false;
 }
 
-static int peer_add_outstanding(struct leme_control_peer *peer,
-                                const char *id, size_t id_len) {
+static int peer_add_outstanding(struct leme_control_peer *peer, const char *id,
+                                size_t id_len) {
   if (peer->outstanding_count >= 16 || id_len > 128) {
     return -1;
   }
@@ -194,9 +192,10 @@ static void leme_control_peer_flush(struct leme_control_peer *peer) {
   }
 }
 
-static enum leme_control_code dispatch_peer_request(
-    struct leme_control_peer *peer, const struct leme_control_request *request,
-    struct leme_control_frame **out) {
+static enum leme_control_code
+dispatch_peer_request(struct leme_control_peer *peer,
+                      const struct leme_control_request *request,
+                      struct leme_control_frame **out) {
   struct leme_control_context *context = NULL;
   enum leme_control_code code = leme_control_context_create(
       leme_control_context_server(peer->context),
@@ -281,10 +280,8 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
     enum leme_control_request_op op = leme_control_request_operation(preq->req);
     struct leme_control_frame *reply_frame = NULL;
     bool watch_published = false;
-    struct leme_public_model *model =
-        leme_control_context_model(peer->context);
-    struct leme_public_text model_inst =
-        leme_public_model_instance(model);
+    struct leme_public_model *model = leme_control_context_model(peer->context);
+    struct leme_public_text model_inst = leme_public_model_instance(model);
 
     if (!peer->negotiated) {
       if (op != LEME_CONTROL_HELLO) {
@@ -371,9 +368,10 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
       if (preq->slot >= 0 && preq->slot < 16) {
         peer->outstanding[preq->slot].frame = reply_frame;
       }
-      enum leme_control_code qcode = peer->queue->reserved_node != NULL
-          ? leme_control_queue_push_reserved(peer->queue, reply_frame)
-          : leme_control_queue_push(peer->queue, reply_frame);
+      enum leme_control_code qcode =
+          peer->queue->reserved_node != NULL
+              ? leme_control_queue_push_reserved(peer->queue, reply_frame)
+              : leme_control_queue_push(peer->queue, reply_frame);
       leme_control_queue_cancel_reservation(peer->queue,
                                             peer->queue->reserved_bytes);
       if (qcode != LEME_CONTROL_OK) {
@@ -440,10 +438,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
       peer->state != LEME_PEER_STATE_CLOSED) {
     char buf[4096];
     bool should_stop = false;
-    struct leme_public_model *model =
-        leme_control_context_model(peer->context);
-    struct leme_public_text model_inst =
-        leme_public_model_instance(model);
+    struct leme_public_model *model = leme_control_context_model(peer->context);
+    struct leme_public_text model_inst = leme_public_model_instance(model);
     uint64_t loop_start_ns = monotonic_now_ns(NULL);
     uint64_t loop_deadline_ns = (peer->limits.deadline_ns > 0)
                                     ? loop_start_ns + peer->limits.deadline_ns
@@ -506,8 +502,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
           struct leme_control_document *doc = NULL;
           struct leme_control_error err = {0};
           struct leme_control_meter dmeter = {
-              .remaining =
-                  peer->limits.work_units > 0 ? peer->limits.work_units : 100000,
+              .remaining = peer->limits.work_units > 0 ? peer->limits.work_units
+                                                       : 100000,
               .deadline_ns = loop_deadline_ns,
               .context = NULL,
               .now_ns = monotonic_now_ns,
@@ -688,7 +684,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
         !wl_list_empty(&peer->pending_requests)) {
       const uint64_t previous = leme_control_context_deadline(peer->context);
       const uint64_t deadline = previous != 0 && previous < loop_deadline_ns
-          ? previous : loop_deadline_ns;
+                                    ? previous
+                                    : loop_deadline_ns;
       leme_control_context_set_deadline(peer->context, deadline);
       leme_control_peer_ready(peer);
       leme_control_context_set_deadline(peer->context, previous);
@@ -698,11 +695,10 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
   return 0;
 }
 
-enum leme_control_code leme_control_peer_open(
-    struct leme_control_context *context,
-    struct wl_event_loop *loop,
-    int fd,
-    struct leme_control_peer **out) {
+enum leme_control_code
+leme_control_peer_open(struct leme_control_context *context,
+                       struct wl_event_loop *loop, int fd,
+                       struct leme_control_peer **out) {
   if (context == NULL || loop == NULL || fd < 0 || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }

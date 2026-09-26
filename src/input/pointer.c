@@ -1170,8 +1170,8 @@ static void leme_input_handle_swipe_begin(struct wl_listener *listener,
   is_takeover = (output->workspace_transition != NULL &&
                  leme_render_workspace_transition_active(output));
 
-  if (is_takeover &&
-      !leme_render_workspace_transition_presented_position(output, &initial_pos)) {
+  if (is_takeover && !leme_render_workspace_transition_presented_position(
+                         output, &initial_pos)) {
     leme_render_workspace_transition_finish(output);
     is_takeover = false;
     initial_pos = leme_tags_position(leme_output_tags(output));
@@ -1186,9 +1186,9 @@ static void leme_input_handle_swipe_begin(struct wl_listener *listener,
     }
   }
   if (ring_count == 0) {
-    ring_count = leme_tags_ring(leme_output_tags(output),
-                                LEME_TAG_CHANGE_FORWARD, ring,
-                                LEME_ARRAY_LENGTH(ring));
+    ring_count =
+        leme_tags_ring(leme_output_tags(output), LEME_TAG_CHANGE_FORWARD, ring,
+                       LEME_ARRAY_LENGTH(ring));
   }
   if (ring_count < 2 || ring_count > LEME_TAGS_RING_MAX) {
     return;
@@ -1209,19 +1209,18 @@ static void leme_input_handle_swipe_begin(struct wl_listener *listener,
   const double index = (double)center_index;
   double center_pos = index + count * round((initial_pos - index) / count);
 
-  if (is_takeover &&
-      ((mode == LEME_WORKSPACE_GESTURE_SINGLE &&
-        fabs(initial_pos - center_pos) > 1.0) ||
-       !leme_render_workspace_transition_set_gesture_range(
-           output, mode == LEME_WORKSPACE_GESTURE_SINGLE,
-           center_pos - 1.0, center_pos + 1.0))) {
+  if (is_takeover && ((mode == LEME_WORKSPACE_GESTURE_SINGLE &&
+                       fabs(initial_pos - center_pos) > 1.0) ||
+                      !leme_render_workspace_transition_set_gesture_range(
+                          output, mode == LEME_WORKSPACE_GESTURE_SINGLE,
+                          center_pos - 1.0, center_pos + 1.0))) {
     leme_render_workspace_transition_finish(output);
     is_takeover = false;
     focused_id = leme_output_tags(output)->focused_id;
     initial_pos = leme_tags_position(leme_output_tags(output));
-    ring_count = leme_tags_ring(leme_output_tags(output),
-                                LEME_TAG_CHANGE_FORWARD, ring,
-                                LEME_ARRAY_LENGTH(ring));
+    ring_count =
+        leme_tags_ring(leme_output_tags(output), LEME_TAG_CHANGE_FORWARD, ring,
+                       LEME_ARRAY_LENGTH(ring));
     if (ring_count < 2 || ring_count > LEME_TAGS_RING_MAX) {
       return;
     }
@@ -1235,8 +1234,10 @@ static void leme_input_handle_swipe_begin(struct wl_listener *listener,
     if (center_index >= ring_count) {
       return;
     }
-    center_pos = (double)center_index + (double)ring_count *
-        round((initial_pos - (double)center_index) / (double)ring_count);
+    center_pos =
+        (double)center_index +
+        (double)ring_count *
+            round((initial_pos - (double)center_index) / (double)ring_count);
   }
 
   leme_session_notify_activity(server);
@@ -1324,7 +1325,8 @@ static void leme_input_handle_swipe_update(struct wl_listener *listener,
       return;
     }
 
-    const double dist = hypot(server->gesture.dx_accum, server->gesture.dy_accum);
+    const double dist =
+        hypot(server->gesture.dx_accum, server->gesture.dy_accum);
     if (dist < 16.0) {
       return;
     }
@@ -1393,8 +1395,10 @@ static void leme_input_handle_swipe_update(struct wl_listener *listener,
   server->gesture.displacement = next_displacement;
   leme_swipe_tracker_push(&server->gesture.tracker, delta, event->time_msec);
 
-  const double visual = server->gesture.mode == LEME_WORKSPACE_GESTURE_SINGLE ?
-      leme_swipe_position(raw, server->gesture.center_position) : raw;
+  const double visual =
+      server->gesture.mode == LEME_WORKSPACE_GESTURE_SINGLE
+          ? leme_swipe_position(raw, server->gesture.center_position)
+          : raw;
   if (output->workspace_transition != NULL) {
     leme_render_workspace_transition_set_position(output, visual);
   }
@@ -1437,8 +1441,8 @@ static void leme_input_handle_swipe_end(struct wl_listener *listener,
   const double raw =
       server->gesture.initial_position + server->gesture.displacement;
   const bool single = server->gesture.mode == LEME_WORKSPACE_GESTURE_SINGLE;
-  double visual = single ?
-      leme_swipe_position(raw, server->gesture.center_position) : raw;
+  double visual =
+      single ? leme_swipe_position(raw, server->gesture.center_position) : raw;
   if (output->workspace_transition != NULL &&
       !leme_render_workspace_transition_presented_position(output, &visual)) {
     leme_input_workspace_gesture_cancel(server);
@@ -1446,9 +1450,13 @@ static void leme_input_handle_swipe_end(struct wl_listener *listener,
   }
   const double projection = leme_swipe_tracker_projected_position(
       &server->gesture.tracker, raw, event->time_msec);
-  const double velocity = event->cancelled ? 0.0 :
-      leme_swipe_tracker_velocity(&server->gesture.tracker, event->time_msec) *
-      (single ? leme_swipe_position_derivative(raw, server->gesture.center_position) : 1.0);
+  const double velocity =
+      event->cancelled ? 0.0
+                       : leme_swipe_tracker_velocity(&server->gesture.tracker,
+                                                     event->time_msec) *
+                             (single ? leme_swipe_position_derivative(
+                                           raw, server->gesture.center_position)
+                                     : 1.0);
   const bool forward = projection >= server->gesture.initial_position;
   bool bounded = single;
   double minimum = server->gesture.center_position - 1.0;
@@ -1470,17 +1478,19 @@ static void leme_input_handle_swipe_end(struct wl_listener *listener,
       bounded = true;
       minimum = floor(visual);
       maximum = ceil(visual);
-      target = leme_swipe_continuous_target(
-          fmax(minimum, fmin(projection, maximum)), settings->threshold, forward);
+      target =
+          leme_swipe_continuous_target(fmax(minimum, fmin(projection, maximum)),
+                                       settings->threshold, forward);
       break;
     case LEME_WORKSPACE_GESTURE_FREE:
-      target = leme_swipe_continuous_target(projection, settings->threshold, forward);
+      target = leme_swipe_continuous_target(projection, settings->threshold,
+                                            forward);
       break;
     }
   }
 
-  if (!isfinite(visual) || !isfinite(projection) ||
-      !isfinite(target) || !isfinite(velocity)) {
+  if (!isfinite(visual) || !isfinite(projection) || !isfinite(target) ||
+      !isfinite(velocity)) {
     leme_input_workspace_gesture_cancel(server);
     return;
   }
@@ -1498,8 +1508,8 @@ static void leme_input_handle_swipe_end(struct wl_listener *listener,
   target_id = server->gesture.ring[target_idx];
 
   if (output->workspace_transition != NULL &&
-      !leme_render_workspace_transition_set_gesture_range(
-          output, bounded, minimum, maximum)) {
+      !leme_render_workspace_transition_set_gesture_range(output, bounded,
+                                                          minimum, maximum)) {
     leme_input_workspace_gesture_cancel(server);
     return;
   }
@@ -1555,8 +1565,7 @@ void leme_input_pointer_events_init(struct leme_server *server) {
   wl_signal_add(&server->cursor->events.swipe_update,
                 &server->cursor_swipe_update);
   server->cursor_swipe_end.notify = leme_input_handle_swipe_end;
-  wl_signal_add(&server->cursor->events.swipe_end,
-                &server->cursor_swipe_end);
+  wl_signal_add(&server->cursor->events.swipe_end, &server->cursor_swipe_end);
   server->request_set_cursor.notify = leme_input_handle_set_cursor;
   wl_signal_add(&server->seat->events.request_set_cursor,
                 &server->request_set_cursor);
@@ -1611,8 +1620,7 @@ bool leme_input_pointer_resolve_id(const struct leme_server *server,
           info->flat = (profiles & LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT) != 0;
           info->current_accel_profile =
               libinput_device_config_accel_get_profile(dev);
-          info->has_accel =
-              libinput_device_config_accel_is_available(dev) != 0;
+          info->has_accel = libinput_device_config_accel_is_available(dev) != 0;
           if (info->has_accel) {
             info->current_accel_speed =
                 libinput_device_config_accel_get_speed(dev);
@@ -1630,12 +1638,10 @@ bool leme_input_pointer_resolve_id(const struct leme_server *server,
             info->current_left_handed =
                 libinput_device_config_left_handed_get(dev) != 0;
           }
-          info->has_tap =
-              libinput_device_config_tap_get_finger_count(dev) > 0;
+          info->has_tap = libinput_device_config_tap_get_finger_count(dev) > 0;
           if (info->has_tap) {
-            info->current_tap =
-                libinput_device_config_tap_get_enabled(dev) ==
-                LIBINPUT_CONFIG_TAP_ENABLED;
+            info->current_tap = libinput_device_config_tap_get_enabled(dev) ==
+                                LIBINPUT_CONFIG_TAP_ENABLED;
           }
         }
       }
@@ -1645,9 +1651,10 @@ bool leme_input_pointer_resolve_id(const struct leme_server *server,
   return false;
 }
 
-enum libinput_config_status leme_input_apply_pointer_setting(
-    struct leme_server *server, struct leme_public_id id,
-    const struct leme_input_setting_val *val) {
+enum libinput_config_status
+leme_input_apply_pointer_setting(struct leme_server *server,
+                                 struct leme_public_id id,
+                                 const struct leme_input_setting_val *val) {
   if (server == NULL || val == NULL || server->pointers.next == NULL) {
     return LIBINPUT_CONFIG_STATUS_UNSUPPORTED;
   }
@@ -1671,7 +1678,8 @@ enum libinput_config_status leme_input_apply_pointer_setting(
         return libinput_device_config_scroll_set_natural_scroll_enabled(
             dev, val->boolean ? 1 : 0);
       case LEME_INPUT_SETTING_LEFT_HANDED:
-        return libinput_device_config_left_handed_set(dev, val->boolean ? 1 : 0);
+        return libinput_device_config_left_handed_set(dev,
+                                                      val->boolean ? 1 : 0);
       case LEME_INPUT_SETTING_TAP:
         return libinput_device_config_tap_set_enabled(
             dev, val->boolean ? LIBINPUT_CONFIG_TAP_ENABLED

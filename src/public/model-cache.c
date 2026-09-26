@@ -48,8 +48,11 @@ void leme_public_model_sync_source(struct leme_public_model *model,
     struct leme_public_cached_root *cached = model->cached[i];
     if (cached == NULL)
       continue;
-    const uint64_t generation = source->root_generation == NULL ? 0 :
-        source->root_generation(source->context, (enum leme_public_root)i);
+    const uint64_t generation =
+        source->root_generation == NULL
+            ? 0
+            : source->root_generation(source->context,
+                                      (enum leme_public_root)i);
     if (generation == 0 || generation != cached->generation) {
       leme_public_cached_root_unref(cached);
       model->cached[i] = NULL;
@@ -92,8 +95,7 @@ enum leme_public_status leme_public_model_cached_root(
     *out = model->cached[root];
     return LEME_PUBLIC_OK;
   }
-  const bool reference_free =
-      !has_references(leme_public_root_schema(root), 1);
+  const bool reference_free = !has_references(leme_public_root_schema(root), 1);
   struct leme_public_builder *b = NULL;
   diagnostic->stage = "builder";
   enum leme_public_status status =
@@ -138,9 +140,11 @@ enum leme_public_status leme_public_model_cached_root(
     goto fail;
   }
   leme_public_builder_set_work(b, NULL);
-  *cached = (struct leme_public_cached_root){
-      .references = 1, .generation = generation, .reference_free = reference_free,
-      .builder = b, .value = value};
+  *cached = (struct leme_public_cached_root){.references = 1,
+                                             .generation = generation,
+                                             .reference_free = reference_free,
+                                             .builder = b,
+                                             .value = value};
   model->cached[root] = cached;
   *out = cached;
   return LEME_PUBLIC_OK;
@@ -149,9 +153,9 @@ fail:
   return status;
 }
 
-enum leme_public_status leme_public_snapshot_project(
-    struct leme_public_model *model, uint32_t roots,
-    struct leme_public_snapshot **out) {
+enum leme_public_status
+leme_public_snapshot_project(struct leme_public_model *model, uint32_t roots,
+                             struct leme_public_snapshot **out) {
   struct leme_public_snapshot *baseline = model->baseline;
   if (baseline->roots_mask == roots) {
     leme_public_snapshot_ref(baseline);
@@ -177,10 +181,12 @@ enum leme_public_status leme_public_snapshot_project(
   status = leme_public_builder_seal(b, NULL, 0);
   if (status != LEME_PUBLIC_OK)
     goto fail;
-  *snapshot = (struct leme_public_snapshot){
-      .references = 1, .bytes = bytes + baseline->bytes, .builder = b,
-      .roots_mask = roots, .backing = baseline,
-      .null_value = baseline->null_value};
+  *snapshot = (struct leme_public_snapshot){.references = 1,
+                                            .bytes = bytes + baseline->bytes,
+                                            .builder = b,
+                                            .roots_mask = roots,
+                                            .backing = baseline,
+                                            .null_value = baseline->null_value};
   memcpy(snapshot->roots, baseline->roots, sizeof(snapshot->roots));
   memcpy(snapshot->indexes, baseline->indexes, sizeof(snapshot->indexes));
   memcpy(snapshot->instance, baseline->instance, sizeof(snapshot->instance));

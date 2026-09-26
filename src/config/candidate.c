@@ -14,11 +14,9 @@ static struct leme_config *unconst_config(const struct leme_config *p) {
   return (struct leme_config *)out;
 }
 
-enum leme_control_code
-leme_config_effective_copy(const struct leme_config *baseline,
-                           struct leme_public_budget *account,
-                           struct leme_config **out,
-                           struct leme_control_error *error) {
+enum leme_control_code leme_config_effective_copy(
+    const struct leme_config *baseline, struct leme_public_budget *account,
+    struct leme_config **out, struct leme_control_error *error) {
   if (out == NULL) {
     if (error != NULL) {
       error->code = LEME_CONTROL_INVALID_ARGUMENT;

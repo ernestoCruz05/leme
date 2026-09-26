@@ -69,7 +69,8 @@ leme_control_resolve_field_path(const struct leme_control_type *item_type,
     enum leme_public_kind kind = leme_public_schema_kind(fschema);
     enum leme_public_entity ent;
     if (leme_public_schema_entity(schema, &ent)) {
-      *out_type = leme_control_type_entity(ent, LEME_CONTROL_PROVENANCE_SNAPSHOT);
+      *out_type =
+          leme_control_type_entity(ent, LEME_CONTROL_PROVENANCE_SNAPSHOT);
       out_type->nullable = nullable;
     } else {
       switch (kind) {
@@ -115,45 +116,46 @@ leme_control_resolve_field_path(const struct leme_control_type *item_type,
   return LEME_CONTROL_OK;
 }
 
-enum leme_control_code leme_control_infer_operator_result(
-    const struct leme_control_operator *op,
-    const struct leme_control_type *arg_types, size_t arg_count,
-    struct leme_control_type *out_type) {
+enum leme_control_code
+leme_control_infer_operator_result(const struct leme_control_operator *op,
+                                   const struct leme_control_type *arg_types,
+                                   size_t arg_count,
+                                   struct leme_control_type *out_type) {
   if (op == NULL || out_type == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
 
   switch (op->opcode) {
   case LEME_CONTROL_OP_VIEWS:
-    *out_type = *leme_control_type_collection_ref(LEME_PUBLIC_VIEW,
-                                                  LEME_CONTROL_PROVENANCE_SNAPSHOT);
+    *out_type = *leme_control_type_collection_ref(
+        LEME_PUBLIC_VIEW, LEME_CONTROL_PROVENANCE_SNAPSHOT);
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_TAGS:
-    *out_type = *leme_control_type_collection_ref(LEME_PUBLIC_TAG,
-                                                  LEME_CONTROL_PROVENANCE_SNAPSHOT);
+    *out_type = *leme_control_type_collection_ref(
+        LEME_PUBLIC_TAG, LEME_CONTROL_PROVENANCE_SNAPSHOT);
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_OUTPUTS:
-    *out_type = *leme_control_type_collection_ref(LEME_PUBLIC_OUTPUT,
-                                                  LEME_CONTROL_PROVENANCE_SNAPSHOT);
+    *out_type = *leme_control_type_collection_ref(
+        LEME_PUBLIC_OUTPUT, LEME_CONTROL_PROVENANCE_SNAPSHOT);
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_INPUTS:
-    *out_type = *leme_control_type_collection_ref(LEME_PUBLIC_INPUT,
-                                                  LEME_CONTROL_PROVENANCE_SNAPSHOT);
+    *out_type = *leme_control_type_collection_ref(
+        LEME_PUBLIC_INPUT, LEME_CONTROL_PROVENANCE_SNAPSHOT);
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_SESSION:
-    *out_type = leme_control_type_record(
-        leme_public_root_schema(LEME_PUBLIC_SESSION));
+    *out_type =
+        leme_control_type_record(leme_public_root_schema(LEME_PUBLIC_SESSION));
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_CONFIG:
-    *out_type = leme_control_type_record(
-        leme_public_root_schema(LEME_PUBLIC_CONFIG));
+    *out_type =
+        leme_control_type_record(leme_public_root_schema(LEME_PUBLIC_CONFIG));
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_RUNTIME:
-    *out_type = leme_control_type_record(
-        leme_public_root_schema(LEME_PUBLIC_RUNTIME));
+    *out_type =
+        leme_control_type_record(leme_public_root_schema(LEME_PUBLIC_RUNTIME));
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_STATUS:
-    *out_type = leme_control_type_record(
-        leme_public_root_schema(LEME_PUBLIC_STATUS));
+    *out_type =
+        leme_control_type_record(leme_public_root_schema(LEME_PUBLIC_STATUS));
     return LEME_CONTROL_OK;
   case LEME_CONTROL_OP_VIEW:
     *out_type = *leme_control_type_entity_ref(LEME_PUBLIC_VIEW,
@@ -245,8 +247,8 @@ enum leme_control_code leme_control_infer_operator_result(
         }
       }
       if (uniform_entity) {
-        *out_type = *leme_control_type_collection_ref(
-            arg_types[0].entity, arg_types[0].provenance);
+        *out_type = *leme_control_type_collection_ref(arg_types[0].entity,
+                                                      arg_types[0].provenance);
         return LEME_CONTROL_OK;
       }
     }
@@ -331,7 +333,8 @@ bool leme_control_is_valid_action_target(
       return false;
     return target_type->item_type->kind == LEME_CONTROL_TYPE_ENTITY &&
            target_type->item_type->entity == expected_entity &&
-           target_type->item_type->provenance == LEME_CONTROL_PROVENANCE_SNAPSHOT;
+           target_type->item_type->provenance ==
+               LEME_CONTROL_PROVENANCE_SNAPSHOT;
   }
 
   if (target_type->kind == LEME_CONTROL_TYPE_ENTITY) {

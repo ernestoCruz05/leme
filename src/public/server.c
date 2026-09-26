@@ -14,7 +14,8 @@
 #include "render/graphics.h"
 #include <wlr/backend/session.h>
 
-struct leme_public_features leme_public_server_features(const struct leme_server *server) {
+struct leme_public_features
+leme_public_server_features(const struct leme_server *server) {
   struct leme_public_features result = {0};
 #ifdef LEME_HAVE_EFFECTS
   result.effects_build = true;
@@ -200,8 +201,7 @@ static enum leme_public_status status_value(struct leme_public_builder *b,
 }
 
 static enum leme_public_status
-runtime_value(struct leme_public_builder *b,
-              const struct leme_server *server,
+runtime_value(struct leme_public_builder *b, const struct leme_server *server,
               const struct leme_public_model *model,
               struct leme_public_value **out) {
   *out = NULL;
@@ -313,10 +313,9 @@ source_root(void *context, const struct leme_public_model *model,
   return LEME_PUBLIC_INVALID;
 }
 
-enum leme_public_status
-leme_public_server_capture_work(struct leme_server *server, uint32_t requested_roots,
-                                const struct leme_public_work *work,
-                                struct leme_public_snapshot **out) {
+enum leme_public_status leme_public_server_capture_work(
+    struct leme_server *server, uint32_t requested_roots,
+    const struct leme_public_work *work, struct leme_public_snapshot **out) {
   if (out == NULL)
     return LEME_PUBLIC_INVALID;
   *out = NULL;
@@ -349,7 +348,8 @@ static uint64_t source_generation(void *context, enum leme_public_root root) {
   return 0;
 }
 
-struct leme_public_source leme_public_server_source(struct leme_server *server) {
+struct leme_public_source
+leme_public_server_source(struct leme_server *server) {
   return (struct leme_public_source){
       .context = server,
       .cache_snapshots = true,

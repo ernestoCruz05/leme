@@ -95,9 +95,8 @@ leme_control_frame_create_capacity(struct leme_public_budget *account,
 }
 
 enum leme_control_code
-leme_control_frame_create(struct leme_public_budget *account,
-                          const char *bytes, size_t length,
-                          struct leme_control_frame **out) {
+leme_control_frame_create(struct leme_public_budget *account, const char *bytes,
+                          size_t length, struct leme_control_frame **out) {
   enum leme_control_code code =
       leme_control_frame_create_capacity(account, length, out);
   if (code != LEME_CONTROL_OK) {
@@ -152,19 +151,18 @@ void leme_control_frame_set_length(struct leme_control_frame *frame,
   }
 }
 
-void leme_control_frame_set_metadata(
-    struct leme_control_frame *frame,
-    enum leme_control_frame_kind kind,
-    bool sensitive,
-    const char *id,
-    size_t id_len) {
+void leme_control_frame_set_metadata(struct leme_control_frame *frame,
+                                     enum leme_control_frame_kind kind,
+                                     bool sensitive, const char *id,
+                                     size_t id_len) {
   if (frame == NULL) {
     return;
   }
   frame->kind = kind;
   frame->sensitive = sensitive;
   if (id != NULL && id_len > 0) {
-    size_t copy_len = id_len < sizeof(frame->id) - 1 ? id_len : sizeof(frame->id) - 1;
+    size_t copy_len =
+        id_len < sizeof(frame->id) - 1 ? id_len : sizeof(frame->id) - 1;
     memcpy(frame->id, id, copy_len);
     frame->id[copy_len] = '\0';
     frame->id_len = copy_len;
@@ -243,9 +241,10 @@ bool leme_control_framer_is_empty(const struct leme_control_framer *framer) {
   return framer == NULL || framer->length == 0;
 }
 
-enum leme_control_code leme_control_framer_feed(
-    struct leme_control_framer *framer, const char *bytes, size_t length,
-    size_t *consumed, struct leme_control_frame **out) {
+enum leme_control_code
+leme_control_framer_feed(struct leme_control_framer *framer, const char *bytes,
+                         size_t length, size_t *consumed,
+                         struct leme_control_frame **out) {
   if (framer == NULL || consumed == NULL || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
@@ -267,8 +266,8 @@ enum leme_control_code leme_control_framer_feed(
 
     struct leme_control_frame *frame = NULL;
     if (framer->length == 0) {
-      enum leme_control_code code = leme_control_frame_create(
-          framer->account, bytes, chunk_len, &frame);
+      enum leme_control_code code =
+          leme_control_frame_create(framer->account, bytes, chunk_len, &frame);
       if (code != LEME_CONTROL_OK) {
         return code;
       }

@@ -90,8 +90,7 @@ bool leme_json_reserve(struct leme_json *json, size_t extra) {
   return true;
 }
 
-void leme_json_append(struct leme_json *json, const char *text,
-                      size_t length) {
+void leme_json_append(struct leme_json *json, const char *text, size_t length) {
   if (!leme_json_reserve(json, length))
     return;
   if (length != 0)
@@ -133,7 +132,8 @@ void leme_json_init(struct leme_json *json) {
   leme_json_init_limit(json, SIZE_MAX - 1);
 }
 
-void leme_json_init_fixed(struct leme_json *json, char *buffer, size_t capacity) {
+void leme_json_init_fixed(struct leme_json *json, char *buffer,
+                          size_t capacity) {
   *json = (struct leme_json){
       .data = buffer,
       .capacity = capacity,

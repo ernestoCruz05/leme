@@ -8,7 +8,7 @@
 #include <stddef.h>
 
 enum leme_control_opcode {
-#define CONTROL_OP(id, name, is_act, min_a, max_a, args_arr, args_cnt, res,   \
+#define CONTROL_OP(id, name, is_act, min_a, max_a, args_arr, args_cnt, res,    \
                    desc, work)                                                 \
   LEME_CONTROL_OP_##id,
 #include "control/operators.def"

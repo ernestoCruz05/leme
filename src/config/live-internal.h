@@ -6,7 +6,6 @@
 #include "public/budget.h"
 #include "public/value.h"
 
-
 struct leme_config_store {
   struct leme_server *server;
   struct leme_config *baseline;

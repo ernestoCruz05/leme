@@ -83,7 +83,7 @@ static bool pointer_rules_equal(const struct leme_config *a,
 }
 
 static bool leme_pointers_have_delta(const struct leme_server *server,
-                                    const struct leme_config *next) {
+                                     const struct leme_config *next) {
   if (server == NULL || server->pointers.next == NULL ||
       wl_list_empty(&server->pointers) || server->config == NULL) {
     return false;
@@ -96,7 +96,7 @@ static bool leme_pointers_have_delta(const struct leme_server *server,
 }
 
 static bool leme_keyboards_have_delta(const struct leme_server *server,
-                                     const struct leme_config *next) {
+                                      const struct leme_config *next) {
   if (server == NULL || server->keyboards.next == NULL ||
       wl_list_empty(&server->keyboards)) {
     return false;
@@ -118,9 +118,9 @@ static bool leme_keyboards_have_delta(const struct leme_server *server,
   return false;
 }
 
-static enum leme_control_code set_preflight_error(
-    struct leme_control_error *error, enum leme_control_code code,
-    const char *msg) {
+static enum leme_control_code
+set_preflight_error(struct leme_control_error *error,
+                    enum leme_control_code code, const char *msg) {
   if (error != NULL) {
     error->code = code;
     error->phase = LEME_CONTROL_PREFLIGHT;
@@ -132,10 +132,11 @@ static enum leme_control_code set_preflight_error(
   return code;
 }
 
-enum leme_control_code leme_config_reload_prepare(
-    struct leme_server *server, struct leme_config *next,
-    struct leme_public_budget *account, struct leme_config_reload **out,
-    struct leme_control_error *error) {
+enum leme_control_code
+leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
+                           struct leme_public_budget *account,
+                           struct leme_config_reload **out,
+                           struct leme_control_error *error) {
   if (server == NULL || next == NULL || out == NULL) {
     return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                "invalid reload arguments");
@@ -232,8 +233,7 @@ enum leme_control_code leme_config_reload_prepare(
         plan->next = NULL;
         leme_config_reload_discard(&plan);
         char msg[256];
-        (void)snprintf(msg, sizeof(msg),
-                       "failed to prepare tag table on %s",
+        (void)snprintf(msg, sizeof(msg), "failed to prepare tag table on %s",
                        output->wlr_output->name);
         return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY, msg);
       }

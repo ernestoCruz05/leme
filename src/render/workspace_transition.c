@@ -247,10 +247,9 @@ static bool leme_workspace_transition_is_eligible(
   return settings != NULL && settings->configured &&
          (settings->kind == LEME_ANIMATION_KIND_SPRING ||
           settings->duration_ms > 0) &&
-         source_id != destination_id &&
-         output->tags.table != NULL && source_id > 0 &&
-         source_id <= output->tags.max_tags && destination_id > 0 &&
-         destination_id <= output->tags.max_tags &&
+         source_id != destination_id && output->tags.table != NULL &&
+         source_id > 0 && source_id <= output->tags.max_tags &&
+         destination_id > 0 && destination_id <= output->tags.max_tags &&
          !leme_workspace_tag_has_fullscreen(output, source_id) &&
          !leme_workspace_tag_has_fullscreen(output, destination_id) &&
          (direction == LEME_TAG_CHANGE_FORWARD ||
@@ -264,8 +263,7 @@ static bool leme_workspace_transition_is_eligible(
          server->scene_floating != NULL && server->scene_tiled != NULL;
 }
 
-static void
-leme_workspace_transition_sync_cache_visibility(
+static void leme_workspace_transition_sync_cache_visibility(
     struct leme_workspace_transition *transition) {
   size_t i;
 
@@ -275,8 +273,9 @@ leme_workspace_transition_sync_cache_visibility(
   for (i = 0; i < transition->cache_count; i++) {
     const bool one_tag = transition->gesture_bounded &&
                          transition->gesture_min == transition->gesture_max;
-    bool active = (transition->cache[i].tree == transition->outgoing ||
-                   (!one_tag && transition->cache[i].tree == transition->incoming));
+    bool active =
+        (transition->cache[i].tree == transition->outgoing ||
+         (!one_tag && transition->cache[i].tree == transition->incoming));
     if (transition->cache[i].tree != NULL) {
       wlr_scene_node_set_enabled(&transition->cache[i].tree->node, active);
     }
@@ -302,7 +301,8 @@ leme_workspace_transition_prepare_with_ops(
         leme_render_output_animations_finish(output);
       } else {
         leme_workspace_finish_live_view_animations(output);
-        leme_animation_manager_finish_owner(&output->server->animations, output);
+        leme_animation_manager_finish_owner(&output->server->animations,
+                                            output);
       }
     }
     return NULL;
@@ -378,7 +378,8 @@ leme_workspace_transition_prepare_with_ops(
       ops->effect_create(transition->outgoing, transition->incoming,
                          output->full_box, direction, &transition->settings);
   if (transition->effect == NULL ||
-      (!allow_empty && !leme_workspace_effect_has_content(transition->effect))) {
+      (!allow_empty &&
+       !leme_workspace_effect_has_content(transition->effect))) {
     goto fail;
   }
   return transition;
@@ -413,7 +414,8 @@ struct leme_workspace_transition *leme_render_workspace_transition_prepare(
       false);
 }
 
-struct leme_workspace_transition *leme_render_workspace_transition_prepare_gesture(
+struct leme_workspace_transition *
+leme_render_workspace_transition_prepare_gesture(
     struct leme_output *output, uint16_t source_id, uint16_t destination_id,
     enum leme_tag_change_direction direction) {
   return leme_workspace_transition_prepare_with_ops(
@@ -438,9 +440,8 @@ leme_render_workspace_transition_refresh_views(struct leme_output *output) {
   }
 }
 
-static void
-leme_render_workspace_transition_apply(void *data,
-                                       const struct leme_animation_frame *frame) {
+static void leme_render_workspace_transition_apply(
+    void *data, const struct leme_animation_frame *frame) {
   struct leme_workspace_transition *transition = data;
   struct leme_output *output;
   double position;
@@ -591,12 +592,13 @@ bool leme_render_workspace_transition_set_gesture_bounds(
 }
 
 static double leme_workspace_gesture_segment(double position, bool bounded,
-                                              double minimum, double maximum) {
+                                             double minimum, double maximum) {
   if (!bounded) {
     return floor(position);
   }
-  return minimum == maximum ? minimum :
-      fmax(minimum, fmin(floor(position), maximum - 1.0));
+  return minimum == maximum
+             ? minimum
+             : fmax(minimum, fmin(floor(position), maximum - 1.0));
 }
 
 bool leme_render_workspace_transition_set_gesture_range(
@@ -606,25 +608,25 @@ bool leme_render_workspace_transition_set_gesture_range(
   if (transition == NULL || transition->ring_count < 2 ||
       (bounded && (!isfinite(minimum) || !isfinite(maximum) ||
                    fabs(minimum) > 0x1p52 - 2.0 ||
-                   fabs(maximum) > 0x1p52 - 2.0 ||
-                   minimum > maximum || floor(minimum) != minimum ||
-                   floor(maximum) != maximum))) {
+                   fabs(maximum) > 0x1p52 - 2.0 || minimum > maximum ||
+                   floor(minimum) != minimum || floor(maximum) != maximum))) {
     return false;
   }
   const double position = transition->presented_position;
   /* A long keyboard slide blends only its endpoints, not intermediate tags. */
   if (!transition->is_gesture && !transition->presented_pair_position &&
       fabs(transition->to_scalar - transition->from_scalar) > 1.0 &&
-      position != transition->from_scalar && position != transition->to_scalar) {
+      position != transition->from_scalar &&
+      position != transition->to_scalar) {
     return false;
   }
   if (transition->last_frame_valid && transition->gesture_bounded &&
       (position != floor(position) || position < transition->gesture_min ||
        position > transition->gesture_max)) {
-    const double old_segment = leme_workspace_gesture_segment(position, true,
-        transition->gesture_min, transition->gesture_max);
-    const double new_segment = leme_workspace_gesture_segment(position, bounded,
-        minimum, maximum);
+    const double old_segment = leme_workspace_gesture_segment(
+        position, true, transition->gesture_min, transition->gesture_max);
+    const double new_segment =
+        leme_workspace_gesture_segment(position, bounded, minimum, maximum);
     const bool old_one = transition->gesture_min == transition->gesture_max;
     const bool new_one = bounded && minimum == maximum;
     if (old_segment != new_segment || old_one != new_one) {
@@ -675,9 +677,12 @@ void leme_render_output_animations_finish(struct leme_output *output) {
     if (server->gesture.engaged) {
       const double raw =
           server->gesture.initial_position + server->gesture.displacement;
-      double visual = server->gesture.mode == LEME_WORKSPACE_GESTURE_SINGLE ?
-          leme_swipe_position(raw, server->gesture.center_position) : raw;
-      (void)leme_render_workspace_transition_presented_position(output, &visual);
+      double visual =
+          server->gesture.mode == LEME_WORKSPACE_GESTURE_SINGLE
+              ? leme_swipe_position(raw, server->gesture.center_position)
+              : raw;
+      (void)leme_render_workspace_transition_presented_position(output,
+                                                                &visual);
       uint16_t tag_id = server->gesture.initial_tag_id;
       if (server->gesture.ring_count > 0 && isfinite(visual)) {
         const size_t wrapped = (size_t)leme_tags_ring_wrap(
@@ -756,8 +761,7 @@ bool leme_render_workspace_transition_targets(const struct leme_output *output,
   return true;
 }
 
-static struct wlr_scene_tree *
-leme_workspace_transition_get_or_create_slot(
+static struct wlr_scene_tree *leme_workspace_transition_get_or_create_slot(
     struct leme_workspace_transition *transition, uint16_t tag_id,
     const struct leme_view *active_view, uint16_t keep_id) {
   size_t i;
@@ -814,7 +818,7 @@ leme_workspace_transition_get_or_create_slot(
 }
 
 static bool leme_workspace_transition_apply_position(struct leme_output *output,
-                                                      double position) {
+                                                     double position) {
   struct leme_workspace_transition *transition =
       output == NULL ? NULL : output->workspace_transition;
   struct leme_animation_spec spec;
@@ -838,13 +842,14 @@ static bool leme_workspace_transition_apply_position(struct leme_output *output,
     transition->last_frame_valid = true;
   }
 
-  segment = leme_workspace_gesture_segment(position, transition->gesture_bounded,
-      transition->gesture_min, transition->gesture_max);
+  segment = leme_workspace_gesture_segment(
+      position, transition->gesture_bounded, transition->gesture_min,
+      transition->gesture_max);
   fraction = position - segment;
-  const double extent = fmax((double)output->full_box.width,
-                             (double)output->full_box.height);
-  if (!isfinite(fraction) || (extent > 0.0 &&
-      fabs(fraction) > (double)INT_MAX / extent / 4.0)) {
+  const double extent =
+      fmax((double)output->full_box.width, (double)output->full_box.height);
+  if (!isfinite(fraction) ||
+      (extent > 0.0 && fabs(fraction) > (double)INT_MAX / extent / 4.0)) {
     return false;
   }
   low = (size_t)leme_tags_ring_wrap(segment, transition->ring_count);
@@ -860,8 +865,7 @@ static bool leme_workspace_transition_apply_position(struct leme_output *output,
     struct leme_workspace_effect *new_effect;
     const struct leme_view *incoming_focus;
 
-    incoming_focus =
-        leme_workspace_destination_focus(output, new_incoming_id);
+    incoming_focus = leme_workspace_destination_focus(output, new_incoming_id);
 
     if (transition->outgoing_id != new_outgoing_id) {
       new_outgoing = leme_workspace_transition_get_or_create_slot(
@@ -880,8 +884,8 @@ static bool leme_workspace_transition_apply_position(struct leme_output *output,
 
     leme_workspace_effect_restore(transition->effect);
     new_effect = transition->ops->effect_create(
-        new_outgoing, new_incoming, output->full_box,
-        LEME_TAG_CHANGE_FORWARD, &transition->settings);
+        new_outgoing, new_incoming, output->full_box, LEME_TAG_CHANGE_FORWARD,
+        &transition->settings);
     if (new_effect == NULL) {
       if (transition->last_frame_valid) {
         leme_workspace_effect_apply(transition->effect,
@@ -916,9 +920,8 @@ static bool leme_workspace_transition_apply_position(struct leme_output *output,
   transition->presented_position = position;
   transition->presented_pair_position = true;
 
-  leme_tags_position_set(
-      leme_output_tags(output),
-      leme_tags_ring_wrap(position, transition->ring_count));
+  leme_tags_position_set(leme_output_tags(output),
+                         leme_tags_ring_wrap(position, transition->ring_count));
 
   if (output->wlr_output != NULL) {
     wlr_output_schedule_frame(output->wlr_output);
@@ -942,9 +945,10 @@ static void leme_render_workspace_transition_settle_apply(
                                                 frame->scalar);
 }
 
-void leme_render_workspace_transition_settle(
-    struct leme_output *output, double from_position, double to_position,
-    double initial_velocity) {
+void leme_render_workspace_transition_settle(struct leme_output *output,
+                                             double from_position,
+                                             double to_position,
+                                             double initial_velocity) {
   struct leme_workspace_transition *transition;
   struct leme_animation_spec spec;
   struct leme_animation_subject subject;

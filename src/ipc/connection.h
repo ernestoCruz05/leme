@@ -10,11 +10,10 @@
 struct wl_event_loop;
 struct leme_control_peer;
 
-enum leme_control_code leme_control_peer_open(
-    struct leme_control_context *context,
-    struct wl_event_loop *loop,
-    int fd,
-    struct leme_control_peer **out);
+enum leme_control_code
+leme_control_peer_open(struct leme_control_context *context,
+                       struct wl_event_loop *loop, int fd,
+                       struct leme_control_peer **out);
 
 void leme_control_peer_destroy(struct leme_control_peer *peer);
 

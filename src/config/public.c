@@ -86,8 +86,8 @@ capture_overrides(struct leme_public_builder *b,
     }
     struct leme_public_value *cloned_val = NULL;
     if (leme_public_clone(b, ov->value, &cloned_val) != LEME_PUBLIC_OK ||
-        leme_public_object_set(b, obj, LEME_PUBLIC_TEXT("value"),
-                               cloned_val) != LEME_PUBLIC_OK) {
+        leme_public_object_set(b, obj, LEME_PUBLIC_TEXT("value"), cloned_val) !=
+            LEME_PUBLIC_OK) {
       return leme_public_builder_status(b);
     }
     if (leme_public_array_set(b, arr, i, obj) != LEME_PUBLIC_OK) {
@@ -111,13 +111,14 @@ leme_config_public_capture(struct leme_public_builder *b,
     return leme_public_fail(b, LEME_PUBLIC_LOCKED);
   if (server->config == NULL)
     return leme_public_fail(b, LEME_PUBLIC_UNAVAILABLE);
-  const struct leme_config *baseline =
-      server->config_store != NULL ? server->config_store->baseline
-                                   : server->config;
-  const struct leme_config *effective =
-      server->config_store != NULL ? server->config_store->effective
-                                   : server->config;
-  const struct leme_public_features features = leme_public_server_features(server);
+  const struct leme_config *baseline = server->config_store != NULL
+                                           ? server->config_store->baseline
+                                           : server->config;
+  const struct leme_config *effective = server->config_store != NULL
+                                            ? server->config_store->effective
+                                            : server->config;
+  const struct leme_public_features features =
+      leme_public_server_features(server);
   struct leme_public_value *loaded_settings = NULL;
   struct leme_public_value *effective_settings = NULL;
   struct leme_public_value *metadata = NULL;

@@ -61,8 +61,8 @@ void leme_render_init(struct leme_server *server) {
       server->scene_bottom == NULL || server->scene_tiled == NULL ||
       server->scene_floating == NULL || server->scene_durable == NULL ||
       server->scene_top == NULL || server->scene_fullscreen == NULL ||
-      server->scene_overlay == NULL ||
-      server->scene_drag == NULL || server->scene_lock == NULL) {
+      server->scene_overlay == NULL || server->scene_drag == NULL ||
+      server->scene_lock == NULL) {
     leme_render_finish(server);
     return;
   }

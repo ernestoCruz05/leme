@@ -127,11 +127,12 @@ double leme_animation_elapsed(const struct timespec *start,
                               const struct timespec *now, uint32_t duration_ms);
 #define LEME_ANIMATION_SPRING_SETTLE_MAX_MS 10000u
 
-double leme_animation_spring_value_at(
-    const struct leme_animation_spring *spring, double initial_velocity,
-    double seconds);
-uint32_t leme_animation_spring_duration_ms(
-    const struct leme_animation_spring *spring, double initial_velocity);
+double
+leme_animation_spring_value_at(const struct leme_animation_spring *spring,
+                               double initial_velocity, double seconds);
+uint32_t
+leme_animation_spring_duration_ms(const struct leme_animation_spring *spring,
+                                  double initial_velocity);
 
 double leme_animation_spring_displacement_at(
     const struct leme_animation_spring *spring, double displacement,

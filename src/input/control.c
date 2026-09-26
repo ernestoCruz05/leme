@@ -38,9 +38,9 @@ struct input_control_prepared {
   bool is_noop;
 };
 
-static enum leme_control_code set_preflight_error(
-    struct leme_control_error *error, enum leme_control_code code,
-    const char *msg) {
+static enum leme_control_code
+set_preflight_error(struct leme_control_error *error,
+                    enum leme_control_code code, const char *msg) {
   if (error != NULL) {
     error->code = code;
     error->phase = LEME_CONTROL_PREFLIGHT;
@@ -52,9 +52,8 @@ static enum leme_control_code set_preflight_error(
 }
 
 enum leme_control_code leme_input_control_prepare(
-    struct leme_server *server,
-    const struct leme_control_intent *intents, size_t count,
-    struct leme_public_budget *account,
+    struct leme_server *server, const struct leme_control_intent *intents,
+    size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
   if (server == NULL || intents == NULL || count == 0 || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
@@ -152,8 +151,7 @@ enum leme_control_code leme_input_control_prepare(
     prep->account = account;
     prep->count = 1;
     memcpy(prep->layout_label, label, sizeof(prep->layout_label));
-    prep->is_noop =
-        (server->keyboard_layout == (xkb_layout_index_t)target_idx);
+    prep->is_noop = (server->keyboard_layout == (xkb_layout_index_t)target_idx);
     *out = (struct leme_control_prepared *)prep;
     return LEME_CONTROL_OK;
   }
@@ -169,8 +167,7 @@ enum leme_control_code leme_input_control_prepare(
         leme_public_at(intents[0].args, 0);
     const struct leme_public_value *val_val =
         leme_public_at(intents[0].args, 1);
-    if (key_val == NULL ||
-        leme_public_kind(key_val) != LEME_PUBLIC_STRING) {
+    if (key_val == NULL || leme_public_kind(key_val) != LEME_PUBLIC_STRING) {
       return set_preflight_error(error, LEME_CONTROL_TYPE_ERROR,
                                  "key must be string");
     }
@@ -196,8 +193,7 @@ enum leme_control_code leme_input_control_prepare(
       leme_public_as_text(val_val, &ptext);
       if (ptext.length == 4 && memcmp(ptext.data, "flat", 4) == 0) {
         setting.profile = LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
-      } else if (ptext.length == 8 &&
-                 memcmp(ptext.data, "adaptive", 8) == 0) {
+      } else if (ptext.length == 8 && memcmp(ptext.data, "adaptive", 8) == 0) {
         setting.profile = LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
       } else {
         return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
@@ -346,10 +342,11 @@ enum leme_control_code leme_input_control_prepare(
                              "unsupported action opcode");
 }
 
-enum leme_control_code leme_input_control_execute_one(
-    struct leme_server *server, struct leme_control_prepared *prepared,
-    size_t index, enum leme_control_outcome *outcome,
-    struct leme_control_error *error) {
+enum leme_control_code
+leme_input_control_execute_one(struct leme_server *server,
+                               struct leme_control_prepared *prepared,
+                               size_t index, enum leme_control_outcome *outcome,
+                               struct leme_control_error *error) {
   if (server == NULL || prepared == NULL || outcome == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }

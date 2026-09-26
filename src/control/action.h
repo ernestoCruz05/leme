@@ -46,51 +46,64 @@ struct leme_control_prepared;
 
 struct leme_control_domain {
   void *context;
-  enum leme_control_code (*prepare)(
-      void *context, const struct leme_control_intent *intents, size_t count,
-      struct leme_public_budget *account,
-      struct leme_control_prepared **out, struct leme_control_error *error);
-  enum leme_control_code (*execute_one)(
-      void *context, struct leme_control_prepared *prepared, size_t index,
-      enum leme_control_outcome *outcome, struct leme_control_error *error);
+  enum leme_control_code (*prepare)(void *context,
+                                    const struct leme_control_intent *intents,
+                                    size_t count,
+                                    struct leme_public_budget *account,
+                                    struct leme_control_prepared **out,
+                                    struct leme_control_error *error);
+  enum leme_control_code (*execute_one)(void *context,
+                                        struct leme_control_prepared *prepared,
+                                        size_t index,
+                                        enum leme_control_outcome *outcome,
+                                        struct leme_control_error *error);
   void (*discard)(void *context, struct leme_control_prepared *prepared);
 };
 
 struct leme_control_plan;
 
-enum leme_control_code leme_control_prepare_action(
-    struct leme_control_context *context,
-    const struct leme_control_program *program,
-    const struct leme_public_snapshot *snapshot,
-    struct leme_control_plan **out, struct leme_control_error *error);
+enum leme_control_code
+leme_control_prepare_action(struct leme_control_context *context,
+                            const struct leme_control_program *program,
+                            const struct leme_public_snapshot *snapshot,
+                            struct leme_control_plan **out,
+                            struct leme_control_error *error);
 
-enum leme_control_code leme_control_execute_action(
-    struct leme_control_context *context,
-    struct leme_control_plan *plan,
-    struct leme_control_error *error);
+enum leme_control_code
+leme_control_execute_action(struct leme_control_context *context,
+                            struct leme_control_plan *plan,
+                            struct leme_control_error *error);
 
 void leme_control_plan_destroy(struct leme_control_plan *plan);
 
-struct leme_public_text leme_control_plan_revision(const struct leme_control_plan *plan);
+struct leme_public_text
+leme_control_plan_revision(const struct leme_control_plan *plan);
 size_t leme_control_plan_count(const struct leme_control_plan *plan);
-enum leme_control_outcome leme_control_plan_outcome(const struct leme_control_plan *plan, size_t index);
+enum leme_control_outcome
+leme_control_plan_outcome(const struct leme_control_plan *plan, size_t index);
 size_t leme_control_plan_affected(const struct leme_control_plan *plan);
 bool leme_control_plan_effects_applied(const struct leme_control_plan *plan);
-struct leme_public_text leme_control_plan_requested_id(const struct leme_control_plan *plan, size_t index);
-struct leme_public_text leme_control_plan_effective_id(const struct leme_control_plan *plan, size_t index);
-const struct leme_control_target *leme_control_plan_target(const struct leme_control_plan *plan, size_t index);
-size_t leme_control_plan_requested_count(const struct leme_control_plan *plan, size_t index);
-struct leme_public_text leme_control_plan_requested_target(const struct leme_control_plan *plan, size_t index, size_t req_index);
+struct leme_public_text
+leme_control_plan_requested_id(const struct leme_control_plan *plan,
+                               size_t index);
+struct leme_public_text
+leme_control_plan_effective_id(const struct leme_control_plan *plan,
+                               size_t index);
+const struct leme_control_target *
+leme_control_plan_target(const struct leme_control_plan *plan, size_t index);
+size_t leme_control_plan_requested_count(const struct leme_control_plan *plan,
+                                         size_t index);
+struct leme_public_text
+leme_control_plan_requested_target(const struct leme_control_plan *plan,
+                                   size_t index, size_t req_index);
 
 enum leme_control_code leme_control_plan_value(
-    const struct leme_control_plan *plan,
-    struct leme_public_builder *builder,
-    const char *warning_code,
-    struct leme_public_value **out);
+    const struct leme_control_plan *plan, struct leme_public_builder *builder,
+    const char *warning_code, struct leme_public_value **out);
 
-enum leme_control_code leme_control_plan_details(
-    const struct leme_control_plan *plan,
-    struct leme_public_builder *builder,
-    struct leme_public_value **out);
+enum leme_control_code
+leme_control_plan_details(const struct leme_control_plan *plan,
+                          struct leme_public_builder *builder,
+                          struct leme_public_value **out);
 
 #endif

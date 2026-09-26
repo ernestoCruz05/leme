@@ -1218,9 +1218,9 @@ leme_output_head_box(const struct wlr_output_configuration_head_v1 *head,
       .x = head->state.x,
       .y = head->state.y,
   };
-  return leme_output_logical_size(
-             width, height, head->state.scale, head->state.transform,
-             &box->width, &box->height) &&
+  return leme_output_logical_size(width, height, head->state.scale,
+                                  head->state.transform, &box->width,
+                                  &box->height) &&
          leme_output_box_edges(box, NULL, NULL);
 }
 

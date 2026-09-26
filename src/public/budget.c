@@ -72,7 +72,8 @@ enum leme_public_status
 leme_public_budget_reserve(struct leme_public_budget *budget, size_t bytes) {
   if (budget == NULL)
     return LEME_PUBLIC_INVALID;
-  for (struct leme_public_budget *cur = budget; cur != NULL; cur = cur->parent) {
+  for (struct leme_public_budget *cur = budget; cur != NULL;
+       cur = cur->parent) {
     if (bytes > cur->maximum - cur->used)
       return LEME_PUBLIC_LIMIT;
   }
@@ -85,7 +86,8 @@ void leme_public_budget_release(struct leme_public_budget *budget,
                                 size_t bytes) {
   if (budget == NULL)
     return;
-  for (struct leme_public_budget *cur = budget; cur != NULL; cur = cur->parent) {
+  for (struct leme_public_budget *cur = budget; cur != NULL;
+       cur = cur->parent) {
     const size_t min_used = cur->parent == NULL ? sizeof(*cur) : 0;
     if (bytes > cur->used - min_used)
       abort();

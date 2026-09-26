@@ -67,8 +67,8 @@ static void pop_path_arg(struct compiler *c, size_t prev_len) {
   c->path_buf[c->path_len] = '\0';
 }
 
-static enum leme_control_code
-reserve_node(struct compiler *c, uint32_t *out_idx) {
+static enum leme_control_code reserve_node(struct compiler *c,
+                                           uint32_t *out_idx) {
   if (c->program->node_count >= c->limits->expression_nodes)
     return set_error(c, LEME_CONTROL_RESOURCE_LIMIT,
                      "expression node limit exceeded");
@@ -86,9 +86,9 @@ reserve_node(struct compiler *c, uint32_t *out_idx) {
             : leme_control_realloc(c->program->nodes,
                                    new_cap * sizeof(struct leme_control_node));
     if (new_nodes == NULL) {
-      enum leme_control_code code =
-          errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
-                          : LEME_CONTROL_OUT_OF_MEMORY;
+      enum leme_control_code code = errno == ENOSPC
+                                        ? LEME_CONTROL_RESOURCE_LIMIT
+                                        : LEME_CONTROL_OUT_OF_MEMORY;
       return set_error(c, code, "node allocation failed");
     }
     c->program->nodes = new_nodes;
@@ -99,16 +99,17 @@ reserve_node(struct compiler *c, uint32_t *out_idx) {
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-reserve_args(struct compiler *c, size_t count, uint32_t **out_ptr) {
+static enum leme_control_code reserve_args(struct compiler *c, size_t count,
+                                           uint32_t **out_ptr) {
   if (count == 0) {
     *out_ptr = NULL;
     return LEME_CONTROL_OK;
   }
   if (c->program->arg_pool_count + count > c->program->arg_pool_capacity) {
     size_t needed = c->program->arg_pool_count + count;
-    size_t new_cap =
-        c->program->arg_pool_capacity == 0 ? 32 : c->program->arg_pool_capacity * 2;
+    size_t new_cap = c->program->arg_pool_capacity == 0
+                         ? 32
+                         : c->program->arg_pool_capacity * 2;
     if (new_cap < needed)
       new_cap = needed;
 
@@ -118,9 +119,9 @@ reserve_args(struct compiler *c, size_t count, uint32_t **out_ptr) {
             : leme_control_realloc(c->program->arg_pool,
                                    new_cap * sizeof(uint32_t));
     if (new_pool == NULL) {
-      enum leme_control_code code =
-          errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
-                          : LEME_CONTROL_OUT_OF_MEMORY;
+      enum leme_control_code code = errno == ENOSPC
+                                        ? LEME_CONTROL_RESOURCE_LIMIT
+                                        : LEME_CONTROL_OUT_OF_MEMORY;
       return set_error(c, code, "arg allocation failed");
     }
     c->program->arg_pool = new_pool;
@@ -188,9 +189,8 @@ compile_field(struct compiler *c, const struct leme_public_value *fval,
                      "field selector outside item scope");
 
   struct leme_control_type field_type = {0};
-  enum leme_control_code code =
-      leme_control_resolve_field_path(item_scope, path.components, count,
-                                      &field_type);
+  enum leme_control_code code = leme_control_resolve_field_path(
+      item_scope, path.components, count, &field_type);
   if (code != LEME_CONTROL_OK)
     return set_error(c, code, "failed to resolve field path");
 
@@ -221,8 +221,7 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
                      "call name must be string");
 
   if (leme_public_kind(args_val) != LEME_PUBLIC_ARRAY)
-    return set_error(c, LEME_CONTROL_INVALID_REQUEST,
-                     "args must be an array");
+    return set_error(c, LEME_CONTROL_INVALID_REQUEST, "args must be an array");
 
   const struct leme_control_operator *op =
       leme_control_operator_find(call_name);
@@ -271,8 +270,8 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
     }
 
     uint32_t child_idx = 0;
-    code = compile_node(c, arg_node, scope_for_arg, depth + 1, false,
-                        &child_idx);
+    code =
+        compile_node(c, arg_node, scope_for_arg, depth + 1, false, &child_idx);
     if (code != LEME_CONTROL_OK) {
       pop_path_arg(c, prev_len);
       return code;
@@ -379,8 +378,7 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
         child->type.kind != LEME_CONTROL_TYPE_BOOLEAN &&
         child->type.kind != LEME_CONTROL_TYPE_ANY) {
       size_t prev_len = push_path_arg(c, i);
-      code = set_error(c, LEME_CONTROL_TYPE_ERROR,
-                       "expected boolean argument");
+      code = set_error(c, LEME_CONTROL_TYPE_ERROR, "expected boolean argument");
       pop_path_arg(c, prev_len);
       return code;
     }
@@ -392,8 +390,7 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
         child->type.kind != LEME_CONTROL_TYPE_NUMBER &&
         child->type.kind != LEME_CONTROL_TYPE_ANY) {
       size_t prev_len = push_path_arg(c, i);
-      code = set_error(c, LEME_CONTROL_TYPE_ERROR,
-                       "expected number argument");
+      code = set_error(c, LEME_CONTROL_TYPE_ERROR, "expected number argument");
       pop_path_arg(c, prev_len);
       return code;
     }
@@ -402,8 +399,8 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
       if (i % 2 == 0 && child->type.kind != LEME_CONTROL_TYPE_STRING &&
           child->type.kind != LEME_CONTROL_TYPE_ANY) {
         size_t prev_len = push_path_arg(c, i);
-        code = set_error(c, LEME_CONTROL_TYPE_ERROR,
-                         "object key must be string");
+        code =
+            set_error(c, LEME_CONTROL_TYPE_ERROR, "object key must be string");
         pop_path_arg(c, prev_len);
         return code;
       }
@@ -469,13 +466,12 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
   }
 
   struct leme_control_type res_type = {0};
-  code = leme_control_infer_operator_result(op, child_types, arg_count,
-                                           &res_type);
+  code =
+      leme_control_infer_operator_result(op, child_types, arg_count, &res_type);
   if (code != LEME_CONTROL_OK)
     return set_error(c, code, "type inference failed");
 
-  uint32_t roots =
-      leme_control_operator_roots(op, child_literals, arg_count);
+  uint32_t roots = leme_control_operator_roots(op, child_literals, arg_count);
   for (size_t i = 0; i < arg_count; ++i) {
     roots |= c->program->nodes[arg_indices[i]].roots;
   }
@@ -549,10 +545,11 @@ compile_node(struct compiler *c, const struct leme_public_value *node_val,
                    "malformed expression node shape");
 }
 
-enum leme_control_code leme_control_compile(
-    struct leme_control_context *context,
-    const struct leme_control_request *request,
-    struct leme_control_program **out, struct leme_control_error *error) {
+enum leme_control_code
+leme_control_compile(struct leme_control_context *context,
+                     const struct leme_control_request *request,
+                     struct leme_control_program **out,
+                     struct leme_control_error *error) {
   return leme_control_compile_work(context, request, NULL, out, error);
 }
 
@@ -582,9 +579,8 @@ leme_control_compile_work(struct leme_control_context *context,
   struct leme_control_program *prog =
       leme_control_alloc(account, sizeof(struct leme_control_program));
   if (prog == NULL) {
-    enum leme_control_code code =
-        errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
-                        : LEME_CONTROL_OUT_OF_MEMORY;
+    enum leme_control_code code = errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
+                                                  : LEME_CONTROL_OUT_OF_MEMORY;
     if (error != NULL) {
       error->code = code;
       error->phase = LEME_CONTROL_VALIDATE;
@@ -640,7 +636,8 @@ leme_control_compile_work(struct leme_control_context *context,
   return LEME_CONTROL_OK;
 }
 
-uint32_t leme_control_program_roots(const struct leme_control_program *program) {
+uint32_t
+leme_control_program_roots(const struct leme_control_program *program) {
   return program != NULL ? program->roots : 0;
 }
 

@@ -11,11 +11,14 @@ struct sort_entry {
   size_t original_index;
 };
 
-static enum leme_control_code
-compare_entries(struct evaluator *ev, const struct sort_entry *a,
-                const struct sort_entry *b, bool is_desc, int *out_cmp) {
-  bool a_null = (a->key == NULL || leme_public_kind(a->key) == LEME_PUBLIC_NULL);
-  bool b_null = (b->key == NULL || leme_public_kind(b->key) == LEME_PUBLIC_NULL);
+static enum leme_control_code compare_entries(struct evaluator *ev,
+                                              const struct sort_entry *a,
+                                              const struct sort_entry *b,
+                                              bool is_desc, int *out_cmp) {
+  bool a_null =
+      (a->key == NULL || leme_public_kind(a->key) == LEME_PUBLIC_NULL);
+  bool b_null =
+      (b->key == NULL || leme_public_kind(b->key) == LEME_PUBLIC_NULL);
   if (a_null && b_null) {
     *out_cmp = (a->original_index < b->original_index) ? -1 : 1;
     return LEME_CONTROL_OK;
@@ -66,9 +69,9 @@ compare_entries(struct evaluator *ev, const struct sort_entry *a,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_where(struct evaluator *ev, const struct leme_control_node *node,
-           const struct leme_public_value **out) {
+static enum leme_control_code eval_where(struct evaluator *ev,
+                                         const struct leme_control_node *node,
+                                         const struct leme_public_value **out) {
   const struct leme_public_value *col = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &col);
@@ -198,8 +201,8 @@ eval_select(struct evaluator *ev, const struct leme_control_node *node,
   memset(keys, 0, field_count * sizeof(struct select_key));
 
   for (size_t j = 0; j < field_count; ++j) {
-    const struct leme_control_node *fn =
-        leme_control_program_node(ev->program, node->as.call.arg_indices[j + 1]);
+    const struct leme_control_node *fn = leme_control_program_node(
+        ev->program, node->as.call.arg_indices[j + 1]);
     if (fn == NULL || fn->kind != LEME_CONTROL_NODE_FIELD) {
       free_select_keys(keys, field_count);
       return eval_set_error(ev, "/expr", LEME_CONTROL_INVALID_ARGUMENT,
@@ -292,9 +295,9 @@ eval_select(struct evaluator *ev, const struct leme_control_node *node,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_map(struct evaluator *ev, const struct leme_control_node *node,
-         const struct leme_public_value **out) {
+static enum leme_control_code eval_map(struct evaluator *ev,
+                                       const struct leme_control_node *node,
+                                       const struct leme_public_value **out) {
   const struct leme_public_value *col = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &col);
@@ -331,12 +334,10 @@ eval_map(struct evaluator *ev, const struct leme_control_node *node,
     ev->current_item = prev_item;
     if (code != LEME_CONTROL_OK)
       return code;
-    const struct leme_public_value *owned =
-        eval_ensure_owned(ev, val, &code);
+    const struct leme_public_value *owned = eval_ensure_owned(ev, val, &code);
     if (owned == NULL)
       return code;
-    if (leme_public_array_set(ev->builder, res, i, owned) !=
-        LEME_PUBLIC_OK)
+    if (leme_public_array_set(ev->builder, res, i, owned) != LEME_PUBLIC_OK)
       return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                             "array set failed");
   }
@@ -483,8 +484,7 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
       leme_control_free(entries);
       return code;
     }
-    if (leme_public_array_set(ev->builder, res, i, owned) !=
-        LEME_PUBLIC_OK) {
+    if (leme_public_array_set(ev->builder, res, i, owned) != LEME_PUBLIC_OK) {
       leme_control_free(entries);
       return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                             "array set failed");
@@ -496,9 +496,9 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_limit(struct evaluator *ev, const struct leme_control_node *node,
-           const struct leme_public_value **out) {
+static enum leme_control_code eval_limit(struct evaluator *ev,
+                                         const struct leme_control_node *node,
+                                         const struct leme_public_value **out) {
   const struct leme_public_value *col = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &col);
@@ -536,12 +536,10 @@ eval_limit(struct evaluator *ev, const struct leme_control_node *node,
 
   for (size_t i = 0; i < n; ++i) {
     const struct leme_public_value *item = leme_public_at(col, i);
-    const struct leme_public_value *owned =
-        eval_ensure_owned(ev, item, &code);
+    const struct leme_public_value *owned = eval_ensure_owned(ev, item, &code);
     if (owned == NULL)
       return code;
-    if (leme_public_array_set(ev->builder, res, i, owned) !=
-        LEME_PUBLIC_OK)
+    if (leme_public_array_set(ev->builder, res, i, owned) != LEME_PUBLIC_OK)
       return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                             "array set failed");
   }
@@ -550,9 +548,9 @@ eval_limit(struct evaluator *ev, const struct leme_control_node *node,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_first(struct evaluator *ev, const struct leme_control_node *node,
-           const struct leme_public_value **out) {
+static enum leme_control_code eval_first(struct evaluator *ev,
+                                         const struct leme_control_node *node,
+                                         const struct leme_public_value **out) {
   const struct leme_public_value *col = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &col);

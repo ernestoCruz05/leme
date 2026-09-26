@@ -6,7 +6,8 @@
 struct leme_server;
 struct leme_view;
 
-struct leme_public_features leme_public_server_features(const struct leme_server *server);
+struct leme_public_features
+leme_public_server_features(const struct leme_server *server);
 bool leme_public_server_init(struct leme_server *server);
 bool leme_public_server_prepare(struct leme_server *server);
 void leme_public_server_finish(struct leme_server *server);

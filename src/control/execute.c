@@ -10,10 +10,10 @@ static uint64_t monotonic_now_ns(void *context) {
   return leme_control_now_ns(context);
 }
 
-enum leme_control_code leme_control_execute_action(
-    struct leme_control_context *context,
-    struct leme_control_plan *plan,
-    struct leme_control_error *error) {
+enum leme_control_code
+leme_control_execute_action(struct leme_control_context *context,
+                            struct leme_control_plan *plan,
+                            struct leme_control_error *error) {
   if (context == NULL || plan == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }

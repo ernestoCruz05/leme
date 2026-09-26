@@ -464,10 +464,9 @@ field_value(struct leme_public_builder *b,
       first->kind == LEME_PUBLIC_OBJECT                      ? first->name
       : second != NULL && second->kind == LEME_PUBLIC_OBJECT ? second->name
                                                              : NULL;
-  const bool writable =
-      field->write_capability != NULL && available &&
-      strcmp(field->write_capability, "config_writes") == 0 &&
-      features->config_writes;
+  const bool writable = field->write_capability != NULL && available &&
+                        strcmp(field->write_capability, "config_writes") == 0 &&
+                        features->config_writes;
   if (leme_public_object(b, path == NULL ? 18u : 19u, &record) !=
           LEME_PUBLIC_OK ||
       leme_public_put_text(b, record, LEME_PUBLIC_TEXT("name"), field->name,
@@ -486,8 +485,8 @@ field_value(struct leme_public_builder *b,
                            access_name(field->access)) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("available"),
                            available) != LEME_PUBLIC_OK ||
-      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("writable"),
-                           writable) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("writable"), writable) !=
+          LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("write_capability"),
                            field->write_capability) != LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("items"), items) !=
@@ -801,11 +800,11 @@ leme_public_operation_value(struct leme_public_builder *b,
     struct leme_public_value *arg = NULL;
     if (leme_public_object(b, 2, &arg) != LEME_PUBLIC_OK ||
         leme_public_put_text(b, arg, LEME_PUBLIC_TEXT("type"),
-                             operation->arguments[i].type, false) !=
-            LEME_PUBLIC_OK ||
+                             operation->arguments[i].type,
+                             false) != LEME_PUBLIC_OK ||
         leme_public_put_text(b, arg, LEME_PUBLIC_TEXT("scope"),
-                             operation->arguments[i].scope, false) !=
-            LEME_PUBLIC_OK ||
+                             operation->arguments[i].scope,
+                             false) != LEME_PUBLIC_OK ||
         leme_public_array_set(b, arguments, i, arg) != LEME_PUBLIC_OK)
       return leme_public_builder_status(b);
   }
@@ -979,7 +978,8 @@ leme_public_schema_reference(const struct leme_public_schema *schema) {
   return schema != NULL ? schema->related : NULL;
 }
 
-size_t leme_public_schema_alternatives(const struct leme_public_schema *schema) {
+size_t
+leme_public_schema_alternatives(const struct leme_public_schema *schema) {
   if (schema == NULL)
     return 0;
   if (schema->primary != NULL && schema->alternative != NULL)
@@ -1006,7 +1006,8 @@ size_t leme_public_schema_fields(const struct leme_public_schema *schema) {
 }
 
 const struct leme_public_field *
-leme_public_schema_field(const struct leme_public_schema *schema, size_t index) {
+leme_public_schema_field(const struct leme_public_schema *schema,
+                         size_t index) {
   if (schema == NULL || index >= schema->field_count)
     return NULL;
   return &schema->fields[index];

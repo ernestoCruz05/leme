@@ -7,9 +7,9 @@
 #include <math.h>
 #include <string.h>
 
-static enum leme_control_code
-eval_root(struct evaluator *ev, enum leme_control_opcode opcode,
-          const struct leme_public_value **out) {
+static enum leme_control_code eval_root(struct evaluator *ev,
+                                        enum leme_control_opcode opcode,
+                                        const struct leme_public_value **out) {
   if (ev->snapshot == NULL)
     return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
                           "snapshot not available");
@@ -58,9 +58,9 @@ eval_root(struct evaluator *ev, enum leme_control_opcode opcode,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_view(struct evaluator *ev, const struct leme_control_node *node,
-          const struct leme_public_value **out) {
+static enum leme_control_code eval_view(struct evaluator *ev,
+                                        const struct leme_control_node *node,
+                                        const struct leme_public_value **out) {
   const struct leme_public_value *arg0 = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &arg0);
@@ -88,9 +88,9 @@ eval_view(struct evaluator *ev, const struct leme_control_node *node,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_input(struct evaluator *ev, const struct leme_control_node *node,
-           const struct leme_public_value **out) {
+static enum leme_control_code eval_input(struct evaluator *ev,
+                                         const struct leme_control_node *node,
+                                         const struct leme_public_value **out) {
   const struct leme_public_value *arg0 = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &arg0);
@@ -171,9 +171,9 @@ eval_output(struct evaluator *ev, const struct leme_control_node *node,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_tag(struct evaluator *ev, const struct leme_control_node *node,
-         const struct leme_public_value **out) {
+static enum leme_control_code eval_tag(struct evaluator *ev,
+                                       const struct leme_control_node *node,
+                                       const struct leme_public_value **out) {
   const struct leme_public_value *arg0 = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &arg0);
@@ -301,16 +301,15 @@ eval_tag(struct evaluator *ev, const struct leme_control_node *node,
                           "work limit exceeded");
 
   if (matched_tag == NULL)
-    return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
-                          "tag not found");
+    return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND, "tag not found");
 
   *out = matched_tag;
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_by_id(struct evaluator *ev, const struct leme_control_node *node,
-           const struct leme_public_value **out) {
+static enum leme_control_code eval_by_id(struct evaluator *ev,
+                                         const struct leme_control_node *node,
+                                         const struct leme_public_value **out) {
   const struct leme_public_value *arg0 = NULL;
   enum leme_control_code code =
       eval_node(ev, node->as.call.arg_indices[0], &arg0);
@@ -400,9 +399,9 @@ eval_describe(struct evaluator *ev, const struct leme_control_node *node,
     enum leme_public_status st =
         leme_public_operation_value(ev->builder, op, &res);
     if (st != LEME_PUBLIC_OK) {
-      enum leme_control_code c = (st == LEME_PUBLIC_LIMIT
-                                      ? LEME_CONTROL_RESOURCE_LIMIT
-                                      : LEME_CONTROL_OUT_OF_MEMORY);
+      enum leme_control_code c =
+          (st == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
+                                   : LEME_CONTROL_OUT_OF_MEMORY);
       return eval_set_error(ev, "/expr", c,
                             "operation descriptor build failed");
     }
@@ -413,9 +412,9 @@ eval_describe(struct evaluator *ev, const struct leme_control_node *node,
       return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
                             "root not found");
     if (st != LEME_PUBLIC_OK) {
-      enum leme_control_code c = (st == LEME_PUBLIC_LIMIT
-                                      ? LEME_CONTROL_RESOURCE_LIMIT
-                                      : LEME_CONTROL_OUT_OF_MEMORY);
+      enum leme_control_code c =
+          (st == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
+                                   : LEME_CONTROL_OUT_OF_MEMORY);
       return eval_set_error(ev, "/expr", c, "root descriptor build failed");
     }
   } else if (cat.length == 4 && memcmp(cat.data, "type", 4) == 0) {
@@ -425,9 +424,9 @@ eval_describe(struct evaluator *ev, const struct leme_control_node *node,
       return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
                             "type not found");
     if (st != LEME_PUBLIC_OK) {
-      enum leme_control_code c = (st == LEME_PUBLIC_LIMIT
-                                      ? LEME_CONTROL_RESOURCE_LIMIT
-                                      : LEME_CONTROL_OUT_OF_MEMORY);
+      enum leme_control_code c =
+          (st == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
+                                   : LEME_CONTROL_OUT_OF_MEMORY);
       return eval_set_error(ev, "/expr", c, "type descriptor build failed");
     }
   } else {
@@ -443,9 +442,9 @@ eval_describe(struct evaluator *ev, const struct leme_control_node *node,
   return LEME_CONTROL_OK;
 }
 
-enum leme_control_code
-eval_lookup_call(struct evaluator *ev, const struct leme_control_node *node,
-                 const struct leme_public_value **out) {
+enum leme_control_code eval_lookup_call(struct evaluator *ev,
+                                        const struct leme_control_node *node,
+                                        const struct leme_public_value **out) {
   if (ev == NULL || node == NULL || out == NULL || node->as.call.op == NULL)
     return eval_set_error(ev, "/expr", LEME_CONTROL_INVALID_ARGUMENT,
                           "invalid eval call");
