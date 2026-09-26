@@ -95,7 +95,6 @@ stdenv.mkDerivation {
 
   mesonFlags = [
     "-Deffects=true"
-    "--wrap-mode=nodownload"
   ];
 
   passthru.providedSessions = [ "leme" ];
