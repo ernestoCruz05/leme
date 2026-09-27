@@ -6,13 +6,15 @@ This page lists the protocol behavior that matters to clients. Leme advertises o
 
 Leme supports XDG shell toplevels and recursive popups. Parented transients keep their parent's output and tag, float above tiled views, and center over the parent. Fixed-size unparented prompts start floating; ordinary resizable windows tile.
 
+Leme advertises XDG shell version 6. It tells clients that fullscreen is the only window-management capability, so toolkits can hide maximize and minimize buttons, and it answers maximize requests with an unmaximized configure. A new window receives the usable area of the focused output as its bounds. A window that is not on an enabled output, for example on a hidden tag, in a hidden scratchpad, or on a powered-off output, is marked suspended so its client can stop rendering.
+
 Layer-shell v5 supports wallpaper, panels, launchers, notifications, overlays, drag surfaces, and lock surfaces. Leme honors exclusive zones and keyboard interactivity. Viewporter and fractional-scale protocols are available to current layer-shell clients.
 
 ## Input and data exchange
 
 Leme supports keyboard layouts, relative pointer, pointer constraints, pointer lock, shortcut inhibition, cursor shape, clipboard and primary selection, legacy and standardized data-control, pointer drag and drop, and XWayland selection bridging.
 
-While shortcut inhibition is active, normal compositor bindings and SUPER pointer grabs go to the focused client. `switch_vt` and `quit` remain emergency actions.
+While shortcut inhibition is active, normal compositor bindings and SUPER pointer grabs go to the focused client. `switch_vt` and `quit` remain emergency actions, and `toggle_shortcuts_inhibit` deactivates the inhibitor until the window loses focus or the command runs again.
 
 Leme supports `virtual-keyboard-unstable-v1` and `wlr-virtual-pointer-unstable-v1`. Any client can create a virtual keyboard or pointer. Its input goes to the focused client like physical input, triggers compositor bindings, and reaches the lock screen while the session is locked. A virtual keyboard keeps the keymap its client sends; configured layouts and layout switching apply only to physical keyboards. A virtual pointer created for a specific output moves within that output.
 

@@ -769,6 +769,7 @@ static bool leme_output_reconcile(struct leme_server *server,
     leme_layer_restore_keyboard_focus(server);
   }
   leme_view_arrange(server);
+  leme_view_sync_suspended(server);
   leme_session_refresh_idle_inhibitors(server);
   return true;
 }

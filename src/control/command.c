@@ -1315,6 +1315,26 @@ enum leme_control_code leme_control_command_lower(
     return LEME_CONTROL_OK;
   }
 
+  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT: {
+    struct leme_control_intent *intents = alloc_intents(account, 1);
+    if (intents == NULL) {
+      leme_public_builder_destroy(b);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "out of memory");
+    }
+    intents[0].opcode = LEME_CONTROL_OP_COMMAND;
+    struct leme_public_value *c_args = NULL;
+    make_cmd_args(b, "toggle_shortcuts_inhibit", NULL, 0, false, 0, false,
+                  &c_args);
+    intents[0].args = c_args;
+    const struct leme_public_value *roots[1] = {c_args};
+    leme_public_builder_seal(b, roots, 1);
+    out->intents = intents;
+    out->count = 1;
+    out->builder = b;
+    return LEME_CONTROL_OK;
+  }
+
   case LEME_COMMAND_SCRATCHPAD_SEND: {
     if (!has_focused_view) {
       leme_public_builder_destroy(b);

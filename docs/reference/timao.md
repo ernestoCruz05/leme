@@ -29,7 +29,7 @@ Command names and argument syntax are documented in the [command reference](comm
 - `switch_layout`, `set_layout`, `remove_empty_tag`, `mode`
 - `toggle_floating`, `toggle_sticky`, `toggle_fullscreen`, `close_view`
 - `move`, `move_view_to_tag`, `move_view_to_output`, `resize`
-- `reload_config`, `cycle_keyboard_layout`
+- `reload_config`, `cycle_keyboard_layout`, `toggle_shortcuts_inhibit`
 - `scratchpad_send`, `scratchpad_retrieve`, `scratchpad_toggle`
 
 These commands use the compositor's command adapter. `spawn`, `quit` and `switch_vt` are not available as simple CLI commands. Scripts can start a detached process with `launch`. A command can succeed with a no-op result, for example when a requested state is already set.

@@ -168,6 +168,16 @@ void leme_view_ack_fullscreen(struct leme_view *view, bool fullscreen) {
   }
 }
 
+void leme_view_refuse_maximize(struct leme_view *view) {
+  if (view != NULL && view->kind == LEME_VIEW_XDG &&
+      view->xdg_toplevel != NULL && view->xdg_toplevel->base->initialized) {
+    wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, false);
+  } else if (view != NULL && view->kind == LEME_VIEW_XWAYLAND &&
+             view->xwayland_surface != NULL) {
+    wlr_xwayland_surface_set_maximized(view->xwayland_surface, false, false);
+  }
+}
+
 void leme_view_protocol_close(struct leme_view *view) {
   if (view != NULL && view->kind == LEME_VIEW_XDG &&
       view->xdg_toplevel != NULL) {

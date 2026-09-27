@@ -52,6 +52,8 @@ static const char *command_name(enum leme_command_type type) {
     return "mode";
   case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
     return "cycle_keyboard_layout";
+  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
+    return "toggle_shortcuts_inhibit";
   case LEME_COMMAND_SWITCH_VT:
     return "switch_vt";
   case LEME_COMMAND_QUIT:
@@ -201,6 +203,7 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
   case LEME_COMMAND_CLOSE_VIEW:
   case LEME_COMMAND_RELOAD_CONFIG:
   case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
+  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
   case LEME_COMMAND_QUIT:
   case LEME_COMMAND_SCRATCHPAD_SEND:
   case LEME_COMMAND_SCRATCHPAD_RETRIEVE:

@@ -11,6 +11,7 @@
 #include "shell/sticky.h"
 #include "shell/view.h"
 #include "shell/xwayland.h"
+#include "protocols/input.h"
 #include "protocols/session.h"
 
 #include <errno.h>
@@ -360,6 +361,8 @@ bool leme_command_execute(struct leme_server *server,
     return true;
   case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
     return leme_input_cycle_keyboard_layout(server);
+  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
+    return leme_input_protocols_toggle_shortcuts_inhibit(server);
   case LEME_COMMAND_SWITCH_VT:
     if (server->session == NULL) {
       wlr_log(WLR_ERROR, "%s", "leme: VT switching is unavailable");

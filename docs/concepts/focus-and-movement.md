@@ -30,4 +30,6 @@ A pointer drag can carry a view to another output when `cross_output_drag` is en
 
 ## Input ownership
 
-A focused client may inhibit keyboard shortcuts. While inhibition is active, ordinary compositor bindings and SUPER pointer grabs go to that client. `switch_vt` and `quit` remain reserved emergency commands.
+A focused client may inhibit keyboard shortcuts. While inhibition is active, ordinary compositor bindings and SUPER pointer grabs go to that client. `switch_vt`, `quit` and `toggle_shortcuts_inhibit` remain reserved commands.
+
+`toggle_shortcuts_inhibit` releases the focused window's inhibition, so every binding works again, and running it again restores it. The release lasts while that window keeps focus: when focus leaves and returns, the window inhibits shortcuts again.

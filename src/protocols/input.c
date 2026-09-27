@@ -268,6 +268,25 @@ bool leme_input_protocols_shortcuts_inhibited(
              server->seat->keyboard_state.focused_surface;
 }
 
+bool leme_input_protocols_toggle_shortcuts_inhibit(struct leme_server *server) {
+  struct leme_input_protocols *protocols = server->input_protocols;
+  struct wlr_keyboard_shortcuts_inhibitor_v1 *inhibitor;
+
+  if (protocols == NULL || protocols->active_inhibitor == NULL) {
+    wlr_log(WLR_INFO, "%s",
+            "leme: the focused window does not inhibit shortcuts");
+    return false;
+  }
+  inhibitor = protocols->active_inhibitor->inhibitor;
+  if (inhibitor->active) {
+    wlr_keyboard_shortcuts_inhibitor_v1_deactivate(inhibitor);
+  } else {
+    wlr_keyboard_shortcuts_inhibitor_v1_activate(inhibitor);
+    leme_input_set_mode(server, "common");
+  }
+  return true;
+}
+
 static void
 leme_input_protocols_handle_inhibitor_destroy(struct wl_listener *listener,
                                               void *data) {

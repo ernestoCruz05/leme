@@ -227,6 +227,7 @@ void leme_render_output_frame(struct leme_output *output) {
     return;
   }
   leme_capture_sync(output->server);
+  leme_view_sync_suspended(output->server);
   leme_view_flush_deferred_configures(output->server);
   clock_gettime(CLOCK_MONOTONIC, &now);
   leme_animation_manager_tick(&output->server->animations, &now);

@@ -36,7 +36,13 @@ binds "game" {
 
 A mode with `escape_exits false` must bind a `mode` command. This prevents a configuration edit from creating a mode with no keyboard-only way out. The setting belongs to a `binds` block, not a `bind_group`.
 
-`switch_vt` is unavailable in nested and headless sessions. `switch_vt` and `quit` remain emergency compositor actions while a client inhibits shortcuts or the session is locked.
+`switch_vt` is unavailable in nested and headless sessions. `switch_vt` and `quit` remain emergency compositor actions while a client inhibits shortcuts or the session is locked. `toggle_shortcuts_inhibit` also works while a client inhibits shortcuts; bind it to get back to Leme from a fullscreen remote desktop or virtual machine without the mouse:
+
+```scfg
+binds "common" {
+    SUPER+SHIFT+Escape toggle_shortcuts_inhibit
+}
+```
 
 Range loops can generate numbered VT bindings:
 

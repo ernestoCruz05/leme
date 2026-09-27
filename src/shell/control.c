@@ -670,6 +670,9 @@ static enum leme_control_code command_control_prepare(
   } else if (name_t.length == 21 &&
              memcmp(name_t.data, "cycle_keyboard_layout", 21) == 0) {
     prep->cmd.type = LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT;
+  } else if (name_t.length == 24 &&
+             memcmp(name_t.data, "toggle_shortcuts_inhibit", 24) == 0) {
+    prep->cmd.type = LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
   } else if (name_t.length == 15 &&
              memcmp(name_t.data, "scratchpad_send", 15) == 0) {
     if (server->focused_view == NULL || !server->focused_view->mapped ||

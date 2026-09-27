@@ -246,6 +246,8 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
     }
   } else if (strcmp(name, "cycle_keyboard_layout") == 0 && arguments == 0) {
     command->type = LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT;
+  } else if (strcmp(name, "toggle_shortcuts_inhibit") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
   } else if (strcmp(name, "switch_vt") == 0 && arguments == 1) {
     command->type = LEME_COMMAND_SWITCH_VT;
     if (!leme_command_parse_u16(params[1], &command->vt) || command->vt == 0 ||

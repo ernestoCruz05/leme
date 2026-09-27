@@ -31,6 +31,7 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `reload_config` | Parse, validate, and apply the configuration file. |
 | `mode NAME` | Select an existing binding mode. |
 | `cycle_keyboard_layout` | Select the next configured XKB group. |
+| `toggle_shortcuts_inhibit` | Release the focused window's shortcut inhibition so compositor bindings work again, or restore it. Works while shortcuts are inhibited. |
 | `switch_vt N` | Change to VT 1 through 12 through the active libseat session. |
 | `quit` | Terminate the compositor. |
 

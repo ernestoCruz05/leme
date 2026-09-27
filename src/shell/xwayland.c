@@ -380,7 +380,7 @@ static void leme_xwayland_handle_request_maximize(struct wl_listener *listener,
       wl_container_of(listener, wrapper, request_maximize);
 
   (void)data;
-  wlr_xwayland_surface_set_maximized(wrapper->xsurface, false, false);
+  leme_view_refuse_maximize(wrapper->view);
 }
 
 static bool

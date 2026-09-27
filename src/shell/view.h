@@ -79,6 +79,7 @@ struct leme_view {
   struct wl_listener set_app_id;
   struct wl_listener set_parent;
   struct wl_listener request_fullscreen;
+  struct wl_listener request_maximize;
   struct wl_listener request_move;
   struct wl_listener request_resize;
   struct wl_listener new_popup;
@@ -123,6 +124,8 @@ void leme_view_set_configure_deferred(struct leme_view *view, bool deferred);
 void leme_view_flush_deferred_configure(struct leme_view *view);
 void leme_view_flush_deferred_configures(struct leme_server *server);
 void leme_view_ack_fullscreen(struct leme_view *view, bool fullscreen);
+void leme_view_refuse_maximize(struct leme_view *view);
+void leme_view_sync_suspended(struct leme_server *server);
 void leme_view_protocol_close(struct leme_view *view);
 bool leme_view_map(struct leme_view *view,
                    const struct leme_view_map_options *options);

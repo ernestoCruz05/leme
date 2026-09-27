@@ -340,7 +340,8 @@ static void leme_input_handle_modifiers(struct wl_listener *listener,
 
 static bool leme_input_binding_reserved(const struct leme_binding *binding) {
   return binding->command.type == LEME_COMMAND_SWITCH_VT ||
-         binding->command.type == LEME_COMMAND_QUIT;
+         binding->command.type == LEME_COMMAND_QUIT ||
+         binding->command.type == LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
 }
 
 static void leme_input_handle_key(struct wl_listener *listener, void *data) {

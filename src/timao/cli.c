@@ -28,6 +28,7 @@ static const char help[] =
     "  toggle_floating; toggle_sticky; toggle_fullscreen; resize DIRECTION "
     "AMOUNT\n"
     "  close_view; reload_config; mode NAME; cycle_keyboard_layout\n"
+    "  toggle_shortcuts_inhibit\n"
     "  scratchpad_send; scratchpad_toggle [NAME]; scratchpad_retrieve\n"
     "A configured named scratchpad may launch its configured program.\n"
     "get/sub were removed: use eval '(query ...)' or eval '(watch ...)'.\n"
