@@ -24,6 +24,7 @@ struct leme_mode {
 struct leme_config;
 struct leme_server;
 struct leme_view;
+struct wlr_surface;
 
 struct xkb_keymap *leme_input_compile_keymap(const struct leme_config *config);
 bool leme_input_apply_keymap(struct leme_server *server,
@@ -38,6 +39,9 @@ void leme_input_finish(struct leme_server *server);
 void leme_input_replace_modes(struct leme_server *server,
                               struct leme_mode *modes, size_t mode_count);
 bool leme_input_set_mode(struct leme_server *server, const char *name);
+void leme_input_keyboard_enter(struct leme_server *server,
+                               struct wlr_surface *surface);
+void leme_input_apply_keyboard_repeat(struct leme_server *server);
 void leme_input_refresh_pointer_focus(struct leme_server *server,
                                       uint32_t time_msec);
 bool leme_input_pointer_grab_active(const struct leme_server *server);

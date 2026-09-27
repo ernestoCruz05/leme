@@ -212,7 +212,13 @@ PUBLIC_SCHEMA(POINTER_RULE, "pointer_rule", false,
 )
 PUBLIC_SCHEMA(KEYBOARD, "keyboard", false,
   PUBLIC_FIELD("layouts", LAYOUT_CONFIGS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
-      "Configured layout sequence")
+      "Configured layout sequence"),
+  PUBLIC_FIELD("options", STRINGS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "XKB options in configuration order"),
+  PUBLIC_FIELD("repeat_rate", COUNT, false, true, "hz", SENSITIVE, ALWAYS, NULL,
+      "Key repeats per second; 0 disables repeat"),
+  PUBLIC_FIELD("repeat_delay", POSITIVE_INT, false, true, "ms", SENSITIVE, ALWAYS, NULL,
+      "Delay before a held key starts repeating")
 )
 PUBLIC_SCHEMA(LAYOUT_CONFIG, "layout_config", false,
   PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,

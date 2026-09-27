@@ -74,13 +74,8 @@ void leme_session_restore_focus(struct leme_server *server) {
 
 static void leme_session_focus_surface(struct leme_lock_surface *wrapper) {
   struct leme_server *server = wrapper->session->server;
-  struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
 
-  if (keyboard != NULL) {
-    wlr_seat_keyboard_notify_enter(
-        server->seat, wrapper->wlr_lock_surface->surface, keyboard->keycodes,
-        keyboard->num_keycodes, &keyboard->modifiers);
-  }
+  leme_input_keyboard_enter(server, wrapper->wlr_lock_surface->surface);
   leme_input_protocols_update_keyboard_focus(server);
   leme_input_refresh_pointer_focus(server, 0);
 }

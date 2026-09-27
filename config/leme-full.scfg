@@ -103,6 +103,9 @@ scratchpad "drop" {
 keyboard {
     layout pt
     layout us
+    options compose:ralt
+    repeat_rate 25
+    repeat_delay 600
 }
 
 output {

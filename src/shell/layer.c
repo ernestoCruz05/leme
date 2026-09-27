@@ -1,5 +1,6 @@
 #include "shell/layer.h"
 
+#include "input/input.h"
 #include "protocols/input.h"
 #include "shell/layer_layout.h"
 #include "output/output.h"
@@ -32,7 +33,6 @@ bool leme_layer_keyboard_is_exclusive(const struct leme_server *server) {
 
 static void leme_layer_focus(struct leme_layer_surface *layer) {
   struct leme_server *server;
-  struct wlr_keyboard *keyboard;
 
   if (layer == NULL || !layer->mapped || layer->output == NULL ||
       !layer->output->wlr_output->enabled ||
@@ -51,12 +51,7 @@ static void leme_layer_focus(struct leme_layer_surface *layer) {
   server->focused_layer = layer;
   wlr_log(WLR_INFO, "leme: focused layer %s",
           leme_layer_namespace(layer->wlr_layer_surface));
-  keyboard = wlr_seat_get_keyboard(server->seat);
-  if (keyboard != NULL) {
-    wlr_seat_keyboard_notify_enter(
-        server->seat, layer->wlr_layer_surface->surface, keyboard->keycodes,
-        keyboard->num_keycodes, &keyboard->modifiers);
-  }
+  leme_input_keyboard_enter(server, layer->wlr_layer_surface->surface);
   leme_input_protocols_update_keyboard_focus(server);
 }
 

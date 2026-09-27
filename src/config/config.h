@@ -68,6 +68,11 @@ struct leme_output_policy {
 
 #define LEME_CURSOR_SIZE_DEFAULT 24
 #define LEME_CURSOR_SIZE_MAX 512
+#define LEME_KEYBOARD_REPEAT_RATE_DEFAULT 25
+#define LEME_KEYBOARD_REPEAT_RATE_MAX 1000
+#define LEME_KEYBOARD_REPEAT_DELAY_DEFAULT 600
+#define LEME_KEYBOARD_REPEAT_DELAY_MAX 10000
+#define LEME_KEYBOARD_OPTIONS_MAX 64
 
 struct leme_cursor_config {
   char *theme;
@@ -236,6 +241,10 @@ struct leme_config {
   size_t window_rule_count;
   struct leme_keyboard_layout *keyboard_layouts;
   size_t keyboard_layout_count;
+  char **keyboard_options;
+  size_t keyboard_option_count;
+  int keyboard_repeat_rate;
+  int keyboard_repeat_delay;
   struct leme_output_config *outputs;
   size_t output_count;
   struct leme_output_policy output_policy;

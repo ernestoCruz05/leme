@@ -487,6 +487,7 @@ bool leme_config_apply(struct leme_server *server, struct leme_config *next,
   server->config = next;
   leme_public_server_config_changed(server);
   leme_input_public_keymap_committed(server);
+  leme_input_apply_keyboard_repeat(server);
   if (old == NULL || old->cursor.size != next->cursor.size ||
       !leme_config_same_text(old->cursor.theme, next->cursor.theme)) {
     leme_session_environment_cursor(server);

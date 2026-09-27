@@ -292,8 +292,8 @@ static enum leme_public_status keyboard_value(struct leme_public_builder *b,
                                               struct leme_public_value **out) {
   if (config->keyboard_layout_count != 0 && config->keyboard_layouts == NULL)
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
-  struct leme_public_value *keyboard = NULL, *array = NULL;
-  if (leme_public_object(b, 1, &keyboard) != LEME_PUBLIC_OK ||
+  struct leme_public_value *keyboard = NULL, *array = NULL, *options = NULL;
+  if (leme_public_object(b, 4, &keyboard) != LEME_PUBLIC_OK ||
       leme_public_array(b, config->keyboard_layout_count, &array) !=
           LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
@@ -310,7 +310,15 @@ static enum leme_public_status keyboard_value(struct leme_public_builder *b,
       return leme_public_builder_status(b);
   }
   if (leme_public_object_set(b, keyboard, LEME_PUBLIC_TEXT("layouts"), array) !=
-      LEME_PUBLIC_OK)
+          LEME_PUBLIC_OK ||
+      strings_value(b, config->keyboard_options, config->keyboard_option_count,
+                    &options) != LEME_PUBLIC_OK ||
+      leme_public_object_set(b, keyboard, LEME_PUBLIC_TEXT("options"),
+                             options) != LEME_PUBLIC_OK ||
+      leme_public_put_int(b, keyboard, LEME_PUBLIC_TEXT("repeat_rate"),
+                          config->keyboard_repeat_rate) != LEME_PUBLIC_OK ||
+      leme_public_put_int(b, keyboard, LEME_PUBLIC_TEXT("repeat_delay"),
+                          config->keyboard_repeat_delay) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = keyboard;
   return LEME_PUBLIC_OK;

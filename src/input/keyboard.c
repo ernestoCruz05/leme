@@ -81,11 +81,39 @@ static char *leme_input_join_layouts(const struct leme_config *config,
   return result;
 }
 
+static char *leme_input_join_options(const struct leme_config *config) {
+  size_t length = 1;
+  size_t index;
+  char *result;
+  char *cursor;
+
+  for (index = 0; index < config->keyboard_option_count; index++) {
+    length += strlen(config->keyboard_options[index]) + 1;
+  }
+  result = malloc(length);
+  if (result == NULL) {
+    return NULL;
+  }
+  cursor = result;
+  for (index = 0; index < config->keyboard_option_count; index++) {
+    const size_t value_length = strlen(config->keyboard_options[index]);
+
+    if (index > 0) {
+      *cursor++ = ',';
+    }
+    memcpy(cursor, config->keyboard_options[index], value_length);
+    cursor += value_length;
+  }
+  *cursor = '\0';
+  return result;
+}
+
 struct xkb_keymap *leme_input_compile_keymap(const struct leme_config *config) {
   struct xkb_context *context;
   struct xkb_keymap *keymap;
   char *layouts;
   char *variants = NULL;
+  char *options = NULL;
   bool have_variant = false;
   size_t index;
 
@@ -100,26 +128,34 @@ struct xkb_keymap *leme_input_compile_keymap(const struct leme_config *config) {
   if (have_variant) {
     variants = leme_input_join_layouts(config, true);
   }
-  if (layouts == NULL || (have_variant && variants == NULL)) {
+  if (config->keyboard_option_count > 0) {
+    options = leme_input_join_options(config);
+  }
+  if (layouts == NULL || (have_variant && variants == NULL) ||
+      (config->keyboard_option_count > 0 && options == NULL)) {
     free(layouts);
     free(variants);
+    free(options);
     return NULL;
   }
   context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
   if (context == NULL) {
     free(layouts);
     free(variants);
+    free(options);
     return NULL;
   }
   const struct xkb_rule_names names = {
       .layout = layouts,
       .variant = variants,
+      .options = options,
   };
   keymap =
       xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
   xkb_context_unref(context);
   free(layouts);
   free(variants);
+  free(options);
   if (keymap != NULL &&
       xkb_keymap_num_layouts(keymap) != config->keyboard_layout_count) {
     xkb_keymap_unref(keymap);
@@ -344,6 +380,33 @@ static bool leme_input_binding_reserved(const struct leme_binding *binding) {
          binding->command.type == LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
 }
 
+static struct leme_binding *leme_input_find_binding_other_layouts(
+    struct leme_keyboard *keyboard, xkb_keycode_t keycode,
+    xkb_layout_index_t active, uint32_t modifiers) {
+  struct xkb_keymap *keymap = keyboard->keyboard->keymap;
+  xkb_layout_index_t layouts;
+
+  if (keymap == NULL) {
+    return NULL;
+  }
+  layouts = xkb_keymap_num_layouts_for_key(keymap, keycode);
+  for (xkb_layout_index_t layout = 0; layout < layouts; layout++) {
+    const xkb_keysym_t *syms = NULL;
+    struct leme_binding *binding;
+    int count;
+
+    if (layout == active) {
+      continue;
+    }
+    count = xkb_keymap_key_get_syms_by_level(keymap, keycode, layout, 0, &syms);
+    binding = leme_input_find_binding(keyboard->server, modifiers, syms, count);
+    if (binding != NULL) {
+      return binding;
+    }
+  }
+  return NULL;
+}
+
 static void leme_input_handle_key(struct wl_listener *listener, void *data) {
   struct leme_keyboard *keyboard = wl_container_of(listener, keyboard, key);
   struct wlr_keyboard_key_event *event = data;
@@ -378,6 +441,10 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
       }
     }
     binding = leme_input_find_binding(keyboard->server, modifiers, syms, count);
+    if (binding == NULL) {
+      binding = leme_input_find_binding_other_layouts(keyboard, keycode, layout,
+                                                      modifiers);
+    }
     if (binding != NULL && inhibited && !leme_input_binding_reserved(binding)) {
       binding = NULL;
     }
@@ -446,6 +513,18 @@ static void leme_input_handle_keyboard_destroy(struct wl_listener *listener,
   leme_public_server_invalidate(server);
 }
 
+static void leme_input_set_repeat(const struct leme_server *server,
+                                  struct wlr_keyboard *keyboard) {
+  const struct leme_config *config = server->config;
+
+  wlr_keyboard_set_repeat_info(
+      keyboard,
+      config == NULL ? LEME_KEYBOARD_REPEAT_RATE_DEFAULT
+                     : config->keyboard_repeat_rate,
+      config == NULL ? LEME_KEYBOARD_REPEAT_DELAY_DEFAULT
+                     : config->keyboard_repeat_delay);
+}
+
 static void leme_input_keyboard_attach(struct leme_server *server,
                                        struct wlr_keyboard *wlr_keyboard,
                                        bool is_virtual) {
@@ -457,6 +536,7 @@ static void leme_input_keyboard_attach(struct leme_server *server,
   keyboard->server = server;
   keyboard->keyboard = wlr_keyboard;
   keyboard->is_virtual = is_virtual;
+  leme_input_set_repeat(server, wlr_keyboard);
   if (!is_virtual) {
     struct xkb_keymap *keymap = leme_input_compile_keymap(server->config);
 
@@ -491,6 +571,29 @@ static void leme_input_keyboard_attach(struct leme_server *server,
     wlr_seat_set_keyboard(server->seat, keyboard->keyboard);
   }
   leme_public_server_invalidate(server);
+}
+
+void leme_input_apply_keyboard_repeat(struct leme_server *server) {
+  struct leme_keyboard *keyboard;
+
+  if (server->keyboards.next == NULL) {
+    return;
+  }
+  wl_list_for_each(keyboard, &server->keyboards, link) {
+    leme_input_set_repeat(server, keyboard->keyboard);
+  }
+}
+
+void leme_input_keyboard_enter(struct leme_server *server,
+                               struct wlr_surface *surface) {
+  struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
+
+  if (keyboard == NULL) {
+    wlr_seat_keyboard_notify_enter(server->seat, surface, NULL, 0, NULL);
+    return;
+  }
+  wlr_seat_keyboard_notify_enter(server->seat, surface, keyboard->keycodes,
+                                 keyboard->num_keycodes, &keyboard->modifiers);
 }
 
 void leme_input_keyboard_add(struct leme_server *server,

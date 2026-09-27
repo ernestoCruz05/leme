@@ -511,7 +511,6 @@ void leme_view_destroy_core(struct leme_view *view) {
 
 static void leme_view_focus_eligible(struct leme_view *view) {
   struct leme_server *server;
-  struct wlr_keyboard *keyboard;
 
   server = view->server;
   if (leme_session_locked(server)) {
@@ -543,12 +542,7 @@ static void leme_view_focus_eligible(struct leme_view *view) {
   } else {
     leme_render_view_focus(view);
   }
-  keyboard = wlr_seat_get_keyboard(server->seat);
-  if (keyboard != NULL) {
-    wlr_seat_keyboard_notify_enter(server->seat, leme_view_surface(view),
-                                   keyboard->keycodes, keyboard->num_keycodes,
-                                   &keyboard->modifiers);
-  }
+  leme_input_keyboard_enter(server, leme_view_surface(view));
   leme_input_protocols_update_keyboard_focus(server);
   leme_publication_invalidate(server);
 }

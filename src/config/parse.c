@@ -3329,97 +3329,247 @@ leme_config_parse_config_errors(struct leme_config *config,
   return true;
 }
 
+static bool leme_config_parse_keyboard_layout(
+    struct leme_config *config, const struct leme_scfg_directive *entry,
+    const struct leme_scfg_directive **layout_directives, const char *path,
+    char **error) {
+  struct leme_keyboard_layout *layouts;
+  struct leme_keyboard_layout *layout;
+  const char *name;
+  const char *variant;
+  size_t previous;
+  bool duplicate = false;
+
+  if (entry->params_len < 1 || entry->params_len > 2 ||
+      entry->children.directives_len != 0) {
+    return leme_config_reject(config, entry, -1,
+                              "layout requires a name and optional variant");
+  }
+  name = entry->params[0];
+  variant = entry->params_len == 2 ? entry->params[1] : NULL;
+  if (name[0] == '\0' || strchr(name, ',') != NULL ||
+      (variant != NULL &&
+       (variant[0] == '\0' || strchr(variant, ',') != NULL))) {
+    return leme_config_reject(config, entry, 0,
+                              "invalid keyboard layout or variant");
+  }
+  for (previous = 0; previous < config->keyboard_layout_count; previous++) {
+    const struct leme_keyboard_layout *existing =
+        &config->keyboard_layouts[previous];
+    bool variants_match =
+        existing->variant == NULL
+            ? variant == NULL
+            : variant != NULL && strcmp(existing->variant, variant) == 0;
+
+    if (strcmp(existing->name, name) == 0 && variants_match) {
+      duplicate = true;
+      break;
+    }
+  }
+  if (duplicate) {
+    const struct leme_reject_extra extra = {
+        .secondary = layout_directives[previous],
+        .secondary_label = "first defined here",
+    };
+    return leme_config_reject_detailed(config, entry, -1, &extra,
+                                       "duplicate keyboard layout %s", name);
+  }
+  layouts = realloc(config->keyboard_layouts,
+                    (config->keyboard_layout_count + 1) * sizeof(*layouts));
+  if (layouts == NULL) {
+    leme_config_set_error(error, "%s:%d: out of memory", path, entry->lineno);
+    return false;
+  }
+  config->keyboard_layouts = layouts;
+  layout = &config->keyboard_layouts[config->keyboard_layout_count];
+  *layout = (struct leme_keyboard_layout){
+      .name = strdup(name),
+      .variant = variant == NULL ? NULL : strdup(variant),
+  };
+  if (config->keyboard_layout_count < 4) {
+    layout_directives[config->keyboard_layout_count] = entry;
+  }
+  config->keyboard_layout_count++;
+  if (layout->name == NULL || (variant != NULL && layout->variant == NULL)) {
+    leme_config_set_error(error, "%s:%d: out of memory", path, entry->lineno);
+    return false;
+  }
+  return true;
+}
+
+static bool leme_config_keyboard_option_valid(const char *text) {
+  const size_t length = strlen(text);
+
+  return length > 0 && text[0] != ',' && text[length - 1] != ',' &&
+         strstr(text, ",,") == NULL;
+}
+
+static bool
+leme_config_parse_keyboard_options(struct leme_config *config,
+                                   const struct leme_scfg_directive *entry,
+                                   const char *path, char **error) {
+  size_t param;
+
+  if (entry->params_len < 1 || entry->children.directives_len != 0) {
+    return leme_config_reject(config, entry, -1,
+                              "options requires at least one XKB option");
+  }
+  for (param = 0; param < entry->params_len; param++) {
+    if (!leme_config_keyboard_option_valid(entry->params[param])) {
+      return leme_config_reject(config, entry, (int)param,
+                                "invalid XKB option %s", entry->params[param]);
+    }
+  }
+  for (param = 0; param < entry->params_len; param++) {
+    const char *cursor = entry->params[param];
+
+    for (;;) {
+      const char *comma = strchr(cursor, ',');
+      const size_t length =
+          comma == NULL ? strlen(cursor) : (size_t)(comma - cursor);
+      char **options;
+      char *option;
+
+      if (config->keyboard_option_count >= LEME_KEYBOARD_OPTIONS_MAX) {
+        return leme_config_reject(config, entry, (int)param,
+                                  "keyboard takes at most %d options",
+                                  LEME_KEYBOARD_OPTIONS_MAX);
+      }
+      option = strndup(cursor, length);
+      options =
+          option == NULL
+              ? NULL
+              : realloc(config->keyboard_options,
+                        (config->keyboard_option_count + 1) * sizeof(*options));
+      if (options == NULL) {
+        free(option);
+        leme_config_set_error(error, "%s:%d: out of memory", path,
+                              entry->lineno);
+        return false;
+      }
+      config->keyboard_options = options;
+      config->keyboard_options[config->keyboard_option_count++] = option;
+      if (comma == NULL) {
+        break;
+      }
+      cursor = comma + 1;
+    }
+  }
+  return true;
+}
+
+static bool
+leme_config_parse_keyboard_repeat(struct leme_config *config,
+                                  const struct leme_scfg_directive *entry,
+                                  int minimum, int maximum, int *target) {
+  int value;
+
+  if (entry->params_len != 1 || entry->children.directives_len != 0 ||
+      !leme_config_parse_nonnegative(entry->params[0], &value) ||
+      value < minimum || value > maximum) {
+    return leme_config_reject(config, entry, 0,
+                              "%s expects an integer between %d and %d",
+                              entry->name, minimum, maximum);
+  }
+  *target = value;
+  return true;
+}
+
 static bool
 leme_config_parse_keyboard(struct leme_config *config,
                            const struct leme_scfg_directive *directive,
                            const char *path, char **error) {
-  size_t index;
-
+  static const char *const keyboard_keys[] = {
+      "layout",
+      "options",
+      "repeat_rate",
+      "repeat_delay",
+  };
   const struct leme_scfg_directive *layout_directives[4] = {NULL};
+  const struct leme_scfg_directive *dir_options = NULL;
+  const struct leme_scfg_directive *dir_rate = NULL;
+  const struct leme_scfg_directive *dir_delay = NULL;
+  size_t index;
 
   if (directive->params_len != 0) {
     leme_config_set_error(error, "%s:%d: keyboard takes no arguments", path,
                           directive->lineno);
     return false;
   }
-  if (directive->children.directives_len == 0 ||
-      directive->children.directives_len > 4) {
-    leme_config_set_error(
-        error, "%s:%d: keyboard requires between one and four layouts", path,
-        directive->lineno);
+  if (directive->children.directives_len == 0) {
+    leme_config_set_error(error, "%s:%d: keyboard requires at least one entry",
+                          path, directive->lineno);
     return false;
   }
   for (index = 0; index < directive->children.directives_len; index++) {
     const struct leme_scfg_directive *entry =
         &directive->children.directives[index];
-    struct leme_keyboard_layout *layouts;
-    struct leme_keyboard_layout *layout;
-    const char *name;
-    const char *variant;
-    size_t previous;
-    bool duplicate = false;
+    const struct leme_scfg_directive **first = NULL;
 
-    if (strcmp(entry->name, "layout") != 0 || entry->params_len < 1 ||
-        entry->params_len > 2 || entry->children.directives_len != 0) {
-      if (!leme_config_reject(config, entry, -1,
-                              "layout requires a name and optional variant")) {
+    if (strcmp(entry->name, "layout") == 0) {
+      if (config->keyboard_layout_count == 4) {
+        leme_config_set_error(error,
+                              "%s:%d: keyboard takes at most four layouts",
+                              path, entry->lineno);
+        return false;
+      }
+      if (!leme_config_parse_keyboard_layout(config, entry, layout_directives,
+                                             path, error)) {
         return false;
       }
       continue;
     }
-    name = entry->params[0];
-    variant = entry->params_len == 2 ? entry->params[1] : NULL;
-    if (name[0] == '\0' || strchr(name, ',') != NULL ||
-        (variant != NULL &&
-         (variant[0] == '\0' || strchr(variant, ',') != NULL))) {
-      if (!leme_config_reject(config, entry, 0,
-                              "invalid keyboard layout or variant")) {
+    if (strcmp(entry->name, "options") == 0) {
+      first = &dir_options;
+    } else if (strcmp(entry->name, "repeat_rate") == 0) {
+      first = &dir_rate;
+    } else if (strcmp(entry->name, "repeat_delay") == 0) {
+      first = &dir_delay;
+    } else {
+      const char *nearest = leme_config_nearest_key(
+          entry->name, keyboard_keys,
+          sizeof(keyboard_keys) / sizeof(keyboard_keys[0]));
+      char help_buf[128] = {0};
+      struct leme_reject_extra extra = {0};
+
+      if (nearest != NULL) {
+        snprintf(help_buf, sizeof(help_buf),
+                 "a directive with a similar name exists: `%s`", nearest);
+        extra.help = help_buf;
+      }
+      if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                       "unknown keyboard property %s",
+                                       entry->name)) {
         return false;
       }
       continue;
     }
-    for (previous = 0; previous < config->keyboard_layout_count; previous++) {
-      const struct leme_keyboard_layout *existing =
-          &config->keyboard_layouts[previous];
-      bool variants_match =
-          existing->variant == NULL
-              ? variant == NULL
-              : variant != NULL && strcmp(existing->variant, variant) == 0;
-
-      if (strcmp(existing->name, name) == 0 && variants_match) {
-        duplicate = true;
-        break;
-      }
-    }
-    if (duplicate) {
+    if (*first != NULL) {
       const struct leme_reject_extra extra = {
-          .secondary = layout_directives[previous],
+          .secondary = *first,
           .secondary_label = "first defined here",
       };
       if (!leme_config_reject_detailed(config, entry, -1, &extra,
-                                       "duplicate keyboard layout %s", name)) {
+                                       "duplicate keyboard property %s",
+                                       entry->name)) {
         return false;
       }
       continue;
     }
-    layouts = realloc(config->keyboard_layouts,
-                      (config->keyboard_layout_count + 1) * sizeof(*layouts));
-    if (layouts == NULL) {
-      leme_config_set_error(error, "%s:%d: out of memory", path, entry->lineno);
-      return false;
-    }
-    config->keyboard_layouts = layouts;
-    layout = &config->keyboard_layouts[config->keyboard_layout_count];
-    *layout = (struct leme_keyboard_layout){
-        .name = strdup(name),
-        .variant = variant == NULL ? NULL : strdup(variant),
-    };
-    if (config->keyboard_layout_count < 4) {
-      layout_directives[config->keyboard_layout_count] = entry;
-    }
-    config->keyboard_layout_count++;
-    if (layout->name == NULL || (variant != NULL && layout->variant == NULL)) {
-      leme_config_set_error(error, "%s:%d: out of memory", path, entry->lineno);
+    *first = entry;
+    if (first == &dir_options) {
+      if (!leme_config_parse_keyboard_options(config, entry, path, error)) {
+        return false;
+      }
+    } else if (first == &dir_rate) {
+      if (!leme_config_parse_keyboard_repeat(config, entry, 0,
+                                             LEME_KEYBOARD_REPEAT_RATE_MAX,
+                                             &config->keyboard_repeat_rate)) {
+        return false;
+      }
+    } else if (!leme_config_parse_keyboard_repeat(
+                   config, entry, 1, LEME_KEYBOARD_REPEAT_DELAY_MAX,
+                   &config->keyboard_repeat_delay)) {
       return false;
     }
   }
@@ -4161,6 +4311,8 @@ struct leme_config *leme_config_load(const char *path, char **error) {
   };
   config->drop_mode = LEME_DROP_MODE_SIMPLE;
   config->cursor.size = LEME_CURSOR_SIZE_DEFAULT;
+  config->keyboard_repeat_rate = LEME_KEYBOARD_REPEAT_RATE_DEFAULT;
+  config->keyboard_repeat_delay = LEME_KEYBOARD_REPEAT_DELAY_DEFAULT;
   config->gestures.workspace_switch =
       (struct leme_workspace_switch_gesture_settings){
           .mode = LEME_WORKSPACE_GESTURE_SINGLE,

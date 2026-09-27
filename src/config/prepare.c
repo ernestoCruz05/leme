@@ -115,6 +115,15 @@ static bool leme_keyboards_have_delta(const struct leme_server *server,
       return true;
     }
   }
+  if (server->config->keyboard_option_count != next->keyboard_option_count) {
+    return true;
+  }
+  for (size_t i = 0; i < next->keyboard_option_count; ++i) {
+    if (!leme_config_same_text(next->keyboard_options[i],
+                               server->config->keyboard_options[i])) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -314,6 +323,7 @@ void leme_config_reload_commit(struct leme_server *server,
 
   leme_public_server_config_changed(server);
   leme_input_public_keymap_committed(server);
+  leme_input_apply_keyboard_repeat(server);
 
   if (plan->cursor_manager != NULL) {
     leme_session_environment_cursor(server);

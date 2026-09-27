@@ -152,6 +152,10 @@ void leme_config_destroy(struct leme_config *config) {
     free(config->keyboard_layouts[index].variant);
   }
   free(config->keyboard_layouts);
+  for (index = 0; index < config->keyboard_option_count; index++) {
+    free(config->keyboard_options[index]);
+  }
+  free(config->keyboard_options);
   for (index = 0; index < config->output_count; index++) {
     free(config->outputs[index].name);
     free(config->outputs[index].relative_to);
@@ -319,15 +323,13 @@ void leme_config_set_pointer_defaults(struct leme_config *config) {
 }
 
 bool leme_config_set_default_keyboard(struct leme_config *config) {
-  config->keyboard_layouts = calloc(2, sizeof(*config->keyboard_layouts));
+  config->keyboard_layouts = calloc(1, sizeof(*config->keyboard_layouts));
   if (config->keyboard_layouts == NULL) {
     return false;
   }
-  config->keyboard_layout_count = 2;
-  config->keyboard_layouts[0].name = strdup("pt");
-  config->keyboard_layouts[1].name = strdup("us");
-  return config->keyboard_layouts[0].name != NULL &&
-         config->keyboard_layouts[1].name != NULL;
+  config->keyboard_layout_count = 1;
+  config->keyboard_layouts[0].name = strdup("us");
+  return config->keyboard_layouts[0].name != NULL;
 }
 
 static bool leme_config_default_binding(struct leme_mode *mode, size_t index,
@@ -352,6 +354,8 @@ struct leme_config *leme_config_defaults(void) {
   config->max_tags = 9;
   config->drop_mode = LEME_DROP_MODE_SIMPLE;
   config->cursor.size = LEME_CURSOR_SIZE_DEFAULT;
+  config->keyboard_repeat_rate = LEME_KEYBOARD_REPEAT_RATE_DEFAULT;
+  config->keyboard_repeat_delay = LEME_KEYBOARD_REPEAT_DELAY_DEFAULT;
   config->gestures.workspace_switch =
       (struct leme_workspace_switch_gesture_settings){
           .mode = LEME_WORKSPACE_GESTURE_SINGLE,
