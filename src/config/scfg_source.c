@@ -29,6 +29,22 @@ static bool leme_scfg_source_index(struct leme_scfg_source *source) {
   return true;
 }
 
+static void
+leme_scfg_source_strip_carriage_returns(struct leme_scfg_source *source) {
+  size_t from;
+  size_t to = 0;
+
+  for (from = 0; from < source->length; from++) {
+    if (source->data[from] == '\r' && from + 1 < source->length &&
+        source->data[from + 1] == '\n') {
+      continue;
+    }
+    source->data[to++] = source->data[from];
+  }
+  source->length = to;
+  source->data[to] = '\0';
+}
+
 bool leme_scfg_source_load(struct leme_scfg_source *source, const char *path) {
   FILE *file = fopen(path, "r");
   long size;
@@ -55,6 +71,7 @@ bool leme_scfg_source_load(struct leme_scfg_source *source, const char *path) {
   }
   source->data[source->length] = '\0';
   fclose(file);
+  leme_scfg_source_strip_carriage_returns(source);
   if (!leme_scfg_source_index(source)) {
     leme_scfg_source_finish(source);
     return false;

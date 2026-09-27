@@ -42,7 +42,8 @@ if get_option('effects')
   wlroots_dep = wlroots_proj.get_variable('wlroots')
   add_project_arguments('-DLEME_HAVE_EFFECTS', language: 'c')
 else
-  wlroots_dep = dependency('wlroots-0.20', version: ['>=0.20.0', '<0.21.0'])
+  wlroots_dep = dependency('wlroots-0.20', version: ['>=0.20.0', '<0.21.0'],
+    allow_fallback: false)
 endif
 wayland_server_dep = dependency('wayland-server', version: '>=1.22')
 xkbcommon_dep = dependency('xkbcommon', version: '>=1.5')

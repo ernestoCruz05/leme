@@ -168,7 +168,7 @@ struct leme_server {
   struct wl_listener output_power_set_mode;
   struct wl_listener new_xdg_toplevel;
   struct wl_listener new_layer_surface;
-  struct wl_event_source *sigint_source;
+  struct wl_event_source *signal_sources[3];
   const char *socket;
   bool started;
   bool session_target;

@@ -314,19 +314,25 @@ static void leme_render_check_visible_buffer(struct wlr_scene_buffer *buffer,
 bool leme_render_surface_visible(struct leme_server *server,
                                  struct wlr_surface *surface) {
   struct leme_render_visibility visibility;
+  struct leme_output *output;
 
-  if (surface == NULL || leme_output_focused(server) == NULL ||
-      leme_output_focused(server)->scene_output == NULL ||
-      !leme_output_focused(server)->wlr_output->enabled) {
+  if (surface == NULL || server->outputs.next == NULL) {
     return false;
   }
   visibility = (struct leme_render_visibility){
       .root = wlr_surface_get_root_surface(surface),
   };
-  wlr_scene_output_for_each_buffer(leme_output_focused(server)->scene_output,
-                                   leme_render_check_visible_buffer,
-                                   &visibility);
-  return visibility.visible;
+  wl_list_for_each(output, &server->outputs, link) {
+    if (output->scene_output == NULL || !output->wlr_output->enabled) {
+      continue;
+    }
+    wlr_scene_output_for_each_buffer(
+        output->scene_output, leme_render_check_visible_buffer, &visibility);
+    if (visibility.visible) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool leme_render_at(struct leme_server *server, double lx, double ly,

@@ -47,7 +47,14 @@ static void leme_server_handle_session_active(struct wl_listener *listener,
   }
 }
 
-static int leme_server_handle_sigint(int signal_number, void *data) {
+static const int leme_server_signals[] = {SIGINT, SIGTERM, SIGHUP};
+
+_Static_assert(
+    LEME_ARRAY_LENGTH(leme_server_signals) ==
+        LEME_ARRAY_LENGTH(((struct leme_server *)NULL)->signal_sources),
+    "one event source per handled signal");
+
+static int leme_server_handle_signal(int signal_number, void *data) {
   struct leme_server *server = data;
 
   wlr_log(WLR_INFO, "leme: received signal %d", signal_number);
@@ -249,12 +256,16 @@ bool leme_server_init(struct leme_server *server) {
     return false;
   }
 
-  server->sigint_source =
-      wl_event_loop_add_signal(wl_display_get_event_loop(server->display),
-                               SIGINT, leme_server_handle_sigint, server);
-  if (server->sigint_source == NULL) {
-    wlr_log(WLR_ERROR, "%s", "leme: failed to register SIGINT handler");
-    return false;
+  for (size_t index = 0; index < LEME_ARRAY_LENGTH(leme_server_signals);
+       index++) {
+    server->signal_sources[index] = wl_event_loop_add_signal(
+        wl_display_get_event_loop(server->display), leme_server_signals[index],
+        leme_server_handle_signal, server);
+    if (server->signal_sources[index] == NULL) {
+      wlr_log(WLR_ERROR, "leme: failed to register handler for signal %d",
+              leme_server_signals[index]);
+      return false;
+    }
   }
 
   server->socket = wl_display_add_socket_auto(server->display);
@@ -317,9 +328,12 @@ void leme_server_finish(struct leme_server *server) {
   leme_output_power_finish(server);
   leme_output_finish(server);
 
-  if (server->sigint_source != NULL) {
-    wl_event_source_remove(server->sigint_source);
-    server->sigint_source = NULL;
+  for (size_t index = 0; index < LEME_ARRAY_LENGTH(server->signal_sources);
+       index++) {
+    if (server->signal_sources[index] != NULL) {
+      wl_event_source_remove(server->signal_sources[index]);
+      server->signal_sources[index] = NULL;
+    }
   }
 
   if (server->session_active.link.next != NULL) {

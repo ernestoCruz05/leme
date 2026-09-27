@@ -97,6 +97,22 @@ static bool leme_command_reload(struct leme_server *server) {
   return true;
 }
 
+static bool leme_command_uses_tags(enum leme_command_type type) {
+  switch (type) {
+  case LEME_COMMAND_FOCUS_NEXT_TAG:
+  case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
+  case LEME_COMMAND_FOCUS_TAG:
+  case LEME_COMMAND_FOCUS_LAST_TAG:
+  case LEME_COMMAND_MOVE_VIEW_TO_TAG:
+  case LEME_COMMAND_SET_LAYOUT:
+  case LEME_COMMAND_SWITCH_LAYOUT:
+  case LEME_COMMAND_REMOVE_EMPTY_TAG:
+    return true;
+  default:
+    return false;
+  }
+}
+
 bool leme_command_execute(struct leme_server *server,
                           const struct leme_command *command) {
   struct leme_tags *tags;
@@ -115,6 +131,11 @@ bool leme_command_execute(struct leme_server *server,
     return false;
   }
   tags = leme_focused_tags(server);
+  if (tags == NULL && leme_command_uses_tags(command->type)) {
+    wlr_log(WLR_ERROR, "%s",
+            "leme: tag command refused without an enabled output");
+    return false;
+  }
   view = server->focused_view;
   if (leme_sticky_is_dependent(view)) {
     switch (command->type) {

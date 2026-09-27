@@ -42,6 +42,7 @@ struct leme_expander {
   size_t scalar_count;
   size_t output_count;
   size_t total_iterations;
+  size_t expanded_bytes;
   struct leme_expand_env_reference *env_refs;
   size_t env_ref_count;
   struct leme_expand_list *lists;
@@ -212,6 +213,9 @@ static char *leme_expand_field(struct leme_expander *expander,
     bool explicit_form;
     size_t dollar_index;
 
+    if (length > LEME_CONFIG_EXPAND_MAX_FIELD_BYTES) {
+      goto too_large;
+    }
     if (input[index] != '$') {
       if (!leme_buffer_append(&output, &length, &input[index], 1)) {
         goto out_of_memory;
@@ -379,7 +383,25 @@ static char *leme_expand_field(struct leme_expander *expander,
       goto out_of_memory;
     }
   }
+  if (length > LEME_CONFIG_EXPAND_MAX_FIELD_BYTES) {
+    goto too_large;
+  }
+  if (length > LEME_CONFIG_EXPAND_MAX_TOTAL_BYTES - expander->expanded_bytes) {
+    leme_config_set_error(
+        expander->error, "%s:%d:%d: expanded configuration exceeds %u bytes",
+        expander->path, lineno, column, LEME_CONFIG_EXPAND_MAX_TOTAL_BYTES);
+    free(output);
+    return NULL;
+  }
+  expander->expanded_bytes += length;
   return output;
+
+too_large:
+  leme_config_set_error(
+      expander->error, "%s:%d:%d: expanded value exceeds %u bytes",
+      expander->path, lineno, column, LEME_CONFIG_EXPAND_MAX_FIELD_BYTES);
+  free(output);
+  return NULL;
 
 out_of_memory:
   leme_config_set_error(expander->error, "%s:%d:%d: out of memory",

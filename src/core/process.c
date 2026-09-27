@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -106,7 +107,12 @@ static void leme_process_setup_and_exec(const struct leme_server *server,
                                         char *const *argv, int error_fd) {
   const char *display;
   size_t index;
+  sigset_t unblocked;
 
+  if (sigemptyset(&unblocked) < 0 ||
+      sigprocmask(SIG_SETMASK, &unblocked, NULL) < 0) {
+    leme_process_exit_error(error_fd, errno);
+  }
   for (index = 0;
        server->config != NULL && index < server->config->environment_count;
        index++) {

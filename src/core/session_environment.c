@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -71,11 +72,24 @@ static bool leme_session_environment_has_systemd(void) {
 }
 
 static bool leme_session_environment_spawn(char *const *arguments) {
+  posix_spawnattr_t attributes;
+  sigset_t unblocked;
   pid_t process;
   int result;
   int status;
 
-  result = posix_spawnp(&process, arguments[0], NULL, NULL, arguments, environ);
+  if (posix_spawnattr_init(&attributes) != 0) {
+    return false;
+  }
+  if (sigemptyset(&unblocked) < 0 ||
+      posix_spawnattr_setsigmask(&attributes, &unblocked) != 0 ||
+      posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGMASK) != 0) {
+    (void)posix_spawnattr_destroy(&attributes);
+    return false;
+  }
+  result = posix_spawnp(&process, arguments[0], NULL, &attributes, arguments,
+                        environ);
+  (void)posix_spawnattr_destroy(&attributes);
   if (result != 0) {
     return false;
   }
