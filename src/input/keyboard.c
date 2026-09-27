@@ -27,6 +27,7 @@ struct leme_keyboard {
   struct wlr_keyboard *keyboard;
   struct leme_public_id public_id;
   bool public_keymap_configured;
+  bool is_virtual;
   bool handled[256];
   struct wl_listener key;
   struct wl_listener keymap;
@@ -140,6 +141,9 @@ bool leme_input_apply_keymap(struct leme_server *server,
     return true;
   }
   wl_list_for_each(keyboard, &server->keyboards, link) {
+    if (keyboard->is_virtual) {
+      continue;
+    }
     if (!wlr_keyboard_set_keymap(keyboard->keyboard, keymap)) {
       wlr_log(WLR_ERROR, "%s", "leme: failed to apply keyboard keymap");
       return false;
@@ -148,6 +152,9 @@ bool leme_input_apply_keymap(struct leme_server *server,
   wl_list_for_each(keyboard, &server->keyboards, link) {
     struct wlr_keyboard_modifiers *modifiers = &keyboard->keyboard->modifiers;
 
+    if (keyboard->is_virtual) {
+      continue;
+    }
     wlr_keyboard_notify_modifiers(keyboard->keyboard, modifiers->depressed,
                                   modifiers->latched, modifiers->locked,
                                   server->keyboard_layout);
@@ -161,6 +168,9 @@ static void leme_input_apply_keyboard_layout_group(struct leme_server *server,
   server->keyboard_layout = (xkb_layout_index_t)group;
   wl_list_for_each(keyboard, &server->keyboards, link) {
     struct wlr_keyboard_modifiers *modifiers = &keyboard->keyboard->modifiers;
+    if (keyboard->is_virtual) {
+      continue;
+    }
     wlr_keyboard_notify_modifiers(keyboard->keyboard, modifiers->depressed,
                                   modifiers->latched, modifiers->locked,
                                   server->keyboard_layout);
@@ -401,6 +411,12 @@ static void leme_input_select_keyboard(struct leme_server *server) {
     wlr_seat_set_keyboard(server->seat, NULL);
     return;
   }
+  wl_list_for_each(keyboard, &server->keyboards, link) {
+    if (!keyboard->is_virtual) {
+      wlr_seat_set_keyboard(server->seat, keyboard->keyboard);
+      return;
+    }
+  }
   keyboard = wl_container_of(server->keyboards.next, keyboard, link);
   wlr_seat_set_keyboard(server->seat, keyboard->keyboard);
 }
@@ -429,25 +445,29 @@ static void leme_input_handle_keyboard_destroy(struct wl_listener *listener,
   leme_public_server_invalidate(server);
 }
 
-void leme_input_keyboard_add(struct leme_server *server,
-                             struct wlr_input_device *device) {
+static void leme_input_keyboard_attach(struct leme_server *server,
+                                       struct wlr_keyboard *wlr_keyboard,
+                                       bool is_virtual) {
   struct leme_keyboard *keyboard = calloc(1, sizeof(*keyboard));
-  struct xkb_keymap *keymap;
 
   if (keyboard == NULL) {
     return;
   }
   keyboard->server = server;
-  keyboard->keyboard = wlr_keyboard_from_input_device(device);
-  keymap = leme_input_compile_keymap(server->config);
-  if (keymap == NULL || !wlr_keyboard_set_keymap(keyboard->keyboard, keymap)) {
-    wlr_log(WLR_ERROR, "%s", "leme: failed to configure keyboard");
+  keyboard->keyboard = wlr_keyboard;
+  keyboard->is_virtual = is_virtual;
+  if (!is_virtual) {
+    struct xkb_keymap *keymap = leme_input_compile_keymap(server->config);
+
+    if (keymap == NULL || !wlr_keyboard_set_keymap(wlr_keyboard, keymap)) {
+      wlr_log(WLR_ERROR, "%s", "leme: failed to configure keyboard");
+      xkb_keymap_unref(keymap);
+      free(keyboard);
+      return;
+    }
     xkb_keymap_unref(keymap);
-    free(keyboard);
-    return;
+    keyboard->public_keymap_configured = true;
   }
-  xkb_keymap_unref(keymap);
-  keyboard->public_keymap_configured = true;
   if (leme_public_model_available(server->public_model) &&
       leme_public_model_issue_id(server->public_model, &keyboard->public_id) !=
           LEME_PUBLIC_OK) {
@@ -460,14 +480,27 @@ void leme_input_keyboard_add(struct leme_server *server,
   keyboard->modifiers.notify = leme_input_handle_modifiers;
   wl_signal_add(&keyboard->keyboard->events.modifiers, &keyboard->modifiers);
   keyboard->destroy.notify = leme_input_handle_keyboard_destroy;
-  wl_signal_add(&device->events.destroy, &keyboard->destroy);
+  wl_signal_add(&wlr_keyboard->base.events.destroy, &keyboard->destroy);
   wl_list_insert(&server->keyboards, &keyboard->link);
-  wlr_keyboard_notify_modifiers(
-      keyboard->keyboard, keyboard->keyboard->modifiers.depressed,
-      keyboard->keyboard->modifiers.latched,
-      keyboard->keyboard->modifiers.locked, server->keyboard_layout);
-  wlr_seat_set_keyboard(server->seat, keyboard->keyboard);
+  if (!is_virtual) {
+    wlr_keyboard_notify_modifiers(
+        keyboard->keyboard, keyboard->keyboard->modifiers.depressed,
+        keyboard->keyboard->modifiers.latched,
+        keyboard->keyboard->modifiers.locked, server->keyboard_layout);
+    wlr_seat_set_keyboard(server->seat, keyboard->keyboard);
+  }
   leme_public_server_invalidate(server);
+}
+
+void leme_input_keyboard_add(struct leme_server *server,
+                             struct wlr_input_device *device) {
+  leme_input_keyboard_attach(server, wlr_keyboard_from_input_device(device),
+                             false);
+}
+
+void leme_input_virtual_keyboard_add(struct leme_server *server,
+                                     struct wlr_keyboard *keyboard) {
+  leme_input_keyboard_attach(server, keyboard, true);
 }
 
 void leme_input_public_keymap_committed(struct leme_server *server) {
@@ -475,7 +508,7 @@ void leme_input_public_keymap_committed(struct leme_server *server) {
     return;
   struct leme_keyboard *keyboard = NULL;
   wl_list_for_each(keyboard, &server->keyboards, link)
-      keyboard->public_keymap_configured = true;
+      keyboard->public_keymap_configured = !keyboard->is_virtual;
   leme_public_server_invalidate(server);
 }
 

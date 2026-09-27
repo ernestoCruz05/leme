@@ -33,13 +33,6 @@ struct leme_xdg_decoration {
   struct wl_list link;
 };
 
-struct leme_server_decoration {
-  struct wlr_server_decoration *decoration;
-  struct wl_listener mode;
-  struct wl_listener destroy;
-  struct wl_list link;
-};
-
 struct leme_desktop {
   struct leme_server *server;
   struct wlr_xdg_activation_v1 *activation;
@@ -53,10 +46,8 @@ struct leme_desktop {
   bool cursor_themed;
   bool cursor_overridden;
   struct wl_list xdg_decorations;
-  struct wl_list server_decorations;
   struct wl_listener request_activate;
   struct wl_listener new_xdg_decoration;
-  struct wl_listener new_server_decoration;
   struct wl_listener request_set_shape;
 };
 
@@ -185,55 +176,6 @@ static void leme_desktop_handle_new_xdg_decoration(struct wl_listener *listener,
   wrapper->destroy.notify = leme_desktop_handle_xdg_decoration_destroy;
   wl_signal_add(&decoration->events.destroy, &wrapper->destroy);
   wl_list_insert(&desktop->xdg_decorations, &wrapper->link);
-}
-
-static void
-leme_desktop_server_decoration_finish(struct leme_server_decoration *wrapper) {
-  wl_list_remove(&wrapper->mode.link);
-  wl_list_remove(&wrapper->destroy.link);
-  wl_list_remove(&wrapper->link);
-  free(wrapper);
-}
-
-static void
-leme_desktop_handle_server_decoration_mode(struct wl_listener *listener,
-                                           void *data) {
-  struct leme_server_decoration *wrapper =
-      wl_container_of(listener, wrapper, mode);
-
-  (void)data;
-  wrapper->decoration->mode = WLR_SERVER_DECORATION_MANAGER_MODE_SERVER;
-}
-
-static void
-leme_desktop_handle_server_decoration_destroy(struct wl_listener *listener,
-                                              void *data) {
-  struct leme_server_decoration *wrapper =
-      wl_container_of(listener, wrapper, destroy);
-
-  (void)data;
-  leme_desktop_server_decoration_finish(wrapper);
-}
-
-static void
-leme_desktop_handle_new_server_decoration(struct wl_listener *listener,
-                                          void *data) {
-  struct leme_desktop *desktop =
-      wl_container_of(listener, desktop, new_server_decoration);
-  struct wlr_server_decoration *decoration = data;
-  struct leme_server_decoration *wrapper = calloc(1, sizeof(*wrapper));
-
-  decoration->mode = WLR_SERVER_DECORATION_MANAGER_MODE_SERVER;
-  if (wrapper == NULL) {
-    wlr_log(WLR_ERROR, "%s", "leme: failed to track server decoration");
-    return;
-  }
-  wrapper->decoration = decoration;
-  wrapper->mode.notify = leme_desktop_handle_server_decoration_mode;
-  wl_signal_add(&decoration->events.mode, &wrapper->mode);
-  wrapper->destroy.notify = leme_desktop_handle_server_decoration_destroy;
-  wl_signal_add(&decoration->events.destroy, &wrapper->destroy);
-  wl_list_insert(&desktop->server_decorations, &wrapper->link);
 }
 
 static void leme_desktop_handle_cursor_shape(struct wl_listener *listener,
@@ -381,7 +323,6 @@ bool leme_desktop_init(struct leme_server *server) {
   }
   desktop->server = server;
   wl_list_init(&desktop->xdg_decorations);
-  wl_list_init(&desktop->server_decorations);
   server->desktop = desktop;
   desktop->activation = wlr_xdg_activation_v1_create(server->display);
   server->xdg_dialog_manager = wlr_xdg_wm_dialog_v1_create(server->display, 1);
@@ -416,10 +357,6 @@ bool leme_desktop_init(struct leme_server *server) {
   wl_signal_add(
       &desktop->xdg_decoration_manager->events.new_toplevel_decoration,
       &desktop->new_xdg_decoration);
-  desktop->new_server_decoration.notify =
-      leme_desktop_handle_new_server_decoration;
-  wl_signal_add(&desktop->server_decoration_manager->events.new_decoration,
-                &desktop->new_server_decoration);
   desktop->request_set_shape.notify = leme_desktop_handle_cursor_shape;
   wl_signal_add(&desktop->cursor_shape->events.request_set_shape,
                 &desktop->request_set_shape);
@@ -509,21 +446,11 @@ void leme_desktop_finish(struct leme_server *server) {
   wl_list_for_each_safe(xdg, xdg_next, &desktop->xdg_decorations, link) {
     leme_desktop_xdg_decoration_finish(xdg);
   }
-  struct leme_server_decoration *server_decoration;
-  struct leme_server_decoration *server_decoration_next;
-
-  wl_list_for_each_safe(server_decoration, server_decoration_next,
-                        &desktop->server_decorations, link) {
-    leme_desktop_server_decoration_finish(server_decoration);
-  }
   if (desktop->request_activate.link.next != NULL) {
     wl_list_remove(&desktop->request_activate.link);
   }
   if (desktop->new_xdg_decoration.link.next != NULL) {
     wl_list_remove(&desktop->new_xdg_decoration.link);
-  }
-  if (desktop->new_server_decoration.link.next != NULL) {
-    wl_list_remove(&desktop->new_server_decoration.link);
   }
   if (desktop->request_set_shape.link.next != NULL) {
     wl_list_remove(&desktop->request_set_shape.link);

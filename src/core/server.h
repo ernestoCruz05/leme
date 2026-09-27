@@ -34,6 +34,8 @@ struct leme_view;
 struct leme_tags;
 struct leme_config_store;
 struct wlr_pointer;
+struct wlr_virtual_keyboard_manager_v1;
+struct wlr_virtual_pointer_manager_v1;
 
 struct leme_workspace_gesture_state {
   enum leme_workspace_gesture_mode mode;
@@ -145,7 +147,11 @@ struct leme_server {
   size_t mode_count;
   struct leme_mode *active_mode;
   xkb_layout_index_t keyboard_layout;
+  struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard_manager;
+  struct wlr_virtual_pointer_manager_v1 *virtual_pointer_manager;
   struct wl_listener new_input;
+  struct wl_listener new_virtual_keyboard;
+  struct wl_listener new_virtual_pointer;
   struct wl_listener cursor_motion;
   struct wl_listener cursor_motion_absolute;
   struct wl_listener cursor_button;

@@ -49,3 +49,12 @@ The Wayland socket used by the portal must be the one logged by Leme. A nested o
 Capture continues during a lock, but it sees only committed lock content or the opaque blocker. Per-window capture requests are refused while locked and for unmapped windows, and an active window capture ends when the session locks. A source refused by Leme becomes inert and reports the failure when the client opens its capture session.
 
 If direct capture works but a portal stream does not, restart the full graphical login before retrying. That clears portals that inherited an old display environment. See [portal troubleshooting](../troubleshooting/portals-and-capture.md).
+
+## Remote desktop
+
+A remote desktop server needs capture and input injection. Leme provides both:
+
+- `wayvnc` uses Leme's capture and virtual input protocols directly, without a portal.
+- Portal clients such as RustDesk use the RemoteDesktop portal. The installed portal configuration sends RemoteDesktop and Clipboard requests to `xdg-desktop-portal-luminous`. `xdg-desktop-portal-wlr` has no remote desktop support.
+
+Remote input reaches the lock screen, so a remote session can unlock a locked Leme session. See [virtual input](../reference/wayland-protocols.md#input-and-data-exchange).

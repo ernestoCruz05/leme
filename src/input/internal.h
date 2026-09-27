@@ -3,6 +3,7 @@
 
 struct leme_server;
 struct wlr_input_device;
+struct wlr_keyboard;
 
 #include "public/model.h"
 #include <libinput.h>
@@ -45,6 +46,8 @@ struct leme_input_target_info {
 void leme_input_update_capabilities(struct leme_server *server);
 void leme_input_keyboard_add(struct leme_server *server,
                              struct wlr_input_device *device);
+void leme_input_virtual_keyboard_add(struct leme_server *server,
+                                     struct wlr_keyboard *keyboard);
 void leme_input_keyboards_finish(struct leme_server *server);
 void leme_input_pointer_add(struct leme_server *server,
                             struct wlr_input_device *device);

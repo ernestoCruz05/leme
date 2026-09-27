@@ -81,6 +81,25 @@ An older copy under `/usr/local/bin` can take precedence over `/usr/bin` in
 `PATH`. Check both paths if the version or behavior does not match the build you
 just installed.
 
+## Runtime packages
+
+Leme starts without these, but desktop programs expect them:
+
+- `xdg-desktop-portal` and `xdg-desktop-portal-gtk`, for file choosers and the
+  other desktop portals;
+- `xdg-desktop-portal-luminous`, for screenshots and screen sharing with a
+  window picker;
+- `pipewire` and `wireplumber`, which carry screen sharing streams;
+- XWayland, for X11 programs. See [XWayland](../guides/xwayland.md).
+
+On Arch, luminous is in the AUR. Where it is not packaged, install
+`xdg-desktop-portal-wlr` instead. It shares whole outputs, and the installed
+portal configuration falls back to it when luminous is missing. The
+[screen sharing guide](../guides/screen-sharing.md) covers both.
+
+Log in again after installing a portal backend. `xdg-desktop-portal` reads the
+list of backends only when it starts.
+
 Read [minimal configuration](minimal-config.md) before copying a config file.
 Read [first session](first-session.md) before selecting Leme from a display
 manager or launching it from a TTY.

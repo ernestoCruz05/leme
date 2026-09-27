@@ -14,7 +14,9 @@ Leme supports keyboard layouts, relative pointer, pointer constraints, pointer l
 
 While shortcut inhibition is active, normal compositor bindings and SUPER pointer grabs go to the focused client. `switch_vt` and `quit` remain emergency actions.
 
-Touch-origin drag and drop, touch, tablet, gesture, text-input, input-method, and virtual-keyboard protocols are not implemented.
+Leme supports `virtual-keyboard-unstable-v1` and `wlr-virtual-pointer-unstable-v1`. Any client can create a virtual keyboard or pointer. Its input goes to the focused client like physical input, triggers compositor bindings, and reaches the lock screen while the session is locked. A virtual keyboard keeps the keymap its client sends; configured layouts and layout switching apply only to physical keyboards. A virtual pointer created for a specific output moves within that output.
+
+Touch-origin drag and drop, touch, tablet, gesture, text-input, and input-method protocols are not implemented.
 
 ## Locking and idle
 
