@@ -36,6 +36,7 @@ struct leme_workspace_leaf {
       struct wlr_fbox src_box;
       enum wl_output_transform transform;
       float opacity;
+      float blur_alpha;
     } buffer;
   } base;
 };
@@ -145,6 +146,9 @@ static bool leme_workspace_collect_tree(struct wlr_scene_tree *tree,
                   .src_box = buffer->src_box,
                   .transform = buffer->transform,
                   .opacity = buffer->opacity,
+#ifdef LEME_HAVE_EFFECTS
+                  .blur_alpha = buffer->backdrop_blur_alpha,
+#endif
               },
       };
       leme_workspace_buffer_dimensions(buffer, &leaf->base.buffer.width,
@@ -325,6 +329,11 @@ static void leme_workspace_restore_leaf(struct leme_workspace_leaf *leaf,
                                    leaf->base.buffer.dst_height);
     wlr_scene_buffer_set_opacity(buffer,
                                  leaf->base.buffer.opacity * (float)opacity);
+#ifdef LEME_HAVE_EFFECTS
+    wlr_scene_buffer_set_backdrop_blur_alpha(
+        buffer, leaf->base.buffer.blur_alpha * (float)opacity);
+    wlr_scene_buffer_set_corner_box(buffer, NULL);
+#endif
     buffer->point_accepts_input = leme_workspace_reject_input;
     leme_workspace_clear_opaque_region(buffer);
   }
@@ -406,6 +415,15 @@ static void leme_workspace_clip_buffer(struct leme_workspace_leaf *leaf,
                      (double)transformed_width, (double)transformed_height);
   wlr_scene_buffer_set_source_box(buffer, &source);
   wlr_scene_buffer_set_dest_size(buffer, clip->width, clip->height);
+#ifdef LEME_HAVE_EFFECTS
+  wlr_scene_buffer_set_corner_box(buffer,
+                                  &(struct wlr_box){
+                                      .x = -clip->left,
+                                      .y = -clip->top,
+                                      .width = leaf->base.buffer.width,
+                                      .height = leaf->base.buffer.height,
+                                  });
+#endif
 }
 
 static void leme_workspace_apply_leaf(struct leme_workspace_effect *effect,

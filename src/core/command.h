@@ -45,6 +45,7 @@ struct leme_command {
   enum leme_layout_kind layout;
   int amount;
   bool follow;
+  bool occupied;
   bool has_direction;
   char *text;
   char **argv;

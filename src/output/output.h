@@ -16,12 +16,14 @@ struct leme_view;
 struct leme_workspace_transition;
 struct wlr_ext_workspace_group_handle_v1;
 struct wlr_scene_output;
+struct leme_render_timing;
 
 struct leme_output {
   struct leme_server *server;
   struct leme_public_id public_id;
   struct wlr_output *wlr_output;
   struct wlr_scene_output *scene_output;
+  struct leme_render_timing *render_timing;
   struct leme_tags tags;
   struct leme_workspace_transition *workspace_transition;
   struct leme_box full_box;

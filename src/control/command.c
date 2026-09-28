@@ -98,6 +98,24 @@ static void set_destination_id(struct leme_control_intent *intent,
   intent->destination.tag_number = tag_number;
 }
 
+static const uint16_t occupied_slot_limit = 64;
+
+static uint16_t occupied_neighbour(uint64_t occupied, uint16_t active,
+                                   uint16_t max_tags, bool forward) {
+  if (active == 0 || active > max_tags || max_tags > occupied_slot_limit) {
+    return active;
+  }
+  uint16_t slot = active;
+  for (uint16_t step = 1; step < max_tags; ++step) {
+    slot = forward ? (slot == max_tags ? 1 : (uint16_t)(slot + 1))
+                   : (slot == 1 ? max_tags : (uint16_t)(slot - 1));
+    if (((occupied >> (slot - 1)) & 1u) != 0) {
+      return slot;
+    }
+  }
+  return active;
+}
+
 static const char *direction_to_string(enum leme_direction dir) {
   switch (dir) {
   case LEME_DIRECTION_LEFT:
@@ -330,6 +348,7 @@ enum leme_control_code leme_control_command_lower(
   bool has_active_tag = false;
   uint16_t max_tags = 1;
   uint16_t last_materialized = 1;
+  uint64_t occupied_slots = 0;
 
   const struct leme_public_value *session_root = NULL;
   const struct leme_public_value *views_root = NULL;
@@ -508,6 +527,14 @@ enum leme_control_code leme_control_command_lower(
               uint16_t s = (uint16_t)num;
               if (s > max_tags) {
                 max_tags = s;
+              }
+              int64_t views = 0;
+              const struct leme_public_value *v_val =
+                  leme_public_get(tag, LEME_PUBLIC_TEXT("view_count"));
+              if (s >= 1 && s <= occupied_slot_limit && v_val != NULL &&
+                  leme_public_as_integer(v_val, &views) == LEME_PUBLIC_OK &&
+                  views > 0) {
+                occupied_slots |= UINT64_C(1) << (s - 1);
               }
               bool mat = false;
               const struct leme_public_value *m_val =
@@ -703,11 +730,16 @@ enum leme_control_code leme_control_command_lower(
       return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
                                  "no focused output");
     }
-    uint16_t target_slot =
-        cmd.type == LEME_COMMAND_FOCUS_NEXT_TAG
-            ? next_slot
-            : (cmd.type == LEME_COMMAND_FOCUS_PREVIOUS_TAG ? prev_slot
-                                                           : cmd.tag_id);
+    uint16_t target_slot = cmd.tag_id;
+    if (cmd.type != LEME_COMMAND_FOCUS_TAG) {
+      const bool forward = cmd.type == LEME_COMMAND_FOCUS_NEXT_TAG;
+      if (cmd.occupied) {
+        target_slot = occupied_neighbour(occupied_slots, active_tag_slot,
+                                         max_tags, forward);
+      } else {
+        target_slot = forward ? next_slot : prev_slot;
+      }
+    }
     struct leme_public_id target_tag_id = {0};
     struct leme_public_text target_tag_id_text = {0};
     bool found_tag = false;

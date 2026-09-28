@@ -527,6 +527,41 @@ struct leme_tag *leme_tags_step(struct leme_tags *tags,
   return is_candidate ? NULL : tags->table[id];
 }
 
+static bool leme_tags_occupied(const struct leme_tag *tag) {
+  const struct leme_view *view = NULL;
+
+  if (tag == NULL) {
+    return false;
+  }
+  wl_list_for_each(view, &tag->views, tag_link) {
+    if (view->mapped && !view->unmanaged && leme_ownership_tag(view) == tag) {
+      return true;
+    }
+  }
+  return false;
+}
+
+struct leme_tag *
+leme_tags_step_occupied(struct leme_tags *tags,
+                        enum leme_tag_change_direction direction) {
+  uint16_t id;
+  uint16_t count;
+
+  if (direction != LEME_TAG_CHANGE_FORWARD &&
+      direction != LEME_TAG_CHANGE_BACKWARD) {
+    return NULL;
+  }
+  for (count = 1, id = tags->focused_id; count < tags->max_tags; count++) {
+    id = direction > 0 ? (id == tags->max_tags ? 1 : id + 1)
+                       : (id == 1 ? tags->max_tags : id - 1);
+    if (leme_tags_occupied(tags->table[id])) {
+      leme_tags_set_focus_state(tags, id, false, true, direction);
+      return tags->table[id];
+    }
+  }
+  return NULL;
+}
+
 uint16_t leme_tags_adjacent_id(const struct leme_tags *tags,
                                enum leme_tag_change_direction direction) {
   uint16_t wrap_id;

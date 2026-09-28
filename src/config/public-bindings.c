@@ -194,6 +194,9 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
     break;
   case LEME_COMMAND_FOCUS_NEXT_TAG:
   case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
+    if (command->occupied)
+      status = argument_text(b, "occupied", &arguments[count++]);
+    break;
   case LEME_COMMAND_FOCUS_LAST_TAG:
   case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
   case LEME_COMMAND_SWITCH_LAYOUT:

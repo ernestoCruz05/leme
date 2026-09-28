@@ -6,8 +6,8 @@ struct command_name {
   size_t minimum, maximum;
 };
 static const struct command_name commands[] = {
-    {"focus_next_tag", 0, 0},
-    {"focus_previous_tag", 0, 0},
+    {"focus_next_tag", 0, 1},
+    {"focus_previous_tag", 0, 1},
     {"focus_tag", 1, 1},
     {"focus", 1, 1},
     {"focus_last_tag", 0, 0},

@@ -153,15 +153,20 @@ bool leme_command_execute(struct leme_server *server,
   }
   switch (command->type) {
   case LEME_COMMAND_FOCUS_NEXT_TAG:
+  case LEME_COMMAND_FOCUS_PREVIOUS_TAG: {
+    const enum leme_tag_change_direction direction =
+        command->type == LEME_COMMAND_FOCUS_NEXT_TAG ? LEME_TAG_CHANGE_FORWARD
+                                                     : LEME_TAG_CHANGE_BACKWARD;
+
     leme_input_pointer_grab_cancel_tiled(server);
-    leme_tags_step(tags, LEME_TAG_CHANGE_FORWARD);
+    if (!command->occupied) {
+      leme_tags_step(tags, direction);
+    } else if (leme_tags_step_occupied(tags, direction) == NULL) {
+      wlr_log(WLR_DEBUG, "%s", "leme: no other occupied tag");
+    }
     leme_command_refresh_tag(server);
     return true;
-  case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
-    leme_input_pointer_grab_cancel_tiled(server);
-    leme_tags_step(tags, LEME_TAG_CHANGE_BACKWARD);
-    leme_command_refresh_tag(server);
-    return true;
+  }
   case LEME_COMMAND_FOCUS_TAG:
     leme_input_pointer_grab_cancel_tiled(server);
     tag = leme_tags_focus_id(tags, command->tag_id);

@@ -1,4 +1,5 @@
 #include "render/render.h"
+#include "render/timing.h"
 
 #include "protocols/capture.h"
 #include "protocols/data.h"
@@ -145,6 +146,10 @@ bool leme_render_attach_output(struct leme_output *output) {
     wlr_scene_output_layout_add_output(server->scene_output_layout,
                                        layout_output, output->scene_output);
   }
+  if (output->render_timing == NULL) {
+    output->render_timing =
+        leme_render_timing_create(server->render_timing_seconds);
+  }
   return true;
 }
 
@@ -156,6 +161,8 @@ void leme_render_position_output(struct leme_output *output) {
 }
 
 void leme_render_detach_output(struct leme_output *output) {
+  leme_render_timing_destroy(output->render_timing);
+  output->render_timing = NULL;
   if (output->scene_output != NULL) {
     wlr_scene_output_destroy(output->scene_output);
     output->scene_output = NULL;
@@ -239,8 +246,17 @@ void leme_render_output_frame(struct leme_output *output) {
       !wlr_scene_output_needs_frame(output->scene_output)) {
     return;
   }
+  struct wlr_scene_timer *timer =
+      leme_render_timing_begin(output->render_timing, output->wlr_output->name);
+  struct timespec build_start;
+  clock_gettime(CLOCK_MONOTONIC, &build_start);
   wlr_output_state_init(&state);
-  if (!wlr_scene_output_build_state(output->scene_output, &state, NULL)) {
+  const bool built = wlr_scene_output_build_state(
+      output->scene_output, &state,
+      timer == NULL ? NULL
+                    : &(struct wlr_scene_output_state_options){.timer = timer});
+  leme_render_timing_end(output->render_timing, &build_start, built);
+  if (!built) {
     wlr_output_state_finish(&state);
     return;
   }

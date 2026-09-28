@@ -32,6 +32,7 @@ struct leme_config_reload {
   struct wlr_xcursor_manager *cursor_manager;
   struct leme_tags_resize *resizes;
   size_t resize_count;
+  struct xkb_keymap *keymap;
 };
 
 static bool leme_config_same_text(const char *first, const char *second) {
@@ -166,11 +167,6 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
                                "unsupported live output configuration change");
   }
 
-  if (leme_keyboards_have_delta(server, next)) {
-    return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
-                               "unsupported live keyboard keymap change");
-  }
-
   if (leme_pointers_have_delta(server, next)) {
     return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
                                "unsupported live pointer configuration change");
@@ -181,7 +177,10 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
     return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                "invalid keyboard layout configuration");
   }
-  xkb_keymap_unref(km);
+  if (!leme_keyboards_have_delta(server, next)) {
+    xkb_keymap_unref(km);
+    km = NULL;
+  }
 
   struct leme_config_reload *plan = NULL;
   if (account != NULL) {
@@ -190,6 +189,7 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
     plan = calloc(1, sizeof(*plan));
   }
   if (plan == NULL) {
+    xkb_keymap_unref(km);
     return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
                                "out of memory");
   }
@@ -197,6 +197,7 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
   plan->opcode = LEME_CONTROL_OP_RELOAD_CONFIG;
   plan->account = account;
   plan->next = next;
+  plan->keymap = km;
 
   size_t output_count = 0;
   if (server->outputs.next != NULL) {
@@ -321,6 +322,11 @@ void leme_config_reload_commit(struct leme_server *server,
   plan->next = NULL;
   plan->effective = NULL;
 
+  if (plan->keymap != NULL) {
+    (void)leme_input_apply_keymap(server, plan->keymap);
+    xkb_keymap_unref(plan->keymap);
+    plan->keymap = NULL;
+  }
   leme_public_server_config_changed(server);
   leme_input_public_keymap_committed(server);
   leme_input_apply_keyboard_repeat(server);
@@ -364,6 +370,9 @@ void leme_config_reload_discard(struct leme_config_reload **plan_ptr) {
   }
   if (plan->cursor_manager != NULL) {
     leme_desktop_discard_cursor_config(plan->cursor_manager);
+  }
+  if (plan->keymap != NULL) {
+    xkb_keymap_unref(plan->keymap);
   }
   if (plan->effective != NULL) {
     leme_config_destroy(plan->effective);

@@ -6,8 +6,8 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 
 | Command | Behavior |
 | --- | --- |
-| `focus_next_tag` | Move forward through the navigable tag ring. |
-| `focus_previous_tag` | Move backward through the navigable tag ring. |
+| `focus_next_tag [occupied]` | Move forward through the navigable tag ring. With `occupied`, skip to the next tag that has a window, wrapping past the last one; nothing happens when no other tag has a window. |
+| `focus_previous_tag [occupied]` | Move backward through the navigable tag ring. `occupied` skips empty tags the same way. |
 | `focus_tag ID` | Select a pinned, occupied, or empty candidate tag up to `maximum`. |
 | `focus_last_tag` | Swap the current and previous tag states, including a candidate. |
 | `focus_previous_view` | Focus the most recently focused alternative on the current tag. |

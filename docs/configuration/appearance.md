@@ -29,9 +29,10 @@ style {
 
 The active and inactive border colors follow keyboard focus. Leme draws the border as its complete server-side decoration. It does not draw titlebars or buttons.
 
-`corner_radius` rounds the window, frame and content together. The value is
-clamped to half the shorter side, so a small window keeps the largest radius
-that fits. Fullscreen windows are never rounded, because a window covering the
+`corner_radius` rounds the window, frame and content together. Like
+`border_width`, it is in logical pixels, so both grow with the output scale. The
+value is clamped to half the shorter side, so a small window keeps the largest
+radius that fits. Fullscreen windows are never rounded, because a window covering the
 output has nothing to show through its corners.
 
 Rounding requires a build configured with `-Deffects=true`, which compiles
@@ -40,8 +41,16 @@ against a patched wlroots. Other builds accept the key and ignore it.
 `blur` blurs whatever is behind a window. It is only visible where the window
 is translucent, so it does nothing unless `opacity_active` or
 `opacity_inactive` is below 1, or the client draws its own transparency.
-Behind an opaque window the work is skipped entirely. Fullscreen windows are
-never blurred.
+Behind an opaque window the work is skipped entirely, rounded or not.
+Fullscreen windows are never blurred.
+
+The value is roughly the blur radius in logical pixels. Leme uses a dual Kawase
+blur: it shrinks the backdrop in a few steps and scales it back up, so large
+values stay smooth and cost little more than small ones. The blurred area
+follows `corner_radius`, and it fades with the window during open and close
+animations and workspace fades. The software renderer (`WLR_RENDERER=pixman`)
+keeps a plain box blur without rounding or fading. To see what blur costs on
+your hardware, see [measuring performance](../troubleshooting/performance.md).
 
 A blur radius above 64 is reported rather than clamped, so a value that would
 do nothing useful says so instead of being silently reduced.

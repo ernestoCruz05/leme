@@ -45,6 +45,6 @@ Bindings match the symbol a key produces in the active layout. When nothing matc
 
 ## Reloading
 
-A configuration reload applies new repeat settings. Layout and option changes need a restart: a reload that changes them fails with "unsupported live keyboard keymap change", and Leme keeps the current configuration.
+A configuration reload applies new repeat settings. When layouts or options change, the reload also compiles and applies the new keymap and returns to the first layout; a reload that leaves them unchanged keeps the active layout. If the new keymap does not compile, Leme keeps the current configuration.
 
 The keybinding command and `timao` query for the active group are documented in the [command reference](../reference/commands.md) and [timao reference](../reference/timao.md).

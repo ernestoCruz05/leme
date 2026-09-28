@@ -138,6 +138,7 @@ leme_sources = files(
   'src/protocols/workspace.c',
   'src/protocols/toplevel.c',
   'src/render/render.c',
+  'src/render/timing.c',
   'src/render/animation.c',
   'src/render/workspace_effect.c',
   'src/render/workspace_transition.c',

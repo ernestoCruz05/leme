@@ -137,10 +137,16 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
   }
   name = params[0];
   arguments = params_len - 1;
-  if (strcmp(name, "focus_next_tag") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_FOCUS_NEXT_TAG;
-  } else if (strcmp(name, "focus_previous_tag") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_FOCUS_PREVIOUS_TAG;
+  if ((strcmp(name, "focus_next_tag") == 0 ||
+       strcmp(name, "focus_previous_tag") == 0) &&
+      arguments <= 1) {
+    command->type = strcmp(name, "focus_next_tag") == 0
+                        ? LEME_COMMAND_FOCUS_NEXT_TAG
+                        : LEME_COMMAND_FOCUS_PREVIOUS_TAG;
+    if (arguments == 1 && strcmp(params[1], "occupied") != 0) {
+      goto invalid;
+    }
+    command->occupied = arguments == 1;
   } else if (strcmp(name, "focus_tag") == 0 && arguments == 1) {
     command->type = LEME_COMMAND_FOCUS_TAG;
     if (!leme_command_parse_u16(params[1], &command->tag_id)) {

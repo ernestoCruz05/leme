@@ -98,6 +98,8 @@ leme_animation_copy_children(struct leme_animation_copy_context context) {
 #ifdef LEME_HAVE_EFFECTS
       wlr_scene_buffer_set_corner_radius(branch, buffer->corner_radius);
       wlr_scene_buffer_set_backdrop_blur(branch, buffer->backdrop_blur);
+      wlr_scene_buffer_set_backdrop_blur_alpha(branch,
+                                               buffer->backdrop_blur_alpha);
 #endif
       copy = &branch->node;
       break;

@@ -14,6 +14,7 @@
 #include "output/output.h"
 #include "protocols/output_power.h"
 #include "render/render.h"
+#include "render/timing.h"
 #include "protocols/session.h"
 #include "core/session_environment.h"
 #include "workspace/tag.h"
@@ -159,6 +160,13 @@ bool leme_server_init(struct leme_server *server) {
       !wlr_renderer_init_wl_shm(server->renderer, server->display)) {
     wlr_log(WLR_ERROR, "%s", "leme: failed to create renderer");
     return false;
+  }
+
+  if (!leme_render_timing_parse(getenv("LEME_RENDER_TIMING"),
+                                &server->render_timing_seconds)) {
+    wlr_log(WLR_ERROR, "%s",
+            "leme: LEME_RENDER_TIMING must be a whole number of seconds from "
+            "1 through 60; render timing is off");
   }
 
   server->allocator =

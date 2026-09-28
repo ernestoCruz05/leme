@@ -180,7 +180,8 @@ distance, or curve records a diagnostic and leaves that key at its default.
 ### Direction
 
 - `focus_next_tag` and a followed `next` move travel forward, including the
-  wrap from the highest navigable tag to tag 1.
+  wrap from the highest navigable tag to tag 1. With `occupied`, the same holds
+  for the wrap from the highest occupied tag.
 - `focus_previous_tag` and a followed `previous` move travel backward,
   including the reverse wrap.
 - A direct numbered selection or followed numbered move uses the tag numbers:

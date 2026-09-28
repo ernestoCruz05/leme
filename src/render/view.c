@@ -978,6 +978,10 @@ leme_render_view_animation_fade(struct leme_render_view_animation *state,
           wl_container_of(base->node, buffer, node);
 
       wlr_scene_buffer_set_opacity(buffer, base->opacity * alpha);
+#ifdef LEME_HAVE_EFFECTS
+      wlr_scene_buffer_set_backdrop_blur_alpha(
+          buffer, alpha > 0.0f ? (alpha < 1.0f ? alpha : 1.0f) : 0.0f);
+#endif
     }
   }
   for (index = 0; index < LEME_ARRAY_LENGTH(state->nodes.border); index++) {

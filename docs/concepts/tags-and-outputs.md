@@ -11,7 +11,9 @@ window leaves, Leme removes the empty tag while keeping its number available.
 
 Navigation includes the pinned tags, occupied adaptive tags, and at most the
 current empty candidate. Selecting unused tag numbers does not fill the session
-with empty tags.
+with empty tags. `focus_next_tag occupied` and `focus_previous_tag occupied`
+skip every tag without a window, pinned tags and the candidate included, so
+windows on tags 1 and 3 give 1, 3, 1.
 
 The `initial` and `maximum` limits, tag ranges, and `drop_mode` setting are documented in [tag configuration](../configuration/tags.md).
 

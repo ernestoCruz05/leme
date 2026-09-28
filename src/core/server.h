@@ -80,6 +80,7 @@ struct leme_server {
   struct wlr_backend *headless_backend;
   struct wlr_session *session;
   struct wlr_renderer *renderer;
+  uint32_t render_timing_seconds;
   struct wlr_allocator *allocator;
   struct wlr_compositor *compositor;
   struct wlr_linux_dmabuf_v1 *linux_dmabuf;

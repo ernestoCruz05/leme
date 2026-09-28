@@ -76,6 +76,9 @@ leme_tags_focus_id_direction(struct leme_tags *tags, uint16_t id,
                              enum leme_tag_change_direction direction);
 struct leme_tag *leme_tags_step(struct leme_tags *tags,
                                 enum leme_tag_change_direction direction);
+struct leme_tag *
+leme_tags_step_occupied(struct leme_tags *tags,
+                        enum leme_tag_change_direction direction);
 uint16_t leme_tags_adjacent_id(const struct leme_tags *tags,
                                enum leme_tag_change_direction direction);
 bool leme_tags_focus_last(struct leme_tags *tags);

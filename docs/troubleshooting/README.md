@@ -8,4 +8,5 @@ Start with the [session log](startup.md#start-with-the-log), then choose the sym
 - [Portals and capture](portals-and-capture.md) separates compositor capture from portal and PipeWire failures.
 - [XWayland](xwayland.md) covers lazy startup, missing binaries, and native fallback.
 - [Crashes](crashes.md) lists the information needed for a useful report.
+- [Performance](performance.md) shows how to measure what effects and animations cost per frame.
 
