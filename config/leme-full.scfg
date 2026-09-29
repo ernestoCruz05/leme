@@ -50,6 +50,11 @@ style {
 #         curve ease_in
 #         effect fade
 #     }
+#     # Tiled windows glide to their new place when the layout changes:
+#     move {
+#         duration 340
+#         curve 0.30 1.50 0.50 1.00
+#     }
 #     workspace {
 #         duration 180
 #         # Change glide_fade to full_slide for a full-width slide.

@@ -333,6 +333,8 @@ PUBLIC_SCHEMA(ANIMATION, "animation", false,
       "Window open animation"),
   PUBLIC_FIELD("close", ANIMATION_EVENT, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Window close animation"),
+  PUBLIC_FIELD("move", ANIMATION_EVENT, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Tiled window move and resize animation"),
   PUBLIC_FIELD("workspace", WORKSPACE_ANIMATION, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Workspace switching animation")
 )

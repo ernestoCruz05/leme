@@ -84,6 +84,9 @@ void leme_render_view_layout_frame(
     const struct leme_render_view_frame_nodes *nodes, struct leme_box box,
     int border_width, int corner_radius);
 void leme_render_view_set_box(struct leme_view *view, struct leme_box box);
+void leme_render_view_move(struct leme_view *view, struct leme_box from,
+                           struct leme_box to);
+void leme_render_view_finish_move(struct leme_view *view);
 void leme_render_view_clip_to_geometry(struct leme_view *view);
 struct leme_box leme_render_view_local_box(const struct leme_view *view,
                                            struct leme_box global);

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/util/transform.h>
 
 struct leme_animation_hold {
   struct wlr_buffer *buffer;
@@ -140,6 +141,44 @@ void leme_animation_snapshot_destroy(struct wlr_scene_tree *snapshot) {
   if (snapshot != NULL) {
     wlr_scene_node_destroy(&snapshot->node);
   }
+}
+
+void leme_animation_crop_buffer(
+    struct wlr_scene_buffer *buffer,
+    const struct leme_animation_buffer_geometry *geometry, int left, int top,
+    int width, int height) {
+  struct wlr_fbox source = geometry->src_box;
+  struct wlr_fbox oriented;
+  struct wlr_fbox cropped;
+  int transformed_width = geometry->buffer_width;
+  int transformed_height = geometry->buffer_height;
+
+  if (geometry->width <= 0 || geometry->height <= 0) {
+    return;
+  }
+  if (wlr_fbox_empty(&source)) {
+    source = (struct wlr_fbox){
+        .width = geometry->buffer_width,
+        .height = geometry->buffer_height,
+    };
+  }
+  wlr_fbox_transform(&oriented, &source, geometry->transform,
+                     (double)geometry->buffer_width,
+                     (double)geometry->buffer_height);
+  cropped = (struct wlr_fbox){
+      .x = oriented.x + (double)left * oriented.width / (double)geometry->width,
+      .y =
+          oriented.y + (double)top * oriented.height / (double)geometry->height,
+      .width = (double)width * oriented.width / (double)geometry->width,
+      .height = (double)height * oriented.height / (double)geometry->height,
+  };
+  wlr_output_transform_coords(geometry->transform, &transformed_width,
+                              &transformed_height);
+  wlr_fbox_transform(&source, &cropped,
+                     wlr_output_transform_invert(geometry->transform),
+                     (double)transformed_width, (double)transformed_height);
+  wlr_scene_buffer_set_source_box(buffer, &source);
+  wlr_scene_buffer_set_dest_size(buffer, width, height);
 }
 
 struct leme_animation {
@@ -581,6 +620,18 @@ abandon:
   }
 }
 
+static bool leme_animation_holds(const struct leme_animation *animation,
+                                 const struct timespec *now) {
+  const int64_t elapsed_ms =
+      ((int64_t)now->tv_sec - (int64_t)animation->start.tv_sec) * 1000 +
+      ((int64_t)now->tv_nsec - (int64_t)animation->start.tv_nsec) / 1000000;
+
+  return animation->spec.hold_max_ms > 0 && animation->subject.ready != NULL &&
+         elapsed_ms < (int64_t)animation->spec.duration_ms +
+                          (int64_t)animation->spec.hold_max_ms &&
+         !animation->subject.ready(animation->subject.data);
+}
+
 void leme_animation_manager_tick(struct leme_animation_manager *manager,
                                  const struct timespec *now) {
   struct leme_animation *animation;
@@ -603,6 +654,13 @@ void leme_animation_manager_tick(struct leme_animation_manager *manager,
     linear = leme_animation_elapsed(&animation->start, now,
                                     animation->spec.duration_ms);
     if (linear >= 1.0) {
+      if (leme_animation_holds(animation, now)) {
+        frame = leme_animation_frame_at(&animation->spec, 1.0, 1.0);
+        if (animation->subject.apply != NULL) {
+          animation->subject.apply(animation->subject.data, &frame);
+        }
+        continue;
+      }
       animation->finishing = true;
       continue;
     }

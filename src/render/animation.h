@@ -7,10 +7,13 @@
 #include <stdint.h>
 #include <time.h>
 #include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
+#include <wlr/util/box.h>
 
 enum leme_animation_event {
   LEME_ANIMATION_OPEN,
   LEME_ANIMATION_CLOSE,
+  LEME_ANIMATION_MOVE,
   LEME_ANIMATION_EVENT_COUNT,
 };
 
@@ -73,6 +76,7 @@ struct leme_animation_subject {
   const void *owner;
   void (*apply)(void *data, const struct leme_animation_frame *frame);
   void (*done)(void *data);
+  bool (*ready)(void *data);
 };
 
 struct leme_animation_spec {
@@ -90,8 +94,23 @@ struct leme_animation_spec {
   struct leme_animation_spring spring;
   bool scalar_spring;
   double scalar_initial_velocity;
+  uint32_t hold_max_ms;
 };
 
+struct leme_animation_buffer_geometry {
+  int width;
+  int height;
+  int buffer_width;
+  int buffer_height;
+  struct wlr_fbox src_box;
+  enum wl_output_transform transform;
+};
+
+struct wlr_scene_buffer;
+void leme_animation_crop_buffer(
+    struct wlr_scene_buffer *buffer,
+    const struct leme_animation_buffer_geometry *geometry, int left, int top,
+    int width, int height);
 struct wlr_scene_tree *leme_animation_snapshot(struct wlr_scene_tree *source,
                                                struct wlr_scene_tree *parent);
 void leme_animation_snapshot_destroy(struct wlr_scene_tree *snapshot);

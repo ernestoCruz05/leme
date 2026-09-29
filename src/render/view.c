@@ -15,8 +15,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
+#include <wlr/util/transform.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/xwayland/xwayland.h>
 
@@ -82,6 +84,18 @@ struct leme_render_view_content_base {
   int width;
   int height;
   float opacity;
+  bool enabled;
+  int root_x;
+  int root_y;
+  struct leme_animation_buffer_geometry geometry;
+};
+
+struct leme_render_view_copy {
+  struct wlr_scene_tree *root;
+  struct leme_render_view_frame_nodes nodes;
+  struct wl_array content_bases;
+  int content_width;
+  int content_height;
 };
 
 struct leme_render_view_animation {
@@ -95,6 +109,9 @@ struct leme_render_view_animation {
   int final_content_width;
   int final_content_height;
   bool restore_on_done;
+  bool moving;
+  struct leme_box current;
+  struct leme_render_view_copy redrawn;
 };
 
 static void
@@ -436,7 +453,9 @@ static void leme_render_view_apply_opacity(struct wlr_scene_buffer *buffer,
  * cima do instantâneo que representa a transição.
  */
 static bool leme_render_view_presentation_hidden(const struct leme_view *view) {
-  return view->open_animation_pending ||
+  const struct leme_render_view_animation *state = view->animation_state;
+
+  return view->open_animation_pending || (state != NULL && state->moving) ||
          leme_render_workspace_transition_hides_view(view);
 }
 
@@ -882,8 +901,31 @@ struct leme_box leme_render_view_content_box(const struct leme_view *view,
  * Cada nó do conteúdo guarda a sua medida final: o rácio de cada frame é
  * aplicado sempre à base e nunca ao que sobrou do frame anterior.
  */
+static struct leme_animation_buffer_geometry
+leme_render_view_buffer_geometry(const struct wlr_scene_buffer *buffer) {
+  struct leme_animation_buffer_geometry geometry = {
+      .width = buffer->dst_width,
+      .height = buffer->dst_height,
+      .src_box = buffer->src_box,
+      .transform = buffer->transform,
+  };
+
+  if (buffer->buffer != NULL) {
+    geometry.buffer_width = buffer->buffer->width;
+    geometry.buffer_height = buffer->buffer->height;
+    if (geometry.width == 0 && geometry.height == 0) {
+      geometry.width = buffer->buffer->width;
+      geometry.height = buffer->buffer->height;
+      wlr_output_transform_coords(buffer->transform, &geometry.width,
+                                  &geometry.height);
+    }
+  }
+  return geometry;
+}
+
 static bool leme_render_view_collect_content(struct wl_array *bases,
-                                             struct wlr_scene_tree *tree) {
+                                             struct wlr_scene_tree *tree,
+                                             int origin_x, int origin_y) {
   struct wlr_scene_node *node;
 
   if (tree == NULL) {
@@ -892,6 +934,8 @@ static bool leme_render_view_collect_content(struct wl_array *bases,
   wl_list_for_each(node, &tree->children, link) {
     struct leme_render_view_content_base *base =
         wl_array_add(bases, sizeof(*base));
+    const int root_x = origin_x + node->x;
+    const int root_y = origin_y + node->y;
 
     if (base == NULL) {
       return false;
@@ -901,6 +945,9 @@ static bool leme_render_view_collect_content(struct wl_array *bases,
         .x = node->x,
         .y = node->y,
         .opacity = 1.0f,
+        .enabled = node->enabled,
+        .root_x = root_x,
+        .root_y = root_y,
     };
     if (node->type == WLR_SCENE_NODE_RECT) {
       struct wlr_scene_rect *rect = wl_container_of(node, rect, node);
@@ -913,12 +960,13 @@ static bool leme_render_view_collect_content(struct wl_array *bases,
       base->width = buffer->dst_width;
       base->height = buffer->dst_height;
       base->opacity = buffer->opacity;
+      base->geometry = leme_render_view_buffer_geometry(buffer);
     }
     /* A recursão fica no fim: wl_array_add pode realocar o vector. */
     if (node->type == WLR_SCENE_NODE_TREE) {
       struct wlr_scene_tree *branch = wl_container_of(node, branch, node);
 
-      if (!leme_render_view_collect_content(bases, branch)) {
+      if (!leme_render_view_collect_content(bases, branch, root_x, root_y)) {
         return false;
       }
     }
@@ -1007,6 +1055,8 @@ leme_render_view_animation_apply(void *data,
   int border_width = leme_render_view_clamp_border(state->border_width, box);
   double ratio_x = 1.0;
   double ratio_y = 1.0;
+
+  state->current = box;
 
   wlr_scene_node_set_position(&state->root->node, box.x, box.y);
   leme_render_view_layout_frame(
@@ -1140,6 +1190,8 @@ leme_render_view_animation_spec(struct leme_box final,
       .duration_ms = settings->duration_ms,
       .curve = settings->curve,
       .opacity_curve = settings->opacity_curve,
+      .kind = settings->kind,
+      .spring = settings->spring,
   };
 }
 
@@ -1179,7 +1231,7 @@ leme_render_view_animation_begin(struct leme_view *view,
   if (state->root != NULL) {
     leme_render_view_frame_from_snapshot(state->root, &state->nodes);
     if (leme_render_view_collect_content(&state->content_bases,
-                                         state->nodes.content)) {
+                                         state->nodes.content, 0, 0)) {
       for (index = 0; index < LEME_ARRAY_LENGTH(state->nodes.border); index++) {
         if (state->nodes.border[index] != NULL) {
           for (size_t component = 0;
@@ -1211,6 +1263,300 @@ abandon:
   if (opening && view->render_tree != NULL) {
     wlr_scene_node_set_enabled(&view->render_tree->node, true);
   }
+}
+
+static struct leme_box
+leme_render_view_committed_content(const struct leme_view *view,
+                                   struct leme_box fallback) {
+  struct leme_box content = leme_render_view_content_box(view, fallback);
+
+  if (view->kind == LEME_VIEW_XDG && view->xdg_toplevel != NULL &&
+      view->xdg_toplevel->base != NULL &&
+      view->xdg_toplevel->base->geometry.width > 0 &&
+      view->xdg_toplevel->base->geometry.height > 0) {
+    content.width = view->xdg_toplevel->base->geometry.width;
+    content.height = view->xdg_toplevel->base->geometry.height;
+  } else if (view->kind == LEME_VIEW_XWAYLAND &&
+             view->xwayland_surface != NULL &&
+             view->xwayland_surface->surface != NULL &&
+             view->xwayland_surface->surface->current.width > 0 &&
+             view->xwayland_surface->surface->current.height > 0) {
+    content.width = view->xwayland_surface->surface->current.width;
+    content.height = view->xwayland_surface->surface->current.height;
+  }
+  return content;
+}
+
+static bool leme_render_view_move_ready(void *data) {
+  const struct leme_render_view_animation *state = data;
+  const struct leme_view *view = state->view;
+  const struct wlr_xdg_surface *base;
+
+  if (view == NULL || view->kind != LEME_VIEW_XDG ||
+      view->xdg_toplevel == NULL || view->xdg_toplevel->base == NULL) {
+    return true;
+  }
+  if (view->configure_dirty) {
+    return false;
+  }
+  base = view->xdg_toplevel->base;
+  return base->current.configure_serial >= base->scheduled_serial;
+}
+
+static void leme_render_view_copy_crop(struct leme_render_view_copy *copy,
+                                       int width, int height) {
+  struct leme_render_view_content_base *base;
+
+  wl_array_for_each(base, &copy->content_bases) {
+    const int right = base->root_x + base->width;
+    const int bottom = base->root_y + base->height;
+    const int left = base->root_x > 0 ? base->root_x : 0;
+    const int top = base->root_y > 0 ? base->root_y : 0;
+    const int visible_width = (right < width ? right : width) - left;
+    const int visible_height = (bottom < height ? bottom : height) - top;
+
+    if (base->node->type == WLR_SCENE_NODE_TREE) {
+      continue;
+    }
+    if (!base->enabled || visible_width <= 0 || visible_height <= 0) {
+      wlr_scene_node_set_enabled(base->node, false);
+      continue;
+    }
+    wlr_scene_node_set_enabled(base->node, true);
+    wlr_scene_node_set_position(base->node, base->x + left - base->root_x,
+                                base->y + top - base->root_y);
+    if (base->node->type == WLR_SCENE_NODE_RECT) {
+      struct wlr_scene_rect *rect = wl_container_of(base->node, rect, node);
+
+      wlr_scene_rect_set_size(rect, visible_width, visible_height);
+    } else if (base->node->type == WLR_SCENE_NODE_BUFFER) {
+      struct wlr_scene_buffer *buffer =
+          wl_container_of(base->node, buffer, node);
+
+      leme_animation_crop_buffer(buffer, &base->geometry, left - base->root_x,
+                                 top - base->root_y, visible_width,
+                                 visible_height);
+#ifdef LEME_HAVE_EFFECTS
+      wlr_scene_buffer_set_corner_box(buffer, &(struct wlr_box){
+                                                  .x = -left,
+                                                  .y = -top,
+                                                  .width = width,
+                                                  .height = height,
+                                              });
+#endif
+    }
+  }
+}
+
+static int64_t leme_render_view_uncovered(int content_width, int content_height,
+                                          int width, int height) {
+  const int covered_width = width < content_width ? width : content_width;
+  const int covered_height = height < content_height ? height : content_height;
+
+  return (int64_t)width * height - (int64_t)covered_width * covered_height;
+}
+
+static void
+leme_render_view_move_capture(struct leme_render_view_animation *state) {
+  struct leme_view *view = state->view;
+  struct leme_render_view_copy *copy = &state->redrawn;
+  const struct leme_box natural =
+      leme_render_view_committed_content(view, view->box);
+
+  copy->root =
+      leme_animation_snapshot(view->render_tree, leme_render_view_parent(view));
+  if (copy->root == NULL) {
+    return;
+  }
+  leme_render_view_apply_snapshot(view, copy->root,
+                                  view == view->server->focused_view);
+  leme_render_view_frame_from_snapshot(copy->root, &copy->nodes);
+  if (!leme_render_view_collect_content(&copy->content_bases,
+                                        copy->nodes.content, 0, 0)) {
+    leme_animation_snapshot_destroy(copy->root);
+    copy->root = NULL;
+    return;
+  }
+  copy->content_width = natural.width;
+  copy->content_height = natural.height;
+}
+
+static void
+leme_render_view_move_apply(void *data,
+                            const struct leme_animation_frame *frame) {
+  struct leme_render_view_animation *state = data;
+  const struct leme_box box = frame->box;
+  const int border_width =
+      leme_render_view_clamp_border(state->border_width, box);
+  const int width = box.width - border_width * 2;
+  const int height = box.height - border_width * 2;
+  struct leme_render_view_copy original = {
+      .root = state->root,
+      .nodes = state->nodes,
+      .content_bases = state->content_bases,
+      .content_width = state->final_content_width,
+      .content_height = state->final_content_height,
+  };
+  struct leme_render_view_copy *shown = &original;
+  struct wlr_scene_tree *hidden = state->redrawn.root;
+
+  state->current = box;
+  if (state->view == NULL) {
+    return;
+  }
+  if (state->redrawn.root == NULL && leme_render_view_move_ready(state)) {
+    wl_array_init(&state->redrawn.content_bases);
+    leme_render_view_move_capture(state);
+    hidden = state->redrawn.root;
+  }
+  if (state->redrawn.root != NULL &&
+      leme_render_view_uncovered(state->redrawn.content_width,
+                                 state->redrawn.content_height, width,
+                                 height) <=
+          leme_render_view_uncovered(original.content_width,
+                                     original.content_height, width, height)) {
+    shown = &state->redrawn;
+    hidden = state->root;
+  }
+  if (hidden != NULL) {
+    wlr_scene_node_set_enabled(&hidden->node, false);
+  }
+  if (shown->root == NULL) {
+    return;
+  }
+  wlr_scene_node_set_enabled(&shown->root->node, true);
+  wlr_scene_node_set_position(&shown->root->node, box.x, box.y);
+  leme_render_view_layout_frame(
+      &shown->nodes, box, border_width,
+      leme_render_view_corner_radius(state->view, box));
+  leme_render_view_copy_crop(shown, width, height);
+}
+
+static void leme_render_view_move_done(void *data) {
+  struct leme_render_view_animation *state = data;
+  struct leme_view *view = state->view;
+
+  if (state->redrawn.root != NULL) {
+    leme_animation_snapshot_destroy(state->redrawn.root);
+    wl_array_release(&state->redrawn.content_bases);
+  }
+  wl_array_release(&state->content_bases);
+  if (view != NULL) {
+    view->animation_state = NULL;
+    leme_render_view_sync_presentation(view);
+    const struct leme_box content =
+        leme_render_view_content_box(view, view->box);
+    leme_render_view_apply_surface_effects(
+        view, leme_render_view_corner_radius(view, view->box),
+        content.x - view->box.x, leme_render_view_blur(view));
+  }
+  free(state);
+}
+
+static bool leme_render_view_move_allowed(const struct leme_view *view,
+                                          struct leme_box from) {
+  return view->server->config != NULL &&
+         view->server->config->animation[LEME_ANIMATION_MOVE].configured &&
+         view->mapped && view->render_tree != NULL &&
+         view->render_tree->node.enabled && !view->floating &&
+         !view->detached && from.width > 0 && from.height > 0 &&
+         leme_render_view_animation_allowed(view);
+}
+
+void leme_render_view_finish_move(struct leme_view *view) {
+  const struct leme_render_view_animation *state =
+      view == NULL ? NULL : view->animation_state;
+
+  if (state != NULL && state->moving) {
+    leme_render_view_finish_animation(view);
+  }
+}
+
+void leme_render_view_move(struct leme_view *view, struct leme_box from,
+                           struct leme_box to) {
+  const struct leme_render_view_animation *running;
+  struct leme_render_view_animation *state;
+  struct leme_box start = from;
+  size_t index;
+
+  if (view == NULL || view->server == NULL || view->open_animation_pending) {
+    return;
+  }
+  running = view->animation_state;
+  if (running != NULL && running->moving) {
+    start = running->current;
+  }
+  if (view->animation_state != NULL) {
+    leme_render_view_finish_animation(view);
+  }
+  if (!leme_render_view_move_allowed(view, from)) {
+    return;
+  }
+  state = calloc(1, sizeof(*state));
+  if (state == NULL) {
+    return;
+  }
+  wl_array_init(&state->content_bases);
+  state->view = view;
+  state->output = leme_ownership_tag(view) == NULL ||
+                          leme_ownership_tag(view)->owner == NULL
+                      ? NULL
+                      : leme_ownership_tag(view)->owner->output;
+  state->moving = true;
+  state->current = start;
+  state->border_width = leme_render_view_border_width(view, to);
+  const struct leme_box natural =
+      leme_render_view_committed_content(view, start);
+  state->final_content_width = natural.width;
+  state->final_content_height = natural.height;
+  state->root =
+      leme_animation_snapshot(view->render_tree, leme_render_view_parent(view));
+  if (state->root != NULL) {
+    leme_render_view_apply_snapshot(view, state->root,
+                                    view == view->server->focused_view);
+    leme_render_view_frame_from_snapshot(state->root, &state->nodes);
+    if (leme_render_view_collect_content(&state->content_bases,
+                                         state->nodes.content, 0, 0)) {
+      for (index = 0; index < LEME_ARRAY_LENGTH(state->nodes.border); index++) {
+        if (state->nodes.border[index] != NULL) {
+          for (size_t component = 0;
+               component < LEME_ARRAY_LENGTH(state->border_color[index]);
+               component++) {
+            state->border_color[index][component] =
+                state->nodes.border[index]->color[component];
+          }
+        }
+      }
+    } else {
+      leme_animation_snapshot_destroy(state->root);
+      state->root = NULL;
+    }
+  }
+  view->animation_state = state;
+  leme_render_view_sync_presentation(view);
+
+  const struct leme_animation_settings *settings =
+      &view->server->config->animation[LEME_ANIMATION_MOVE];
+  const struct leme_animation_spec spec = {
+      .from = start,
+      .to = to,
+      .from_opacity = 1.0,
+      .to_opacity = 1.0,
+      .duration_ms = settings->duration_ms,
+      .curve = settings->curve,
+      .opacity_curve = settings->curve,
+      .kind = settings->kind,
+      .spring = settings->spring,
+      .hold_max_ms = LEME_ANIMATION_OPEN_TIMEOUT_MS,
+  };
+  const struct leme_animation_subject subject = {
+      .data = state,
+      .owner = state->output,
+      .apply = leme_render_view_move_apply,
+      .done = leme_render_view_move_done,
+      .ready = leme_render_view_move_ready,
+  };
+  leme_animation_run(&view->server->animations, state->root, &spec, &subject);
 }
 
 struct leme_box leme_render_view_frame_box(const struct leme_view *view,

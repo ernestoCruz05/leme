@@ -188,9 +188,11 @@ static void leme_xwayland_surface_map(struct leme_xwayland_view *wrapper) {
   }
   if (adoption != NULL) {
     leme_view_apply_layout_box(
-        view, leme_view_policy_center_box(
-                  view->box, parent->box,
-                  leme_output_usable_box(leme_view_output(parent))));
+        view,
+        leme_view_policy_center_box(
+            view->box, parent->box,
+            leme_output_usable_box(leme_view_output(parent))),
+        false);
     leme_sticky_commit_transient(&adoption);
   }
   if (wrapper->xsurface->fullscreen ||

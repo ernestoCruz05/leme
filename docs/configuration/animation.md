@@ -77,10 +77,78 @@ A window opens or closes without animation when:
 A running window animation ends immediately when the displayed tag changes or
 the session locks. An animation never delays a window from opening or closing.
 
+## Layout changes
+
+Use `move` to animate tiled windows that change place or size when the layout
+rearranges: a window opens or closes on the tag, windows swap or move, the
+layout switches, a split is resized with a command, or a dragged window is
+dropped into a new slot.
+
+```scfg
+animation {
+    move {
+        duration 340
+        curve 0.30 1.50 0.50 1.00
+    }
+}
+```
+
+`move` takes `duration`, `curve` and `spring`, with the same values as `open`
+and `close`. `effect`, `scale_from` and `opacity_curve` do not apply to it and
+are reported as configuration problems. A spring works the same way here:
+
+```scfg
+animation {
+    move {
+        spring {
+            damping_ratio 0.8
+            stiffness 600
+        }
+    }
+}
+```
+
+### What a layout animation shows
+
+The window's frame glides from the old place to the new one, and its content is
+never stretched: it keeps its real size, anchored at the top-left corner, and
+the frame cuts it off where it doesn't fit. A window that shrinks shows its old
+content being covered from the right and bottom, like a curtain. A window that
+grows shows the content the application has already drawn at its new size,
+revealed as the frame opens. The application gets its new size when the
+animation starts, and most redraw within a frame or two. Until then, a growing
+window shows its old content with the background visible in the part not yet
+filled.
+
+When the animation ends, the live window takes over. If the application has not
+drawn at its new size by then, the old content stays at the final place for up
+to 200 ms more, so a slow application never shows its old, larger content
+spilling past the frame.
+
+The content shown during the animation is a still image: a video or a terminal
+updates again when the animation ends. Pointer input, bars and `timao` see the
+final position and size from the start, as they do for `open` and `close`.
+
+When the layout changes again during an animation, the next one starts from
+where the window is shown at that moment.
+
+### When layout changes stay instant
+
+A tiled window moves without animation when:
+
+- the configuration has no `move` block;
+- the window is floating or fullscreen;
+- a bar or panel reserves or releases space, an output changes, or the
+  configuration is reloaded;
+- a split is resized by dragging it with the pointer, so both sides follow the
+  cursor;
+- the window's tag is not visible, a workspace transition is running, or the
+  session is locked.
+
 ## Springs
 
-A window event or the workspace transition may use a spring instead of a
-duration and curve:
+A window event (`open`, `close` or `move`) or the workspace transition may use a
+spring instead of a duration and curve:
 
 ```scfg
 animation {

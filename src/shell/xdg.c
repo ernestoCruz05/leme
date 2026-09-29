@@ -186,9 +186,11 @@ static void leme_view_handle_map(struct wl_listener *listener, void *data) {
   }
   if (adoption != NULL) {
     leme_view_apply_layout_box(
-        view, leme_view_policy_center_box(
-                  view->box, parent->box,
-                  leme_output_usable_box(leme_view_output(parent))));
+        view,
+        leme_view_policy_center_box(
+            view->box, parent->box,
+            leme_output_usable_box(leme_view_output(parent))),
+        false);
     leme_sticky_commit_transient(&adoption);
   }
   if (view->xdg_toplevel->requested.fullscreen ||

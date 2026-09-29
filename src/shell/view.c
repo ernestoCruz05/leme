@@ -245,6 +245,14 @@ void leme_view_arrange(struct leme_server *server) {
   }
 }
 
+void leme_view_arrange_instant(struct leme_server *server) {
+  const bool instant = server->arrange_instant;
+
+  server->arrange_instant = true;
+  leme_view_arrange(server);
+  server->arrange_instant = instant;
+}
+
 void leme_view_refresh_tag_focus(struct leme_server *server) {
   leme_view_arrange(server);
   leme_tags_refresh_visibility(leme_focused_tags(server));
@@ -273,7 +281,7 @@ static bool leme_view_adopt_to_output(struct leme_view *view,
     leme_render_view_set_box(view, view->box);
   }
   if (view->fullscreen) {
-    leme_view_apply_layout_box(view, leme_output_full_box(output));
+    leme_view_apply_layout_box(view, leme_output_full_box(output), false);
   }
   if (follow) {
     leme_output_set_focused(server, output, warp);
@@ -1023,11 +1031,22 @@ bool leme_view_apply_interactive_box(struct leme_view *view,
   return true;
 }
 
-void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box) {
+void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box,
+                                bool animate) {
+  const struct leme_box from = view->box;
+
   if (view->fullscreen) {
     return;
   }
   view->box = box;
+  if (from.x != box.x || from.y != box.y || from.width != box.width ||
+      from.height != box.height) {
+    if (animate) {
+      leme_render_view_move(view, from, box);
+    } else {
+      leme_render_view_finish_move(view);
+    }
+  }
   leme_render_view_set_box(view, box);
 }
 

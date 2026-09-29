@@ -1175,10 +1175,9 @@ static bool leme_config_parse_spring(struct leme_config *config,
   return true;
 }
 
-static bool
-leme_config_parse_animation_event(struct leme_config *config,
-                                  const struct leme_scfg_directive *directive,
-                                  struct leme_animation_settings *settings) {
+static bool leme_config_parse_animation_event(
+    struct leme_config *config, const struct leme_scfg_directive *directive,
+    bool window_effects, struct leme_animation_settings *settings) {
   static const char *const animation_keys[] = {
       "effect", "curve", "opacity_curve", "duration", "scale_from", "spring",
   };
@@ -1193,8 +1192,8 @@ leme_config_parse_animation_event(struct leme_config *config,
   settings->duration_ms = 150;
   settings->curve = leme_animation_curve_preset(LEME_ANIMATION_CURVE_EASE_OUT);
   settings->opacity_curve = settings->curve;
-  settings->effects = LEME_ANIMATION_EFFECT_FADE;
-  settings->scale_from = 0.92;
+  settings->effects = window_effects ? LEME_ANIMATION_EFFECT_FADE : 0;
+  settings->scale_from = window_effects ? 0.92 : 1.0;
   settings->kind = LEME_ANIMATION_KIND_EASING;
   settings->spring = (struct leme_animation_spring){0};
   for (index = 0; index < directive->children.directives_len; index++) {
@@ -1204,6 +1203,17 @@ leme_config_parse_animation_event(struct leme_config *config,
     uint32_t effects;
     double decimal;
     int value;
+
+    if (!window_effects && (strcmp(entry->name, "effect") == 0 ||
+                            strcmp(entry->name, "scale_from") == 0 ||
+                            strcmp(entry->name, "opacity_curve") == 0)) {
+      if (!leme_config_reject(config, entry, -1,
+                              "`%s` does not apply to the `%s` animation",
+                              entry->name, directive->name)) {
+        return false;
+      }
+      continue;
+    }
 
     if (strcmp(entry->name, "spring") == 0) {
       if (dir_spring != NULL) {
@@ -1380,7 +1390,7 @@ leme_config_parse_animation_event(struct leme_config *config,
   }
   settings->configured = (settings->kind == LEME_ANIMATION_KIND_SPRING ||
                           settings->duration_ms > 0) &&
-                         settings->effects != 0;
+                         (!window_effects || settings->effects != 0);
   return true;
 }
 
@@ -1599,10 +1609,11 @@ leme_config_parse_animation(struct leme_config *config,
       "workspace",
       "open",
       "close",
+      "move",
   };
   const struct leme_scfg_directive *dir_workspace = NULL;
-  const struct leme_scfg_directive *dir_open = NULL;
-  const struct leme_scfg_directive *dir_close = NULL;
+  const struct leme_scfg_directive *dir_events[LEME_ANIMATION_EVENT_COUNT] = {
+      NULL};
   size_t index;
 
   if (directive->params_len != 0) {
@@ -1641,12 +1652,13 @@ leme_config_parse_animation(struct leme_config *config,
       }
       continue;
     }
-    if (strcmp(entry->name, "open") == 0 || strcmp(entry->name, "close") == 0) {
-      const bool is_open = strcmp(entry->name, "open") == 0;
-      const struct leme_scfg_directive *dir_evt =
-          is_open ? dir_open : dir_close;
-      enum leme_animation_event event =
-          is_open ? LEME_ANIMATION_OPEN : LEME_ANIMATION_CLOSE;
+    if (strcmp(entry->name, "open") == 0 || strcmp(entry->name, "close") == 0 ||
+        strcmp(entry->name, "move") == 0) {
+      const enum leme_animation_event event =
+          strcmp(entry->name, "open") == 0    ? LEME_ANIMATION_OPEN
+          : strcmp(entry->name, "close") == 0 ? LEME_ANIMATION_CLOSE
+                                              : LEME_ANIMATION_MOVE;
+      const struct leme_scfg_directive *dir_evt = dir_events[event];
 
       if (dir_evt != NULL) {
         const struct leme_reject_extra extra = {
@@ -1667,12 +1679,9 @@ leme_config_parse_animation(struct leme_config *config,
         }
         continue;
       }
-      if (is_open) {
-        dir_open = entry;
-      } else {
-        dir_close = entry;
-      }
+      dir_events[event] = entry;
       if (!leme_config_parse_animation_event(config, entry,
+                                             event != LEME_ANIMATION_MOVE,
                                              &config->animation[event])) {
         return false;
       }

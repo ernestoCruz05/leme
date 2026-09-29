@@ -910,7 +910,8 @@ bool leme_tags_swap_directional(struct leme_tags *tags, struct leme_view *view,
 static void leme_tags_apply_box(struct leme_view *view, struct leme_box box,
                                 void *data) {
   (void)data;
-  leme_view_apply_layout_box(view, box);
+  leme_view_apply_layout_box(
+      view, box, view->server != NULL && !view->server->arrange_instant);
 }
 
 void leme_tags_arrange_current(struct leme_tags *tags,

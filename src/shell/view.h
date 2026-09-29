@@ -153,6 +153,7 @@ void leme_view_discard_tiled_drag(struct leme_view *view,
                                   struct leme_layout_detach **detach);
 void leme_view_close(struct leme_view *view);
 void leme_view_arrange(struct leme_server *server);
+void leme_view_arrange_instant(struct leme_server *server);
 void leme_view_refresh_tag_focus(struct leme_server *server);
 bool leme_view_move_to_output(struct leme_view *view,
                               struct leme_output *output, bool follow);
@@ -168,7 +169,8 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
                       int amount);
 bool leme_view_apply_interactive_box(struct leme_view *view,
                                      struct leme_box box, bool resizing);
-void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box);
+void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box,
+                                bool animate);
 struct leme_view *leme_view_by_public_id(struct leme_server *server,
                                          struct leme_public_id id);
 

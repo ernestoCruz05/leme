@@ -273,7 +273,7 @@ static void leme_input_pointer_grab_motion(
   dy = leme_input_pointer_round_delta(grab->server->cursor->y - grab->cursor_y);
   if (grab->mode == LEME_POINTER_GRAB_TILED_RESIZE) {
     if (leme_layout_resize_drag_update(&grab->resize_drag, dx, dy)) {
-      leme_view_arrange(grab->server);
+      leme_view_arrange_instant(grab->server);
     }
     return;
   }

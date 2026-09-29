@@ -1171,12 +1171,12 @@ leme_config_live_execute_one(struct leme_server *server,
   switch (prep->setting_id) {
   case LEME_LIVE_STYLE_GAP:
     cfg->gap = prep->parsed.int_val;
-    leme_view_arrange(server);
+    leme_view_arrange_instant(server);
     leme_render_refresh_views(server);
     break;
   case LEME_LIVE_STYLE_BORDER_WIDTH:
     cfg->border_width = prep->parsed.int_val;
-    leme_view_arrange(server);
+    leme_view_arrange_instant(server);
     leme_render_refresh_views(server);
     break;
   case LEME_LIVE_STYLE_CORNER_RADIUS:
@@ -1208,7 +1208,7 @@ leme_config_live_execute_one(struct leme_server *server,
         (enum leme_fullscreen_coverage)prep->parsed.int_val;
     leme_render_apply_fullscreen_coverage(server);
     leme_view_refresh_fullscreen(server);
-    leme_view_arrange(server);
+    leme_view_arrange_instant(server);
     leme_render_refresh_views(server);
     break;
   case LEME_LIVE_OUTPUT_CROSS_FOCUS:

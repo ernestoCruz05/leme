@@ -383,38 +383,17 @@ leme_workspace_intersection(const struct leme_workspace_effect *effect,
 static void leme_workspace_clip_buffer(struct leme_workspace_leaf *leaf,
                                        const struct leme_workspace_clip *clip) {
   struct wlr_scene_buffer *buffer = wl_container_of(leaf->node, buffer, node);
-  struct wlr_fbox source = leaf->base.buffer.src_box;
-  struct wlr_fbox oriented;
-  struct wlr_fbox cropped;
-  int transformed_width = leaf->base.buffer.buffer_width;
-  int transformed_height = leaf->base.buffer.buffer_height;
-
-  if (wlr_fbox_empty(&source)) {
-    source = (struct wlr_fbox){
-        .width = leaf->base.buffer.buffer_width,
-        .height = leaf->base.buffer.buffer_height,
-    };
-  }
-  wlr_fbox_transform(&oriented, &source, leaf->base.buffer.transform,
-                     (double)leaf->base.buffer.buffer_width,
-                     (double)leaf->base.buffer.buffer_height);
-  cropped = (struct wlr_fbox){
-      .x = oriented.x + (double)clip->left * oriented.width /
-                            (double)leaf->base.buffer.width,
-      .y = oriented.y + (double)clip->top * oriented.height /
-                            (double)leaf->base.buffer.height,
-      .width = (double)clip->width * oriented.width /
-               (double)leaf->base.buffer.width,
-      .height = (double)clip->height * oriented.height /
-                (double)leaf->base.buffer.height,
+  const struct leme_animation_buffer_geometry geometry = {
+      .width = leaf->base.buffer.width,
+      .height = leaf->base.buffer.height,
+      .buffer_width = leaf->base.buffer.buffer_width,
+      .buffer_height = leaf->base.buffer.buffer_height,
+      .src_box = leaf->base.buffer.src_box,
+      .transform = leaf->base.buffer.transform,
   };
-  wlr_output_transform_coords(leaf->base.buffer.transform, &transformed_width,
-                              &transformed_height);
-  wlr_fbox_transform(&source, &cropped,
-                     wlr_output_transform_invert(leaf->base.buffer.transform),
-                     (double)transformed_width, (double)transformed_height);
-  wlr_scene_buffer_set_source_box(buffer, &source);
-  wlr_scene_buffer_set_dest_size(buffer, clip->width, clip->height);
+
+  leme_animation_crop_buffer(buffer, &geometry, clip->left, clip->top,
+                             clip->width, clip->height);
 #ifdef LEME_HAVE_EFFECTS
   wlr_scene_buffer_set_corner_box(buffer,
                                   &(struct wlr_box){
