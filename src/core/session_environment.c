@@ -111,6 +111,29 @@ static bool leme_session_environment_target(char *action) {
   return leme_session_environment_spawn(arguments);
 }
 
+static bool leme_session_environment_reset_portals(void) {
+  static char command[] = "systemctl";
+  static char user_flag[] = "--user";
+  static char action[] = "reset-failed";
+  static char units[] = "xdg-desktop-portal*.service";
+  char *arguments[] = {command, user_flag, action, units, NULL};
+
+  return leme_session_environment_spawn(arguments);
+}
+
+static bool leme_session_environment_unset(void) {
+  static char command[] = "systemctl";
+  static char user_flag[] = "--user";
+  static char action[] = "unset-environment";
+  static char wayland_display[] = "WAYLAND_DISPLAY";
+  static char display_variable[] = "DISPLAY";
+  static char leme_socket[] = "LEME_SOCKET";
+  char *arguments[] = {command,          user_flag,   action, wayland_display,
+                       display_variable, leme_socket, NULL};
+
+  return leme_session_environment_spawn(arguments);
+}
+
 static bool leme_session_environment_run(const char *display) {
   static char command[] = "dbus-update-activation-environment";
   static char systemd_flag[] = "--systemd";
@@ -177,6 +200,9 @@ void leme_session_environment_publish(struct leme_server *server) {
   if (!leme_session_environment_has_systemd()) {
     return;
   }
+  if (!leme_session_environment_reset_portals()) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to reset failed portal services");
+  }
   if (!leme_session_environment_target(start)) {
     wlr_log(WLR_ERROR, "%s", "leme: failed to start leme-session.target");
     return;
@@ -193,5 +219,9 @@ void leme_session_environment_withdraw(struct leme_server *server) {
   server->session_target = false;
   if (!leme_session_environment_target(stop)) {
     wlr_log(WLR_ERROR, "%s", "leme: failed to stop leme-session.target");
+  }
+  if (!leme_session_environment_unset()) {
+    wlr_log(WLR_ERROR, "%s",
+            "leme: failed to remove the display from the systemd environment");
   }
 }

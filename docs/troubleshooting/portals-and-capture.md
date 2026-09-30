@@ -43,6 +43,8 @@ Install `xdg-desktop-portal-luminous` or `xdg-desktop-portal-wlr` for Screenshot
 
 With a systemd user manager, Leme imports its display environment and then starts `leme-session.target`, which binds `graphical-session.target`. The upstream xdg-desktop-portal 1.22 unit does not start until `graphical-session.target` is active. Services with `PartOf=graphical-session.target` stop when Leme exits. Nested and headless sessions do not start the target.
 
+When Leme exits, it removes `WAYLAND_DISPLAY`, `DISPLAY` and `LEME_SOCKET` from the systemd user environment, so a portal that some program activates between two sessions does not start against a display that no longer exists. When it starts, it clears the failed state of `xdg-desktop-portal*.service` before starting `leme-session.target`. A portal backend that crashed repeatedly between sessions and hit its start limit can then be activated again without a manual `systemctl --user reset-failed`.
+
 ```sh
 systemctl --user status leme-session.target graphical-session.target xdg-desktop-portal.service
 ```

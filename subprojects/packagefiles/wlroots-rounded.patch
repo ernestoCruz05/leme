@@ -293,7 +293,7 @@ index 00000000..a0398286
 +	return params;
 +}
 diff --git a/render/gles2/pass.c b/render/gles2/pass.c
-index a70ea132..4516fd3d 100644
+index a70ea132..a867195e 100644
 --- a/render/gles2/pass.c
 +++ b/render/gles2/pass.c
 @@ -28,14 +28,7 @@ static bool render_pass_submit(struct wlr_render_pass *wlr_pass) {
@@ -323,7 +323,7 @@ index a70ea132..4516fd3d 100644
  
  	wlr_drm_syncobj_timeline_unref(pass->signal_timeline);
  	wlr_buffer_unlock(pass->buffer->buffer);
-@@ -164,6 +159,298 @@ static void setup_blending(enum wlr_render_blend_mode mode) {
+@@ -164,6 +159,315 @@ static void setup_blending(enum wlr_render_blend_mode mode) {
  	}
  }
  
@@ -480,6 +480,21 @@ index a70ea132..4516fd3d 100644
 +	return (int64_t)span.width * span.height;
 +}
 +
++static bool blur_spans_disjoint(const pixman_box32_t *rects, int count,
++		int reach) {
++	for (int i = 0; i < count; i++) {
++		for (int j = i + 1; j < count; j++) {
++			if (rects[i].x1 - reach < rects[j].x2 + reach &&
++					rects[j].x1 - reach < rects[i].x2 + reach &&
++					rects[i].y1 - reach < rects[j].y2 + reach &&
++					rects[j].y1 - reach < rects[i].y2 + reach) {
++				return false;
++			}
++		}
++	}
++	return true;
++}
++
 +static void backdrop_blur_area(struct wlr_gles2_render_pass *pass,
 +		const struct blur_target *target, const pixman_box32_t *area,
 +		const pixman_region32_t *clip) {
@@ -602,8 +617,10 @@ index a70ea132..4516fd3d 100644
 +			fb_width, fb_height);
 +	}
 +
-+	if (rects_len > 1 && rects_cost < blur_span_cost(extents,
-+			target.params.reach, fb_width, fb_height)) {
++	if (rects_len > 1 && rects_len <= 16 &&
++			rects_cost < blur_span_cost(extents, target.params.reach,
++				fb_width, fb_height) &&
++			blur_spans_disjoint(rects, rects_len, target.params.reach)) {
 +		for (int i = 0; i < rects_len; i++) {
 +			pixman_region32_t piece;
 +			pixman_region32_init_rect(&piece, rects[i].x1, rects[i].y1,
@@ -622,7 +639,7 @@ index a70ea132..4516fd3d 100644
  static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
  		const struct wlr_render_texture_options *options) {
  	struct wlr_gles2_render_pass *pass = get_render_pass(wlr_pass);
-@@ -223,7 +510,23 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
+@@ -223,7 +527,23 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
  		}
  	}
  
@@ -647,7 +664,7 @@ index a70ea132..4516fd3d 100644
  		WLR_RENDER_BLEND_MODE_NONE : options->blend_mode);
  
  	glUseProgram(shader->program);
-@@ -244,6 +547,9 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
+@@ -244,6 +564,9 @@ static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
  
  	glUniform1i(shader->tex, 0);
  	glUniform1f(shader->alpha, alpha);
@@ -657,7 +674,7 @@ index a70ea132..4516fd3d 100644
  	set_proj_matrix(shader->proj, pass->projection_matrix, &dst_box);
  	set_tex_matrix(shader->tex_proj, options->transform, &src_fbox);
  
-@@ -263,10 +569,17 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
+@@ -263,10 +586,17 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
  	struct wlr_buffer *wlr_buffer = pass->buffer->buffer;
  	wlr_render_rect_options_get_box(options, wlr_buffer, &box);
  
@@ -677,7 +694,7 @@ index a70ea132..4516fd3d 100644
  			options->clip == NULL &&
  			box.x == 0 && box.y == 0 &&
  			box.width == wlr_buffer->width &&
-@@ -274,10 +587,20 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
+@@ -274,10 +604,20 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
  		glClearColor(color->r, color->g, color->b, color->a);
  		glClear(GL_COLOR_BUFFER_BIT);
  	} else {
@@ -698,7 +715,7 @@ index a70ea132..4516fd3d 100644
  		render(&box, options->clip, renderer->shaders.quad.pos_attrib);
  	}
  
-@@ -344,6 +667,12 @@ struct wlr_gles2_render_pass *begin_gles2_buffer_pass(struct wlr_gles2_buffer *b
+@@ -344,6 +684,12 @@ struct wlr_gles2_render_pass *begin_gles2_buffer_pass(struct wlr_gles2_buffer *b
  	push_gles2_debug(renderer);
  	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
  
@@ -1396,7 +1413,7 @@ index af738bb4..da3200c6 100644
  
  static const struct wlr_render_pass_impl render_pass_impl = {
 diff --git a/types/scene/wlr_scene.c b/types/scene/wlr_scene.c
-index 7bc8b767..06fef5e2 100644
+index 7bc8b767..ba0e119b 100644
 --- a/types/scene/wlr_scene.c
 +++ b/types/scene/wlr_scene.c
 @@ -15,6 +15,7 @@
@@ -1493,7 +1510,7 @@ index 7bc8b767..06fef5e2 100644
  struct scene_update_data {
  	pixman_region32_t *visible;
  	const pixman_region32_t *update_region;
-@@ -366,13 +419,23 @@ static void transform_output_box(struct wlr_box *box, const struct render_data *
+@@ -366,13 +419,30 @@ static void transform_output_box(struct wlr_box *box, const struct render_data *
  	wlr_box_transform(box, box, transform, data->trans_width, data->trans_height);
  }
  
@@ -1507,8 +1524,15 @@ index 7bc8b767..06fef5e2 100644
 +	pixman_region32_t expanded;
 +	pixman_region32_init(&expanded);
 +	pixman_region32_copy(&expanded, damage);
-+	scene_expand_blur_damage(scene_output, &scene_output->scene->tree.node,
-+		0, 0, &expanded);
++
++	pixman_region32_t previous;
++	pixman_region32_init(&previous);
++	do {
++		pixman_region32_copy(&previous, &expanded);
++		scene_expand_blur_damage(scene_output, &scene_output->scene->tree.node,
++			0, 0, &expanded);
++	} while (!pixman_region32_equal(&previous, &expanded));
++	pixman_region32_fini(&previous);
 +
  	pixman_region32_t clipped;
  	pixman_region32_init(&clipped);
@@ -1518,7 +1542,7 @@ index 7bc8b767..06fef5e2 100644
  
  	if (!pixman_region32_empty(&clipped)) {
  		wlr_output_schedule_frame(scene_output->output);
-@@ -394,6 +457,82 @@ static void scene_output_damage_whole(struct wlr_scene_output *scene_output) {
+@@ -394,6 +464,82 @@ static void scene_output_damage_whole(struct wlr_scene_output *scene_output) {
  	pixman_region32_fini(&damage);
  }
  
@@ -1601,7 +1625,7 @@ index 7bc8b767..06fef5e2 100644
  static void scene_damage_outputs(struct wlr_scene *scene, const pixman_region32_t *damage) {
  	if (pixman_region32_empty(damage)) {
  		return;
-@@ -799,6 +938,18 @@ void wlr_scene_rect_set_color(struct wlr_scene_rect *rect, const float color[sta
+@@ -799,6 +945,18 @@ void wlr_scene_rect_set_color(struct wlr_scene_rect *rect, const float color[sta
  	scene_node_update(&rect->node, NULL);
  }
  
@@ -1620,7 +1644,7 @@ index 7bc8b767..06fef5e2 100644
  static void scene_buffer_handle_buffer_release(struct wl_listener *listener,
  		void *data) {
  	struct wlr_scene_buffer *scene_buffer =
-@@ -886,6 +1037,7 @@ struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
+@@ -886,6 +1044,7 @@ struct wlr_scene_buffer *wlr_scene_buffer_create(struct wlr_scene_tree *parent,
  	wl_list_init(&scene_buffer->buffer_release.link);
  	wl_list_init(&scene_buffer->renderer_destroy.link);
  	scene_buffer->opacity = 1;
@@ -1628,7 +1652,7 @@ index 7bc8b767..06fef5e2 100644
  
  	scene_buffer_set_buffer(scene_buffer, buffer);
  	scene_node_update(&scene_buffer->node, NULL);
-@@ -1135,6 +1287,55 @@ void wlr_scene_buffer_set_opacity(struct wlr_scene_buffer *scene_buffer,
+@@ -1135,6 +1294,55 @@ void wlr_scene_buffer_set_opacity(struct wlr_scene_buffer *scene_buffer,
  	scene_node_update(&scene_buffer->node, NULL);
  }
  
@@ -1684,7 +1708,7 @@ index 7bc8b767..06fef5e2 100644
  void wlr_scene_buffer_set_filter_mode(struct wlr_scene_buffer *scene_buffer,
  		enum wlr_scale_filter_mode filter_mode) {
  	if (scene_buffer->filter_mode == filter_mode) {
-@@ -1478,15 +1679,25 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
+@@ -1478,15 +1686,25 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
  	logical_to_buffer_coords(&opaque, data, false);
  	pixman_region32_subtract(&opaque, &render_region, &opaque);
  
@@ -1710,7 +1734,7 @@ index 7bc8b767..06fef5e2 100644
  			.color = {
  				.r = scene_rect->color[0],
  				.g = scene_rect->color[1],
-@@ -1537,6 +1748,18 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
+@@ -1537,6 +1755,18 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
  		wlr_color_transfer_function_get_default_luminance(
  			WLR_COLOR_TRANSFER_FUNCTION_SRGB, &srgb_lum);
  		float luminance_multiplier = get_luminance_multiplier(&src_lum, &srgb_lum);
@@ -1729,7 +1753,7 @@ index 7bc8b767..06fef5e2 100644
  
  		wlr_render_pass_add_texture(data->render_pass, &(struct wlr_render_texture_options) {
  			.texture = texture,
-@@ -1545,6 +1768,14 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
+@@ -1545,6 +1775,14 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
  			.transform = transform,
  			.clip = &render_region,
  			.alpha = &scene_buffer->opacity,
@@ -1744,7 +1768,7 @@ index 7bc8b767..06fef5e2 100644
  			.filter_mode = scene_buffer->filter_mode,
  			.blend_mode = !data->output->scene->calculate_visibility ||
  					!pixman_region32_empty(&opaque) ?
-@@ -1577,6 +1808,7 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
+@@ -1577,6 +1815,7 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
  		break;
  	}
  
