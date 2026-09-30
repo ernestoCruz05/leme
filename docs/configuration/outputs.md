@@ -89,4 +89,4 @@ If the target is already on the focused tag of the focused output, Leme focuses 
 outputs. This happens even when `warp_cursor` is `false`; that output-policy
 key controls keyboard commands, not external activation requests.
 
-The same setting applies to foreign-toplevel activation and cross-output workspace activation. The tag model determines the rest of publication behavior. See the [publication reference](../reference/wayland-protocols.md).
+The same setting applies to activation requests from Wayland and X11 apps, such as a browser asked to open a link, and to foreign-toplevel activation and cross-output workspace activation. The tag model determines the rest of publication behavior. See the [publication reference](../reference/wayland-protocols.md).

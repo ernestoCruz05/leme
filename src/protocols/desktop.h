@@ -5,10 +5,7 @@
 
 struct leme_config;
 struct leme_server;
-struct leme_view;
 
-bool leme_desktop_activation_target_eligible(const struct leme_server *server,
-                                             const struct leme_view *view);
 bool leme_desktop_init(struct leme_server *server);
 void leme_desktop_finish(struct leme_server *server);
 void leme_desktop_output_changed(struct leme_server *server);

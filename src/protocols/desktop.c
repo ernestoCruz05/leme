@@ -6,11 +6,10 @@
 #include "output/output.h"
 #include "protocols/input.h"
 #include "protocols/session.h"
+#include "protocols/toplevel.h"
 #include "shell/layer.h"
-#include "shell/sticky.h"
 #include "shell/view.h"
 #include "shell/xwayland.h"
-#include "workspace/tag.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -79,25 +78,6 @@ static bool leme_desktop_activation_source_valid(
                                  server->seat->pointer_state.focused_surface));
 }
 
-bool leme_desktop_activation_target_eligible(const struct leme_server *server,
-                                             const struct leme_view *view) {
-  const struct leme_tags *tags;
-
-  if (server == NULL || !leme_ownership_activation_eligible(view)) {
-    return false;
-  }
-  if (leme_view_is_sticky(view)) {
-    return leme_view_output(view) != NULL;
-  }
-  if (leme_view_is_shown_scratchpad(view)) {
-    return leme_view_output(view) == leme_output_focused(server);
-  }
-  tags = leme_focused_tags(server);
-  return tags != NULL && !tags->focused_is_candidate &&
-         leme_ownership_tag(view) != NULL &&
-         leme_ownership_tag(view)->id == tags->focused_id;
-}
-
 static void leme_desktop_handle_activate(struct wl_listener *listener,
                                          void *data) {
   struct leme_desktop *desktop =
@@ -111,12 +91,7 @@ static void leme_desktop_handle_activate(struct wl_listener *listener,
     return;
   }
   view = leme_view_from_surface(server, event->surface);
-  if (leme_desktop_activation_target_eligible(server, view)) {
-    if (leme_view_is_sticky(view)) {
-      leme_output_set_focused(server, leme_view_output(view), false);
-    }
-    leme_view_focus(view);
-  }
+  leme_toplevel_activate_view(view);
 }
 
 static void

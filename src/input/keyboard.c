@@ -29,6 +29,7 @@ struct leme_keyboard {
   bool public_keymap_configured;
   bool is_virtual;
   bool handled[256];
+  bool state_skipped[256];
   struct wl_listener key;
   struct wl_listener keymap;
   struct wl_listener modifiers;
@@ -198,13 +199,14 @@ bool leme_input_apply_keymap(struct leme_server *server,
   return true;
 }
 
-static void leme_input_apply_keyboard_layout_group(struct leme_server *server,
-                                                   size_t group) {
+static void
+leme_input_apply_keyboard_layout_group(struct leme_server *server, size_t group,
+                                       const struct leme_keyboard *source) {
   struct leme_keyboard *keyboard;
   server->keyboard_layout = (xkb_layout_index_t)group;
   wl_list_for_each(keyboard, &server->keyboards, link) {
     struct wlr_keyboard_modifiers *modifiers = &keyboard->keyboard->modifiers;
-    if (keyboard->is_virtual) {
+    if (keyboard->is_virtual || keyboard == source) {
       continue;
     }
     wlr_keyboard_notify_modifiers(keyboard->keyboard, modifiers->depressed,
@@ -280,7 +282,7 @@ bool leme_input_select_keyboard_layout(struct leme_server *server,
   if (!leme_input_find_keyboard_layout(server, label, &index, &ambiguous)) {
     return false;
   }
-  leme_input_apply_keyboard_layout_group(server, index);
+  leme_input_apply_keyboard_layout_group(server, index, NULL);
   return true;
 }
 
@@ -292,7 +294,7 @@ bool leme_input_cycle_keyboard_layout(struct leme_server *server) {
   }
   size_t count = server->config->keyboard_layout_count;
   size_t next_idx = (size_t)((server->keyboard_layout + 1) % count);
-  leme_input_apply_keyboard_layout_group(server, next_idx);
+  leme_input_apply_keyboard_layout_group(server, next_idx, NULL);
   return true;
 }
 
@@ -361,6 +363,23 @@ static void leme_input_handle_keymap(struct wl_listener *listener, void *data) {
   leme_public_server_invalidate(keyboard->server);
 }
 
+static void leme_input_follow_keyboard_layout(struct leme_keyboard *keyboard) {
+  struct leme_server *server = keyboard->server;
+  xkb_layout_index_t layout;
+
+  if (keyboard->is_virtual || keyboard->keyboard->xkb_state == NULL ||
+      server->config == NULL) {
+    return;
+  }
+  layout = xkb_state_serialize_layout(keyboard->keyboard->xkb_state,
+                                      XKB_STATE_LAYOUT_LOCKED);
+  if (layout == server->keyboard_layout ||
+      layout >= server->config->keyboard_layout_count) {
+    return;
+  }
+  leme_input_apply_keyboard_layout_group(server, layout, keyboard);
+}
+
 static void leme_input_handle_modifiers(struct wl_listener *listener,
                                         void *data) {
   struct leme_keyboard *keyboard =
@@ -368,10 +387,16 @@ static void leme_input_handle_modifiers(struct wl_listener *listener,
 
   (void)data;
   leme_session_notify_activity(keyboard->server);
+  leme_input_follow_keyboard_layout(keyboard);
   wlr_seat_set_keyboard(keyboard->server->seat, keyboard->keyboard);
   wlr_seat_keyboard_notify_modifiers(keyboard->server->seat,
                                      &keyboard->keyboard->modifiers);
   leme_public_server_invalidate(keyboard->server);
+}
+
+static bool leme_input_keysym_locks(xkb_keysym_t keysym) {
+  return keysym == XKB_KEY_Caps_Lock || keysym == XKB_KEY_Shift_Lock ||
+         keysym == XKB_KEY_Num_Lock;
 }
 
 static bool leme_input_binding_reserved(const struct leme_binding *binding) {
@@ -453,16 +478,26 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
       binding = NULL;
     }
     if (binding != NULL) {
+      const bool locks = leme_input_keysym_locks(binding->keysym);
+
       handled = true;
       leme_input_protocols_cancel_constraint(keyboard->server);
       leme_command_execute(keyboard->server, &binding->command);
       if (event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
         keyboard->handled[event->keycode] = true;
+        keyboard->state_skipped[event->keycode] = locks;
+        if (locks) {
+          event->update_state = false;
+        }
       }
     }
   } else if (event->keycode < LEME_ARRAY_LENGTH(keyboard->handled) &&
              keyboard->handled[event->keycode]) {
     keyboard->handled[event->keycode] = false;
+    if (keyboard->state_skipped[event->keycode]) {
+      keyboard->state_skipped[event->keycode] = false;
+      event->update_state = false;
+    }
     handled = true;
   }
   if (!handled) {

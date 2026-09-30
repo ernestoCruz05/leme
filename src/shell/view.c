@@ -784,7 +784,7 @@ bool leme_view_commit_tiled_drag(struct leme_view *view,
   view->detached = false;
   leme_render_view_update_layer(view);
   leme_view_arrange(view->server);
-  leme_tags_refresh_visibility(leme_focused_tags(view->server));
+  leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
   leme_view_focus(view);
   return true;
 }
@@ -815,7 +815,7 @@ bool leme_view_restore_tiled_drag(struct leme_view *view,
   }
   if (leme_focused_tags(view->server) != NULL) {
     leme_view_arrange(view->server);
-    leme_tags_refresh_visibility(leme_focused_tags(view->server));
+    leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
   }
   if (view->mapped) {
     leme_view_focus(view);
@@ -864,7 +864,7 @@ bool leme_view_set_floating(struct leme_view *view, bool floating) {
     leme_render_view_set_box(view, view->box);
   }
   leme_view_arrange(view->server);
-  leme_tags_refresh_visibility(leme_focused_tags(view->server));
+  leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
   return true;
 }
 
@@ -947,7 +947,7 @@ bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen) {
     }
   }
   leme_render_view_set_activated(view, view == view->server->focused_view);
-  leme_tags_refresh_visibility(leme_focused_tags(view->server));
+  leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
   return true;
 }
 

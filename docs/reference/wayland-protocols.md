@@ -65,9 +65,12 @@ window placement still follows the parent and size rules described under
 Windows and shell surfaces. Both decoration protocols select server-side mode.
 
 Activation requires a one-use token tied to Leme's seat and a valid input
-serial. It can focus a mapped view on the current tag without changing tags.
-A shown scratchpad on the focused output is focused directly; a hidden
-scratchpad is not an activation target. A presented sticky window focuses its
+serial. A window on the focused tag is focused directly. A window on another
+tag or output follows the [publication activation
+policy](../configuration/outputs.md#publication), the same one X11 and
+foreign-toplevel activation use: `follow` switches to it, `urgent` marks its
+tag urgent, and `ignore` drops the request. A shown scratchpad is focused
+directly; a hidden scratchpad is not an activation target. A presented sticky window focuses its
 owner output and then the window; a suspended sticky window is not eligible.
 Requests are ignored while locked or
 while an exclusive layer surface owns keyboard focus.
