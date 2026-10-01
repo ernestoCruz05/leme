@@ -904,6 +904,22 @@ void leme_view_refresh_fullscreen(struct leme_server *server) {
   }
 }
 
+static struct leme_view *
+leme_view_tag_fullscreen(const struct leme_view *view) {
+  struct leme_tag *tag = leme_ownership_tag(view);
+  struct leme_view *other;
+
+  if (tag == NULL) {
+    return NULL;
+  }
+  wl_list_for_each(other, &tag->views, tag_link) {
+    if (other != view && other->mapped && other->fullscreen) {
+      return other;
+    }
+  }
+  return NULL;
+}
+
 bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen) {
   struct leme_box area;
 
@@ -923,6 +939,13 @@ bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen) {
   }
   if (view->fullscreen == fullscreen) {
     return true;
+  }
+  if (fullscreen) {
+    struct leme_view *previous = leme_view_tag_fullscreen(view);
+
+    if (previous != NULL) {
+      leme_view_set_fullscreen(previous, false);
+    }
   }
   leme_render_output_animations_finish(leme_view_output(view));
   leme_input_pointer_grab_cancel_tiled(view->server);

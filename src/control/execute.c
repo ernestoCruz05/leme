@@ -48,7 +48,7 @@ leme_control_execute_action(struct leme_control_context *context,
   }
 
   for (size_t i = 0; i < plan->count; ++i) {
-    if (deadline > 0 && monotonic_now_ns(NULL) >= deadline) {
+    if (i > 0 && deadline > 0 && monotonic_now_ns(NULL) >= deadline) {
       plan->outcomes[i] = LEME_CONTROL_FAILED;
       for (size_t j = i + 1; j < plan->count; ++j) {
         plan->outcomes[j] = LEME_CONTROL_UNATTEMPTED;

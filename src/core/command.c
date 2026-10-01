@@ -128,7 +128,9 @@ bool leme_command_execute(struct leme_server *server,
        command->type == LEME_COMMAND_SCRATCHPAD_RETRIEVE ||
        command->type == LEME_COMMAND_TOGGLE_STICKY) &&
       leme_session_locked(server)) {
-    wlr_log(WLR_ERROR, "%s", "leme: scratchpad command refused while locked");
+    wlr_log(WLR_ERROR, "leme: %s refused while locked",
+            command->type == LEME_COMMAND_TOGGLE_STICKY ? "toggle_sticky"
+                                                        : "scratchpad command");
     return false;
   }
   tags = leme_focused_tags(server);
@@ -241,19 +243,20 @@ bool leme_command_execute(struct leme_server *server,
       wlr_log(WLR_ERROR, "leme: cannot move view to tag %u", target);
       return false;
     }
-    if (command->follow) {
-      struct leme_tag *followed =
-          command->has_direction
-              ? leme_tags_focus_id_direction(tags, target, tag_direction)
-              : leme_tags_focus_id(tags, target);
+    bool followed = false;
 
-      if (followed == NULL) {
-        wlr_log(WLR_ERROR, "leme: cannot follow view to tag %u", target);
-        return false;
+    if (command->follow) {
+      followed =
+          (command->has_direction
+               ? leme_tags_focus_id_direction(tags, target, tag_direction)
+               : leme_tags_focus_id(tags, target)) != NULL;
+      if (!followed) {
+        wlr_log(WLR_ERROR,
+                "leme: moved the view to tag %u but cannot follow it", target);
       }
     }
     leme_command_refresh_tag(server);
-    if (command->follow) {
+    if (followed) {
       leme_view_focus(view);
     }
     return true;

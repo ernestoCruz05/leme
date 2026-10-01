@@ -128,6 +128,7 @@ struct leme_server {
   struct leme_ipc *ipc;
   struct leme_public_model *public_model;
   uint64_t public_config_generation;
+  struct wl_event_source *public_warm_idle;
   struct leme_data *data;
   struct leme_desktop *desktop;
   struct leme_xwayland *xwayland;

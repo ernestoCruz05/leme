@@ -3645,21 +3645,12 @@ static bool leme_config_parse_key(const char *text, uint32_t *modifiers,
 
 static bool leme_config_parse_command(struct leme_command *command,
                                       const struct leme_scfg_directive *entry,
-                                      const char *path, char **error) {
-  char *detail = NULL;
-
+                                      char **error) {
   if (entry->params_len == 0) {
-    leme_config_set_error(error, "%s:%d: binding requires a command", path,
-                          entry->lineno);
+    leme_config_set_error(error, "%s", "binding requires a command");
     return false;
   }
-  if (!leme_command_parse(command, entry->params, entry->params_len, &detail)) {
-    leme_config_set_error(error, "%s:%d: %s", path, entry->lineno,
-                          detail == NULL ? "invalid command" : detail);
-    free(detail);
-    return false;
-  }
-  return true;
+  return leme_command_parse(command, entry->params, entry->params_len, error);
 }
 
 static struct leme_bind_group *
@@ -3850,11 +3841,14 @@ leme_config_parse_bind_block(struct leme_config *config,
       }
       continue;
     }
-    if (!leme_config_parse_command(&binding->command, entry, path, error)) {
+    if (!leme_config_parse_command(&binding->command, entry, error)) {
+      const bool kept = leme_config_reject(
+          config, entry, 0, "invalid command for %s: %s", entry->name,
+          *error != NULL ? *error : "invalid command");
+
       free(*error);
       *error = NULL;
-      if (!leme_config_reject(config, entry, 0, "invalid command for %s",
-                              entry->name)) {
+      if (!kept) {
         free(binding_directives);
         return false;
       }

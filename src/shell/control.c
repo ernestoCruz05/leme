@@ -25,6 +25,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct shell_prepared_item {
@@ -56,6 +57,14 @@ set_preflight_error(struct leme_control_error *error,
     error->effects_applied = false;
   }
   return code;
+}
+
+static enum leme_control_code
+shell_prepare_fail(struct leme_server *server, struct shell_prepared *prep,
+                   struct leme_control_error *error,
+                   enum leme_control_code code, const char *message) {
+  leme_shell_control_discard(server, (struct leme_control_prepared *)prep);
+  return set_preflight_error(error, code, message);
 }
 
 enum leme_control_code leme_shell_control_prepare(
@@ -105,6 +114,10 @@ enum leme_control_code leme_shell_control_prepare(
     }
   }
 
+  if (count > SIZE_MAX / sizeof(struct shell_prepared_item)) {
+    return set_preflight_error(error, LEME_CONTROL_RESOURCE_LIMIT,
+                               "too many targets");
+  }
   struct shell_prepared *prep =
       leme_control_alloc(account, sizeof(struct shell_prepared));
   if (prep == NULL) {
@@ -132,10 +145,8 @@ enum leme_control_code leme_shell_control_prepare(
         dest_output->tags.table[prep->dest_tag_slot] == NULL) {
       if (!leme_tags_prepare_materialize(
               &dest_output->tags, prep->dest_tag_slot, &prep->mat_slot)) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
-                                   "out of memory");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_OUT_OF_MEMORY, "out of memory");
       }
     }
   } else if (opcode == LEME_CONTROL_OP_MOVE_TO_OUTPUT) {
@@ -154,78 +165,67 @@ enum leme_control_code leme_shell_control_prepare(
     struct leme_view *view =
         leme_view_by_public_id(server, intents[i].target.id);
     if (view == NULL || !view->mapped || view->unmanaged) {
-      leme_shell_control_discard(server, (struct leme_control_prepared *)prep);
-      return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
-                                 "view not found or unmapped");
+      return shell_prepare_fail(server, prep, error, LEME_CONTROL_NOT_FOUND,
+                                "view not found or unmapped");
     }
 
     if (opcode == LEME_CONTROL_OP_FOCUS) {
       if (leme_view_is_scratchpad(view) &&
           !leme_view_is_shown_scratchpad(view)) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "cannot focus hidden scratchpad");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "cannot focus hidden scratchpad");
       }
       if (!leme_ownership_focus_eligible(view)) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "view not eligible for focus");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "view not eligible for focus");
       }
     } else if (opcode == LEME_CONTROL_OP_SET_FLOATING) {
       if (leme_view_is_scratchpad(view) || leme_view_is_sticky(view)) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "view incompatible with floating");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "view incompatible with floating");
       }
     } else if (opcode == LEME_CONTROL_OP_SET_FULLSCREEN) {
       if (leme_view_is_scratchpad(view)) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "scratchpad incompatible with fullscreen");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "scratchpad incompatible with fullscreen");
       }
     } else if (opcode == LEME_CONTROL_OP_RESIZE) {
       if (view->fullscreen) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "cannot resize fullscreen view");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "cannot resize fullscreen view");
       }
     } else if (opcode == LEME_CONTROL_OP_MOVE_TO_TAG) {
       if (leme_view_is_scratchpad(view)) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "scratchpad cannot be moved to tag");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "scratchpad cannot be moved to tag");
       }
       if (view->fullscreen) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "cannot move fullscreen view");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "cannot move fullscreen view");
       }
     } else if (opcode == LEME_CONTROL_OP_MOVE_TO_OUTPUT) {
       if (leme_view_is_scratchpad(view)) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "scratchpad cannot be moved to output");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "scratchpad cannot be moved to output");
       }
       if (view->fullscreen) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "cannot move fullscreen view");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "cannot move fullscreen view");
       }
     } else if (opcode == LEME_CONTROL_OP_SET_STICKY) {
       if (leme_view_is_scratchpad(view) || view->fullscreen) {
-        leme_shell_control_discard(server,
-                                   (struct leme_control_prepared *)prep);
-        return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                   "view incompatible with sticky");
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "view incompatible with sticky");
       }
     }
   }
@@ -248,22 +248,9 @@ enum leme_control_code leme_shell_control_prepare(
               server, (struct leme_public_id){prep->items[j].serial});
           struct leme_tag *tag_j = leme_ownership_tag(vj);
           if (tag_i != NULL && tag_i == tag_j) {
-            leme_shell_control_discard(server,
-                                       (struct leme_control_prepared *)prep);
-            return set_preflight_error(
-                error, LEME_CONTROL_ACTION_FAILED,
+            return shell_prepare_fail(
+                server, prep, error, LEME_CONTROL_ACTION_FAILED,
                 "multiple views on same tag cannot be fullscreen");
-          }
-        }
-        if (tag_i != NULL) {
-          struct leme_view *existing = NULL;
-          wl_list_for_each(existing, &tag_i->views, tag_link) {
-            if (existing->mapped && existing->fullscreen && existing != vi) {
-              leme_shell_control_discard(server,
-                                         (struct leme_control_prepared *)prep);
-              return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                         "tag already has a fullscreen view");
-            }
           }
         }
       }
@@ -274,9 +261,9 @@ enum leme_control_code leme_shell_control_prepare(
     const struct leme_public_value *amt_val =
         leme_public_at(intents[0].args, 1);
     if (dir_val == NULL || amt_val == NULL) {
-      leme_shell_control_discard(server, (struct leme_control_prepared *)prep);
-      return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
-                                 "missing resize arguments");
+      return shell_prepare_fail(server, prep, error,
+                                LEME_CONTROL_INVALID_ARGUMENT,
+                                "missing resize arguments");
     }
     struct leme_public_text dir_text = {0};
     leme_public_as_text(dir_val, &dir_text);
@@ -289,18 +276,18 @@ enum leme_control_code leme_shell_control_prepare(
     } else if (dir_text.length == 4 && memcmp(dir_text.data, "down", 4) == 0) {
       prep->resize_edge = LEME_RESIZE_DOWN;
     } else {
-      leme_shell_control_discard(server, (struct leme_control_prepared *)prep);
-      return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
-                                 "invalid resize direction");
+      return shell_prepare_fail(server, prep, error,
+                                LEME_CONTROL_INVALID_ARGUMENT,
+                                "invalid resize direction");
     }
 
     double amt_num = 0.0;
     leme_public_as_number(amt_val, &amt_num);
     int amount = (int)amt_num;
     if (amount <= 0) {
-      leme_shell_control_discard(server, (struct leme_control_prepared *)prep);
-      return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
-                                 "resize amount must be positive");
+      return shell_prepare_fail(server, prep, error,
+                                LEME_CONTROL_INVALID_ARGUMENT,
+                                "resize amount must be positive");
     }
     prep->resize_amount = amount;
   }
@@ -510,16 +497,86 @@ struct composite_prepared {
   struct composite_item *items;
 };
 
+#define COMMAND_WORD_MAX 4
+
 struct command_prepared {
   enum leme_control_opcode opcode;
   struct leme_public_budget *account;
   struct leme_command cmd;
 };
 
+static void command_control_free_words(char **words, size_t count) {
+  for (size_t index = 0; index < count; index++) {
+    free(words[index]);
+  }
+}
+
+static bool command_control_lowered(enum leme_command_type type) {
+  switch (type) {
+  case LEME_COMMAND_FOCUS_DIRECTION:
+  case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
+  case LEME_COMMAND_FOCUS_LAST_TAG:
+  case LEME_COMMAND_FOCUS_OUTPUT:
+  case LEME_COMMAND_MOVE_DIRECTION:
+  case LEME_COMMAND_MOVE_VIEW_TO_OUTPUT:
+  case LEME_COMMAND_SWITCH_LAYOUT:
+  case LEME_COMMAND_REMOVE_EMPTY_TAG:
+  case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
+  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
+  case LEME_COMMAND_SCRATCHPAD_SEND:
+  case LEME_COMMAND_SCRATCHPAD_TOGGLE:
+  case LEME_COMMAND_SCRATCHPAD_RETRIEVE:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static enum leme_control_code
+command_control_check(struct leme_server *server,
+                      const struct leme_command *cmd,
+                      struct leme_control_error *error) {
+  const struct leme_view *view = server->focused_view;
+  const bool needs_view = cmd->type == LEME_COMMAND_MOVE_DIRECTION ||
+                          cmd->type == LEME_COMMAND_MOVE_VIEW_TO_OUTPUT ||
+                          cmd->type == LEME_COMMAND_SCRATCHPAD_SEND;
+
+  if (!command_control_lowered(cmd->type)) {
+    return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
+                               "unknown command");
+  }
+  if (needs_view && (view == NULL || !view->mapped || view->unmanaged)) {
+    return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
+                               "no focused view");
+  }
+  if (cmd->type == LEME_COMMAND_MOVE_VIEW_TO_OUTPUT &&
+      leme_view_is_scratchpad(view)) {
+    return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
+                               "scratchpad cannot be moved to output");
+  }
+  if (cmd->type == LEME_COMMAND_SCRATCHPAD_SEND &&
+      leme_view_is_scratchpad(view)) {
+    return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
+                               "already a scratchpad");
+  }
+  if (cmd->type == LEME_COMMAND_SCRATCHPAD_TOGGLE && cmd->text != NULL &&
+      (server->config == NULL ||
+       leme_config_scratchpad(server->config, cmd->text) == NULL)) {
+    return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
+                               "scratchpad not configured");
+  }
+  return LEME_CONTROL_OK;
+}
+
 static enum leme_control_code command_control_prepare(
     struct leme_server *server, const struct leme_control_intent *intents,
     size_t count, struct leme_public_budget *account,
     struct leme_control_prepared **out, struct leme_control_error *error) {
+  char *words[COMMAND_WORD_MAX] = {0};
+  char *parse_error = NULL;
+  size_t word_count;
+  bool parsed;
+
   if (server == NULL || intents == NULL || count == 0 || out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
@@ -533,18 +590,33 @@ static enum leme_control_code command_control_prepare(
     return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                "missing command args");
   }
-
-  const struct leme_public_value *name_val = leme_public_at(argv, 0);
-  if (name_val == NULL || leme_public_kind(name_val) != LEME_PUBLIC_STRING) {
+  word_count = leme_public_length(argv);
+  if (word_count == 0 || word_count > COMMAND_WORD_MAX) {
     return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                "missing command name");
   }
-  struct leme_public_text name_t = {0};
-  leme_public_as_text(name_val, &name_t);
+  for (size_t index = 0; index < word_count; index++) {
+    const struct leme_public_value *word = leme_public_at(argv, index);
+    struct leme_public_text text = {0};
+
+    if (word == NULL || leme_public_kind(word) != LEME_PUBLIC_STRING) {
+      command_control_free_words(words, word_count);
+      return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
+                                 "command args must be strings");
+    }
+    leme_public_as_text(word, &text);
+    words[index] = strndup(text.data != NULL ? text.data : "", text.length);
+    if (words[index] == NULL) {
+      command_control_free_words(words, word_count);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "out of memory");
+    }
+  }
 
   struct command_prepared *prep =
       leme_control_alloc(account, sizeof(struct command_prepared));
   if (prep == NULL) {
+    command_control_free_words(words, word_count);
     return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
                                "out of memory");
   }
@@ -552,172 +624,23 @@ static enum leme_control_code command_control_prepare(
   prep->opcode = LEME_CONTROL_OP_COMMAND;
   prep->account = account;
 
-  if (name_t.length == 5 && memcmp(name_t.data, "focus", 5) == 0) {
-    prep->cmd.type = LEME_COMMAND_FOCUS_DIRECTION;
-    const struct leme_public_value *d_val = leme_public_at(argv, 1);
-    struct leme_public_text d_t = {0};
-    if (d_val != NULL) {
-      leme_public_as_text(d_val, &d_t);
-    }
-    if (d_t.length == 4 && memcmp(d_t.data, "left", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_LEFT;
-    } else if (d_t.length == 5 && memcmp(d_t.data, "right", 5) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_RIGHT;
-    } else if (d_t.length == 2 && memcmp(d_t.data, "up", 2) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_UP;
-    } else if (d_t.length == 4 && memcmp(d_t.data, "down", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_DOWN;
-    }
-  } else if (name_t.length == 19 &&
-             memcmp(name_t.data, "focus_previous_view", 19) == 0) {
-    prep->cmd.type = LEME_COMMAND_FOCUS_PREVIOUS_VIEW;
-  } else if (name_t.length == 14 &&
-             memcmp(name_t.data, "focus_last_tag", 14) == 0) {
-    prep->cmd.type = LEME_COMMAND_FOCUS_LAST_TAG;
-  } else if (name_t.length == 12 &&
-             memcmp(name_t.data, "focus_output", 12) == 0) {
-    prep->cmd.type = LEME_COMMAND_FOCUS_OUTPUT;
-    prep->cmd.has_direction = true;
-    const struct leme_public_value *d_val = leme_public_at(argv, 1);
-    struct leme_public_text d_t = {0};
-    if (d_val != NULL) {
-      leme_public_as_text(d_val, &d_t);
-    }
-    if (d_t.length == 4 && memcmp(d_t.data, "left", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_LEFT;
-    } else if (d_t.length == 5 && memcmp(d_t.data, "right", 5) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_RIGHT;
-    } else if (d_t.length == 2 && memcmp(d_t.data, "up", 2) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_UP;
-    } else if (d_t.length == 4 && memcmp(d_t.data, "down", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_DOWN;
-    }
-  } else if (name_t.length == 4 && memcmp(name_t.data, "move", 4) == 0) {
-    if (server->focused_view == NULL || !server->focused_view->mapped ||
-        server->focused_view->unmanaged) {
-      leme_control_free(prep);
-      return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
-                                 "no focused view");
-    }
-    prep->cmd.type = LEME_COMMAND_MOVE_DIRECTION;
-    const struct leme_public_value *d_val = leme_public_at(argv, 1);
-    struct leme_public_text d_t = {0};
-    if (d_val != NULL) {
-      leme_public_as_text(d_val, &d_t);
-    }
-    if (d_t.length == 4 && memcmp(d_t.data, "left", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_LEFT;
-    } else if (d_t.length == 5 && memcmp(d_t.data, "right", 5) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_RIGHT;
-    } else if (d_t.length == 2 && memcmp(d_t.data, "up", 2) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_UP;
-    } else if (d_t.length == 4 && memcmp(d_t.data, "down", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_DOWN;
-    }
-    const struct leme_public_value *a_val = leme_public_at(argv, 2);
-    int64_t amt = 0;
-    if (a_val != NULL) {
-      leme_public_as_integer(a_val, &amt);
-    }
-    prep->cmd.amount = (int)amt;
-  } else if (name_t.length == 19 &&
-             memcmp(name_t.data, "move_view_to_output", 19) == 0) {
-    if (server->focused_view == NULL || !server->focused_view->mapped ||
-        server->focused_view->unmanaged) {
-      leme_control_free(prep);
-      return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
-                                 "no focused view");
-    }
-    if (leme_view_is_scratchpad(server->focused_view)) {
-      leme_control_free(prep);
-      return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                 "scratchpad cannot be moved to output");
-    }
-    prep->cmd.type = LEME_COMMAND_MOVE_VIEW_TO_OUTPUT;
-    prep->cmd.has_direction = true;
-    const struct leme_public_value *d_val = leme_public_at(argv, 1);
-    struct leme_public_text d_t = {0};
-    if (d_val != NULL) {
-      leme_public_as_text(d_val, &d_t);
-    }
-    if (d_t.length == 4 && memcmp(d_t.data, "left", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_LEFT;
-    } else if (d_t.length == 5 && memcmp(d_t.data, "right", 5) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_RIGHT;
-    } else if (d_t.length == 2 && memcmp(d_t.data, "up", 2) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_UP;
-    } else if (d_t.length == 4 && memcmp(d_t.data, "down", 4) == 0) {
-      prep->cmd.direction = LEME_DIRECTION_DOWN;
-    }
-    const struct leme_public_value *f_val = leme_public_at(argv, 2);
-    int64_t f_int = 0;
-    if (f_val != NULL) {
-      leme_public_as_integer(f_val, &f_int);
-    }
-    prep->cmd.follow = (f_int != 0);
-  } else if (name_t.length == 13 &&
-             memcmp(name_t.data, "switch_layout", 13) == 0) {
-    prep->cmd.type = LEME_COMMAND_SWITCH_LAYOUT;
-  } else if (name_t.length == 16 &&
-             memcmp(name_t.data, "remove_empty_tag", 16) == 0) {
-    prep->cmd.type = LEME_COMMAND_REMOVE_EMPTY_TAG;
-    const struct leme_public_value *t_val = leme_public_at(argv, 1);
-    int64_t tid = 0;
-    if (t_val != NULL) {
-      leme_public_as_integer(t_val, &tid);
-    }
-    prep->cmd.tag_id = (uint16_t)tid;
-  } else if (name_t.length == 21 &&
-             memcmp(name_t.data, "cycle_keyboard_layout", 21) == 0) {
-    prep->cmd.type = LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT;
-  } else if (name_t.length == 24 &&
-             memcmp(name_t.data, "toggle_shortcuts_inhibit", 24) == 0) {
-    prep->cmd.type = LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
-  } else if (name_t.length == 15 &&
-             memcmp(name_t.data, "scratchpad_send", 15) == 0) {
-    if (server->focused_view == NULL || !server->focused_view->mapped ||
-        server->focused_view->unmanaged) {
-      leme_control_free(prep);
-      return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
-                                 "no focused view");
-    }
-    if (leme_view_is_scratchpad(server->focused_view)) {
-      leme_control_free(prep);
-      return set_preflight_error(error, LEME_CONTROL_ACTION_FAILED,
-                                 "already a scratchpad");
-    }
-    prep->cmd.type = LEME_COMMAND_SCRATCHPAD_SEND;
-  } else if (name_t.length == 17 &&
-             memcmp(name_t.data, "scratchpad_toggle", 17) == 0) {
-    prep->cmd.type = LEME_COMMAND_SCRATCHPAD_TOGGLE;
-    const struct leme_public_value *nm_val = leme_public_at(argv, 1);
-    struct leme_public_text nm_t = {0};
-    if (nm_val != NULL) {
-      leme_public_as_text(nm_val, &nm_t);
-    }
-    if (nm_t.length > 0 && nm_t.data != NULL) {
-      char *sp_name = strndup(nm_t.data, nm_t.length);
-      if (sp_name == NULL) {
-        leme_control_free(prep);
-        return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
-                                   "out of memory");
-      }
-      if (server->config == NULL ||
-          leme_config_scratchpad(server->config, sp_name) == NULL) {
-        free(sp_name);
-        leme_control_free(prep);
-        return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
-                                   "scratchpad not configured");
-      }
-      prep->cmd.text = sp_name;
-    }
-  } else if (name_t.length == 19 &&
-             memcmp(name_t.data, "scratchpad_retrieve", 19) == 0) {
-    prep->cmd.type = LEME_COMMAND_SCRATCHPAD_RETRIEVE;
-  } else {
+  parsed = leme_command_parse(&prep->cmd, words, word_count, &parse_error);
+  command_control_free_words(words, word_count);
+  if (!parsed) {
+    const enum leme_control_code code = set_preflight_error(
+        error, LEME_CONTROL_INVALID_ARGUMENT,
+        parse_error != NULL ? parse_error : "invalid command");
+
+    free(parse_error);
     leme_control_free(prep);
-    return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
-                               "unknown command");
+    return code;
+  }
+  const enum leme_control_code code =
+      command_control_check(server, &prep->cmd, error);
+  if (code != LEME_CONTROL_OK) {
+    leme_command_finish(&prep->cmd);
+    leme_control_free(prep);
+    return code;
   }
 
   *out = (struct leme_control_prepared *)prep;
@@ -738,6 +661,10 @@ command_control_execute_one(struct leme_server *server,
 
   struct leme_view *old_view = server->focused_view;
   struct leme_output *old_output = leme_output_focused(server);
+  const struct leme_box old_box =
+      old_view != NULL ? old_view->box : (struct leme_box){0};
+  const struct leme_output *old_view_output =
+      old_view != NULL ? leme_view_output(old_view) : NULL;
 
   bool ok = leme_command_execute(server, &prep->cmd);
   if (!ok) {
@@ -764,6 +691,12 @@ command_control_execute_one(struct leme_server *server,
     } else {
       *outcome = LEME_CONTROL_NOOP;
     }
+  } else if (prep->cmd.type == LEME_COMMAND_MOVE_DIRECTION) {
+    const bool moved =
+        old_view != NULL &&
+        (old_view->box.x != old_box.x || old_view->box.y != old_box.y ||
+         leme_view_output(old_view) != old_view_output);
+    *outcome = moved ? LEME_CONTROL_APPLIED : LEME_CONTROL_NOOP;
   } else {
     *outcome = LEME_CONTROL_APPLIED;
   }
@@ -777,9 +710,7 @@ static void command_control_discard(struct leme_server *server,
     return;
   }
   struct command_prepared *prep = (struct command_prepared *)prepared;
-  if (prep->cmd.text != NULL) {
-    free(prep->cmd.text);
-  }
+  leme_command_finish(&prep->cmd);
   leme_control_free(prep);
 }
 

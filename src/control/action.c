@@ -150,24 +150,6 @@ leme_control_prepare_action(struct leme_control_context *context,
     return code;
   }
 
-  if (meter.now_ns != NULL && meter.deadline_ns > 0 &&
-      meter.now_ns(meter.context) >= meter.deadline_ns) {
-    if (domain->discard != NULL && prepared != NULL) {
-      domain->discard(domain->context, prepared);
-      prepared = NULL;
-    }
-    leme_control_plan_destroy(plan);
-    if (error != NULL) {
-      error->code = LEME_CONTROL_RESOURCE_LIMIT;
-      error->phase = LEME_CONTROL_PREFLIGHT;
-      (void)snprintf(error->message, sizeof(error->message),
-                     "domain preparation deadline exceeded");
-      (void)snprintf(error->expr_path, sizeof(error->expr_path), "/expr");
-      error->effects_applied = false;
-    }
-    return LEME_CONTROL_RESOURCE_LIMIT;
-  }
-
   plan->prepared = prepared;
   *out = plan;
   return LEME_CONTROL_OK;

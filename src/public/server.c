@@ -52,6 +52,10 @@ bool leme_public_server_prepare(struct leme_server *server) {
 void leme_public_server_finish(struct leme_server *server) {
   if (server == NULL)
     return;
+  if (server->public_warm_idle != NULL) {
+    wl_event_source_remove(server->public_warm_idle);
+    server->public_warm_idle = NULL;
+  }
   leme_public_model_destroy(server->public_model);
   server->public_model = NULL;
 }
@@ -59,6 +63,23 @@ void leme_public_server_finish(struct leme_server *server) {
 void leme_public_server_invalidate(struct leme_server *server) {
   if (server != NULL)
     leme_public_model_invalidate(server->public_model);
+}
+
+static void leme_public_server_handle_warm(void *data) {
+  struct leme_server *server = data;
+  const struct leme_public_source source = leme_public_server_source(server);
+
+  server->public_warm_idle = NULL;
+  leme_public_model_warm(server->public_model, &source);
+}
+
+static void leme_public_server_schedule_warm(struct leme_server *server) {
+  if (server->display == NULL || server->public_warm_idle != NULL ||
+      !leme_public_model_available(server->public_model))
+    return;
+  server->public_warm_idle =
+      wl_event_loop_add_idle(wl_display_get_event_loop(server->display),
+                             leme_public_server_handle_warm, server);
 }
 
 void leme_public_server_config_changed(struct leme_server *server) {
@@ -70,6 +91,7 @@ void leme_public_server_config_changed(struct leme_server *server) {
   }
   ++server->public_config_generation;
   leme_public_server_invalidate(server);
+  leme_public_server_schedule_warm(server);
 }
 
 void leme_public_server_lock_changed(struct leme_server *server, bool locked) {

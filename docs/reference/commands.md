@@ -12,7 +12,7 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `focus_last_tag` | Swap the current and previous tag states, including a candidate. |
 | `focus_previous_view` | Focus the most recently focused alternative on the current tag. |
 | `focus DIR` | Focus the nearest visible view in a direction. |
-| `move DIR [PIXELS]` | Swap a tiled view with its directional neighbor, or move a floating view. The default is 40 pixels. |
+| `move DIR [PIXELS]` | Swap a tiled view with its directional neighbor, or move a floating view. The default is 40 pixels. With no neighbor in that direction, nothing moves and IPC reports `noop`. |
 | `move_view_to_tag next\|previous\|ID [follow]` | Move the focused view to an adjacent or numbered tag. `follow` selects the destination. |
 | `focus_output DIR\|NAME` | Focus an adjacent output or named connector. |
 | `move_view_to_output DIR\|NAME [follow]` | Move the focused view to the target output's current tag. `follow` also moves focus and the pointer. |
@@ -21,7 +21,7 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `remove_empty_tag ID` | Remove an empty non-initial materialized tag. |
 | `toggle_floating` | Toggle the focused managed view between tiled and floating. Sticky views refuse this command. |
 | `toggle_sticky` | Keep the focused managed window visible across tags on its current output, or attach its complete sticky group to that output's current tag. Takes no arguments. |
-| `toggle_fullscreen` | Toggle fullscreen for the focused managed view. A sticky group attaches to its owner output's current tag first. |
+| `toggle_fullscreen` | Toggle fullscreen for the focused managed view. A sticky group attaches to its owner output's current tag first. A tag has at most one fullscreen view: making another view fullscreen returns the previous one to its place. |
 | `scratchpad_send` | Put the focused managed view in the global scratchpad pool. A normal tagged view becomes unnamed. |
 | `scratchpad_toggle [NAME]` | Without a name, show or hide the newest unnamed pool member. With a configured name, show, hide, move, adopt, or start that named scratchpad. |
 | `scratchpad_retrieve` | Return the shown scratchpad to the focused tag, or return the newest unnamed member when none is shown. |

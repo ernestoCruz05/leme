@@ -9,6 +9,54 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct leme_command_usage {
+  const char *name;
+  const char *usage;
+};
+
+static const struct leme_command_usage leme_command_usages[] = {
+    {"focus_next_tag", "focus_next_tag [occupied]"},
+    {"focus_previous_tag", "focus_previous_tag [occupied]"},
+    {"focus_tag", "focus_tag ID"},
+    {"focus_last_tag", "focus_last_tag"},
+    {"focus_previous_view", "focus_previous_view"},
+    {"focus", "focus left|right|up|down"},
+    {"move", "move left|right|up|down [PIXELS]"},
+    {"move_view_to_tag", "move_view_to_tag next|previous|ID [follow]"},
+    {"focus_output", "focus_output left|right|up|down|NAME"},
+    {"move_view_to_output",
+     "move_view_to_output left|right|up|down|NAME [follow]"},
+    {"set_layout", "set_layout dwindle|master_stack|accordion"},
+    {"switch_layout", "switch_layout"},
+    {"remove_empty_tag", "remove_empty_tag ID"},
+    {"toggle_floating", "toggle_floating"},
+    {"toggle_sticky", "toggle_sticky"},
+    {"toggle_fullscreen", "toggle_fullscreen"},
+    {"scratchpad_send", "scratchpad_send"},
+    {"scratchpad_toggle", "scratchpad_toggle [NAME]"},
+    {"scratchpad_retrieve", "scratchpad_retrieve"},
+    {"resize", "resize left|right|up|down PIXELS"},
+    {"close_view", "close_view"},
+    {"spawn", "spawn PROGRAM [ARG ...]"},
+    {"reload_config", "reload_config"},
+    {"mode", "mode NAME"},
+    {"cycle_keyboard_layout", "cycle_keyboard_layout"},
+    {"toggle_shortcuts_inhibit", "toggle_shortcuts_inhibit"},
+    {"switch_vt", "switch_vt N"},
+    {"quit", "quit"},
+};
+
+static const char *leme_command_usage(const char *name) {
+  for (size_t index = 0;
+       index < sizeof(leme_command_usages) / sizeof(leme_command_usages[0]);
+       index++) {
+    if (strcmp(leme_command_usages[index].name, name) == 0) {
+      return leme_command_usages[index].usage;
+    }
+  }
+  return NULL;
+}
+
 static void leme_command_set_error(char **error, const char *format, ...) {
   va_list arguments;
   char buffer[256];
@@ -129,6 +177,7 @@ static char **command_copy_argv(const char *name, char *const *params,
 bool leme_command_parse(struct leme_command *command, char *const *params,
                         size_t params_len, char **error) {
   const char *name;
+  const char *usage;
   size_t arguments;
 
   if (params_len == 0) {
@@ -284,9 +333,16 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
   return true;
 
 invalid:
-  leme_command_set_error(error, "invalid command %s", name);
+  leme_command_finish(command);
+  usage = leme_command_usage(name);
+  if (usage == NULL) {
+    leme_command_set_error(error, "unknown command '%s'", name);
+  } else {
+    leme_command_set_error(error, "usage: %s", usage);
+  }
   return false;
 allocation:
+  leme_command_finish(command);
   leme_command_set_error(error, "%s", "out of memory");
   return false;
 }

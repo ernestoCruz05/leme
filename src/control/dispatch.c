@@ -609,6 +609,7 @@ dispatch_request(struct leme_control_context *context,
       }
       return rep_code;
     }
+    meter.deadline_ns = 0;
 
     struct leme_json trial_json;
     leme_json_init_budget(&trial_json, account, limits->response_bytes);

@@ -74,6 +74,8 @@ void leme_public_model_set_observer(struct leme_public_model *model,
                                     leme_public_changed_fn notify,
                                     void *context);
 void leme_public_model_invalidate(struct leme_public_model *model);
+void leme_public_model_warm(struct leme_public_model *model,
+                            const struct leme_public_source *source);
 void leme_public_model_lock_changed(struct leme_public_model *model,
                                     bool locked);
 enum leme_public_status leme_public_model_capture(

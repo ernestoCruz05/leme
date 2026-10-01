@@ -162,64 +162,23 @@ void leme_control_intent_batch_destroy(
   }
 }
 
-static enum leme_control_code make_cmd_args(struct leme_public_builder *b,
-                                            const char *name,
-                                            const char *arg1_str,
-                                            int64_t arg1_int, bool has_arg1_int,
-                                            int64_t arg2_int, bool has_arg2_int,
+static enum leme_control_code make_cmd_argv(struct leme_public_builder *b,
+                                            const char *const *words,
+                                            size_t count,
                                             struct leme_public_value **out) {
-  size_t count = 1;
-  if (arg1_str != NULL || has_arg1_int) {
-    count++;
-  }
-  if (has_arg2_int) {
-    count++;
-  }
-
   struct leme_public_value *arr = NULL;
   if (leme_public_array(b, count, &arr) != LEME_PUBLIC_OK) {
     return LEME_CONTROL_OUT_OF_MEMORY;
   }
-  struct leme_public_value *v0 = NULL;
-  if (leme_public_string(b, (struct leme_public_text){name, strlen(name)},
-                         false, &v0) != LEME_PUBLIC_OK) {
-    return LEME_CONTROL_OUT_OF_MEMORY;
-  }
-  if (leme_public_array_set(b, arr, 0, v0) != LEME_PUBLIC_OK) {
-    return LEME_CONTROL_OUT_OF_MEMORY;
-  }
-
-  size_t idx = 1;
-  if (arg1_str != NULL) {
-    struct leme_public_value *v1 = NULL;
+  for (size_t idx = 0; idx < count; ++idx) {
+    struct leme_public_value *word = NULL;
     if (leme_public_string(
-            b, (struct leme_public_text){arg1_str, strlen(arg1_str)}, false,
-            &v1) != LEME_PUBLIC_OK) {
-      return LEME_CONTROL_OUT_OF_MEMORY;
-    }
-    if (leme_public_array_set(b, arr, idx++, v1) != LEME_PUBLIC_OK) {
-      return LEME_CONTROL_OUT_OF_MEMORY;
-    }
-  } else if (has_arg1_int) {
-    struct leme_public_value *v1 = NULL;
-    if (leme_public_integer(b, arg1_int, &v1) != LEME_PUBLIC_OK) {
-      return LEME_CONTROL_OUT_OF_MEMORY;
-    }
-    if (leme_public_array_set(b, arr, idx++, v1) != LEME_PUBLIC_OK) {
+            b, (struct leme_public_text){words[idx], strlen(words[idx])}, false,
+            &word) != LEME_PUBLIC_OK ||
+        leme_public_array_set(b, arr, idx, word) != LEME_PUBLIC_OK) {
       return LEME_CONTROL_OUT_OF_MEMORY;
     }
   }
-
-  if (has_arg2_int) {
-    struct leme_public_value *v2 = NULL;
-    if (leme_public_integer(b, arg2_int, &v2) != LEME_PUBLIC_OK) {
-      return LEME_CONTROL_OUT_OF_MEMORY;
-    }
-    if (leme_public_array_set(b, arr, idx++, v2) != LEME_PUBLIC_OK) {
-      return LEME_CONTROL_OUT_OF_MEMORY;
-    }
-  }
-
   *out = arr;
   return LEME_CONTROL_OK;
 }
@@ -869,8 +828,10 @@ enum leme_control_code leme_control_command_lower(
                       focused_output_id, 0, focused_output_id_text);
       }
       struct leme_public_value *c_args = NULL;
-      make_cmd_args(b, "focus_output", direction_to_string(cmd.direction), 0,
-                    false, 0, false, &c_args);
+      make_cmd_argv(b,
+                    (const char *const[]){"focus_output",
+                                          direction_to_string(cmd.direction)},
+                    2, &c_args);
       intents[0].args = c_args;
       const struct leme_public_value *roots[1] = {c_args};
       leme_public_builder_seal(b, roots, 1);
@@ -1048,9 +1009,11 @@ enum leme_control_code leme_control_command_lower(
       set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id, 0,
                     focused_view_id_text);
       struct leme_public_value *c_args = NULL;
-      make_cmd_args(b, "move_view_to_output",
-                    direction_to_string(cmd.direction), 0, false,
-                    cmd.follow ? 1 : 0, true, &c_args);
+      make_cmd_argv(b,
+                    (const char *const[]){"move_view_to_output",
+                                          direction_to_string(cmd.direction),
+                                          "follow"},
+                    cmd.follow ? 3 : 2, &c_args);
       intents[0].args = c_args;
       const struct leme_public_value *roots[1] = {c_args};
       leme_public_builder_seal(b, roots, 1);
@@ -1139,8 +1102,9 @@ enum leme_control_code leme_control_command_lower(
                     focused_view_id_text);
     }
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "focus", direction_to_string(cmd.direction), 0, false, 0,
-                  false, &c_args);
+    make_cmd_argv(
+        b, (const char *const[]){"focus", direction_to_string(cmd.direction)},
+        2, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);
@@ -1163,7 +1127,7 @@ enum leme_control_code leme_control_command_lower(
                     focused_view_id_text);
     }
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "focus_previous_view", NULL, 0, false, 0, false, &c_args);
+    make_cmd_argv(b, (const char *const[]){"focus_previous_view"}, 1, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);
@@ -1189,7 +1153,7 @@ enum leme_control_code leme_control_command_lower(
     set_target_id(account, &intents[0], LEME_PUBLIC_OUTPUT, focused_output_id,
                   0, focused_output_id_text);
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "focus_last_tag", NULL, 0, false, 0, false, &c_args);
+    make_cmd_argv(b, (const char *const[]){"focus_last_tag"}, 1, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);
@@ -1215,8 +1179,12 @@ enum leme_control_code leme_control_command_lower(
     set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id, 0,
                   focused_view_id_text);
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "move", direction_to_string(cmd.direction), 0, false,
-                  cmd.amount, true, &c_args);
+    char amount[16];
+    (void)snprintf(amount, sizeof(amount), "%d", cmd.amount);
+    make_cmd_argv(b,
+                  (const char *const[]){
+                      "move", direction_to_string(cmd.direction), amount},
+                  3, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);
@@ -1242,7 +1210,7 @@ enum leme_control_code leme_control_command_lower(
     set_target_id(account, &intents[0], LEME_PUBLIC_TAG, active_tag_id,
                   active_tag_slot, active_tag_id_text);
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "switch_layout", NULL, 0, false, 0, false, &c_args);
+    make_cmd_argv(b, (const char *const[]){"switch_layout"}, 1, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);
@@ -1316,7 +1284,9 @@ enum leme_control_code leme_control_command_lower(
     set_target_id(account, &intents[0], LEME_PUBLIC_TAG, target_tag_id,
                   cmd.tag_id, target_tag_id_text);
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "remove_empty_tag", NULL, cmd.tag_id, true, 0, false,
+    char tag[8];
+    (void)snprintf(tag, sizeof(tag), "%d", cmd.tag_id);
+    make_cmd_argv(b, (const char *const[]){"remove_empty_tag", tag}, 2,
                   &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
@@ -1336,7 +1306,7 @@ enum leme_control_code leme_control_command_lower(
     }
     intents[0].opcode = LEME_CONTROL_OP_COMMAND;
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "cycle_keyboard_layout", NULL, 0, false, 0, false,
+    make_cmd_argv(b, (const char *const[]){"cycle_keyboard_layout"}, 1,
                   &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
@@ -1356,7 +1326,7 @@ enum leme_control_code leme_control_command_lower(
     }
     intents[0].opcode = LEME_CONTROL_OP_COMMAND;
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "toggle_shortcuts_inhibit", NULL, 0, false, 0, false,
+    make_cmd_argv(b, (const char *const[]){"toggle_shortcuts_inhibit"}, 1,
                   &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
@@ -1383,7 +1353,7 @@ enum leme_control_code leme_control_command_lower(
     set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id, 0,
                   focused_view_id_text);
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "scratchpad_send", NULL, 0, false, 0, false, &c_args);
+    make_cmd_argv(b, (const char *const[]){"scratchpad_send"}, 1, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);
@@ -1409,8 +1379,8 @@ enum leme_control_code leme_control_command_lower(
                     0, focused_output_id_text);
     }
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "scratchpad_toggle", cmd.text != NULL ? cmd.text : "", 0,
-                  false, 0, false, &c_args);
+    make_cmd_argv(b, (const char *const[]){"scratchpad_toggle", cmd.text},
+                  cmd.text != NULL ? 2 : 1, &c_args);
     if (cmd.text != NULL) {
       free(cmd.text);
       cmd.text = NULL;
@@ -1440,7 +1410,7 @@ enum leme_control_code leme_control_command_lower(
     set_target_id(account, &intents[0], LEME_PUBLIC_OUTPUT, focused_output_id,
                   0, focused_output_id_text);
     struct leme_public_value *c_args = NULL;
-    make_cmd_args(b, "scratchpad_retrieve", NULL, 0, false, 0, false, &c_args);
+    make_cmd_argv(b, (const char *const[]){"scratchpad_retrieve"}, 1, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);

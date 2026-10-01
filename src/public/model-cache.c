@@ -153,6 +153,27 @@ fail:
   return status;
 }
 
+void leme_public_model_warm(struct leme_public_model *model,
+                            const struct leme_public_source *source) {
+  static const enum leme_public_root roots[] = {LEME_PUBLIC_RUNTIME,
+                                                LEME_PUBLIC_CONFIG};
+
+  if (source == NULL || source->locked == NULL || source->root == NULL ||
+      !leme_public_model_available(model))
+    return;
+  leme_public_model_sync_source(model, source);
+  for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); ++i) {
+    struct leme_public_capture_diagnostic diagnostic = {.stage = "warm",
+                                                        .root = roots[i]};
+    struct leme_public_cached_root *cached = NULL;
+
+    if (roots[i] == LEME_PUBLIC_CONFIG && source->locked(source->context))
+      continue;
+    (void)leme_public_model_cached_root(model, source, roots[i], NULL,
+                                        &diagnostic, &cached);
+  }
+}
+
 enum leme_public_status
 leme_public_snapshot_project(struct leme_public_model *model, uint32_t roots,
                              struct leme_public_snapshot **out) {
