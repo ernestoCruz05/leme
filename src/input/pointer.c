@@ -198,9 +198,12 @@ static void leme_input_pointer_grab_cleanup(struct leme_pointer_grab *grab) {
       leme_layout_discard_detached(&grab->detach);
     }
   }
+  struct leme_view *view = grab->view;
+
   grab->mode = LEME_POINTER_GRAB_NONE;
   leme_view_set_configure_deferred(grab->view, false);
   grab->view = NULL;
+  leme_view_follow_committed_size(view);
   grab->button = 0;
   grab->edges = LEME_GRAB_EDGE_NONE;
   grab->resize_drag = (struct leme_layout_resize_drag){0};
@@ -497,6 +500,12 @@ bool leme_input_pointer_grab_active(const struct leme_server *server) {
          server->seat->pointer_state.grab == &server->pointer_grab->seat_grab;
 }
 
+bool leme_input_pointer_grabbing(const struct leme_server *server,
+                                 const struct leme_view *view) {
+  return leme_input_pointer_grab_active(server) &&
+         server->pointer_grab->view == view;
+}
+
 bool leme_input_pointer_grab_start_xdg(
     struct leme_view *view, bool resize,
     uint32_t serial, // NOLINT(bugprone-easily-swappable-parameters)
@@ -540,9 +549,12 @@ bool leme_input_pointer_grab_start_xwayland(struct leme_view *view, bool resize,
 }
 
 static void leme_input_pointer_grab_sink(struct leme_pointer_grab *grab) {
+  struct leme_view *view = grab->view;
+
   grab->mode = LEME_POINTER_GRAB_SINK;
   leme_view_set_configure_deferred(grab->view, false);
   grab->view = NULL;
+  leme_view_follow_committed_size(view);
   grab->resize_drag = (struct leme_layout_resize_drag){0};
   leme_desktop_cursor_restore(grab->server);
   if (!leme_input_pointer_button_held(grab->server->seat, grab->button)) {
@@ -875,16 +887,13 @@ static void leme_input_follow_pointer_output(struct leme_server *server) {
   leme_output_set_focused(server, output, false);
 }
 
-static bool leme_input_surface_sets_cursor(struct leme_server *server,
-                                           struct wlr_surface *surface) {
-  struct wlr_seat_client *client;
-
-  if (surface == NULL) {
-    return false;
-  }
-  client = wlr_seat_client_for_wl_client(
-      server->seat, wl_resource_get_client(surface->resource));
-  return client != NULL && !wl_list_empty(&client->pointers);
+static struct wlr_seat_client *
+leme_input_surface_client(struct leme_server *server,
+                          struct wlr_surface *surface) {
+  return surface == NULL
+             ? NULL
+             : wlr_seat_client_for_wl_client(
+                   server->seat, wl_resource_get_client(surface->resource));
 }
 
 static void leme_input_process_motion(struct leme_server *server,
@@ -908,9 +917,10 @@ static void leme_input_process_motion(struct leme_server *server,
     leme_view_focus(hit->view);
   }
   if (hit->surface != server->seat->pointer_state.focused_surface &&
-      !leme_input_surface_sets_cursor(server, hit->surface) &&
-      server->seat->drag == NULL && !leme_input_pointer_grab_active(server)) {
-    leme_desktop_cursor_restore(server);
+      server->seat->drag == NULL && !leme_input_pointer_grab_active(server) &&
+      !leme_desktop_cursor_owned_by(
+          server, leme_input_surface_client(server, hit->surface))) {
+    leme_desktop_cursor_default(server);
   }
   if (hit->surface == NULL) {
     wlr_seat_pointer_notify_clear_focus(server->seat);
@@ -1088,7 +1098,7 @@ static void leme_input_handle_set_cursor(struct wl_listener *listener,
       leme_session_surface_allowed(
           server, server->seat->pointer_state.focused_surface) &&
       server->seat->pointer_state.focused_client == event->seat_client) {
-    leme_desktop_cursor_surface_set(server);
+    leme_desktop_cursor_surface_set(server, event->seat_client);
     wlr_cursor_set_surface(server->cursor, event->surface, event->hotspot_x,
                            event->hotspot_y);
   }

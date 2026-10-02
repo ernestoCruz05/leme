@@ -205,12 +205,38 @@ static void leme_view_handle_unmap(struct wl_listener *listener, void *data) {
   leme_view_unmap(view);
 }
 
+void leme_view_follow_committed_size(struct leme_view *view) {
+  if (view == NULL || view->kind != LEME_VIEW_XDG || !view->mapped ||
+      view->xdg_toplevel == NULL || view->xdg_toplevel->base == NULL ||
+      !view->xdg_toplevel->base->surface->mapped) {
+    return;
+  }
+  const struct wlr_xdg_surface *base = view->xdg_toplevel->base;
+  const struct wlr_box geometry = base->geometry;
+  struct leme_box content;
+
+  if (!view->floating || view->fullscreen || geometry.width <= 0 ||
+      geometry.height <= 0 || !wl_list_empty(&base->configure_list) ||
+      leme_input_pointer_grabbing(view->server, view)) {
+    return;
+  }
+  content = leme_render_view_content_box(view, view->box);
+  if (content.width == geometry.width && content.height == geometry.height) {
+    return;
+  }
+  content.width = geometry.width;
+  content.height = geometry.height;
+  view->box = leme_render_view_frame_box(view, content);
+  leme_render_view_set_box(view, view->box);
+}
+
 static void leme_view_handle_commit(struct wl_listener *listener, void *data) {
   struct leme_view *view = wl_container_of(listener, view, commit);
 
   (void)data;
   if (view->mapped) {
     leme_render_view_clip_to_geometry(view);
+    leme_view_follow_committed_size(view);
   }
   if (view->xdg_toplevel->base->initial_commit) {
     struct leme_output *output = leme_output_focused(view->server);

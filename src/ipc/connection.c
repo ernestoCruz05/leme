@@ -228,10 +228,10 @@ static bool watch_job(const struct leme_control_peer *peer) {
 }
 
 uint64_t leme_control_peer_watch_wake_ns(const struct leme_control_peer *peer) {
-  if (peer == NULL || !watch_pending(peer) || !watch_paced(peer)) {
+  if (peer == NULL || !watch_pending(peer)) {
     return 0;
   }
-  return peer->watch_ready_ns;
+  return peer->watch_ready_ns != 0 ? peer->watch_ready_ns : 1;
 }
 
 bool leme_control_peer_needs_fresh_turn(const struct leme_control_peer *peer) {

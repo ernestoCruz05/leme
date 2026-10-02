@@ -45,6 +45,8 @@ void leme_input_apply_keyboard_repeat(struct leme_server *server);
 void leme_input_refresh_pointer_focus(struct leme_server *server,
                                       uint32_t time_msec);
 bool leme_input_pointer_grab_active(const struct leme_server *server);
+bool leme_input_pointer_grabbing(const struct leme_server *server,
+                                 const struct leme_view *view);
 bool leme_input_pointer_grab_start_xdg(struct leme_view *view, bool resize,
                                        uint32_t serial, uint32_t wlr_edges);
 bool leme_input_pointer_grab_start_xwayland(struct leme_view *view, bool resize,

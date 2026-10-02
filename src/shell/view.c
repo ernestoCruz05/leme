@@ -997,8 +997,7 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
   if (leme_view_is_sticky(view)) {
     return leme_sticky_apply_box(view, view->box, true);
   }
-  leme_render_view_set_box(view, view->box);
-  return true;
+  return leme_view_apply_interactive_box(view, view->box, true);
 }
 
 bool leme_view_apply_interactive_box(struct leme_view *view,

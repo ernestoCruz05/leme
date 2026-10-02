@@ -162,6 +162,7 @@ bool leme_view_drop_to_output(struct leme_view *view,
                               enum leme_direction direction);
 bool leme_view_set_floating(struct leme_view *view, bool floating);
 void leme_view_update_tiled(struct leme_view *view);
+void leme_view_follow_committed_size(struct leme_view *view);
 bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen);
 void leme_view_refresh_fullscreen(struct leme_server *server);
 bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,

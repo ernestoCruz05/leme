@@ -44,6 +44,8 @@ struct leme_desktop {
   float cursor_scale;
   bool cursor_themed;
   bool cursor_overridden;
+  struct wlr_seat_client *cursor_client;
+  struct wl_listener cursor_client_destroy;
   struct wl_list xdg_decorations;
   struct wl_listener request_activate;
   struct wl_listener new_xdg_decoration;
@@ -153,6 +155,33 @@ static void leme_desktop_handle_new_xdg_decoration(struct wl_listener *listener,
   wl_list_insert(&desktop->xdg_decorations, &wrapper->link);
 }
 
+static void
+leme_desktop_handle_cursor_client_destroy(struct wl_listener *listener,
+                                          void *data) {
+  struct leme_desktop *desktop =
+      wl_container_of(listener, desktop, cursor_client_destroy);
+
+  (void)data;
+  wl_list_remove(&desktop->cursor_client_destroy.link);
+  wl_list_init(&desktop->cursor_client_destroy.link);
+  desktop->cursor_client = NULL;
+}
+
+static void leme_desktop_cursor_owner_set(struct leme_desktop *desktop,
+                                          struct wlr_seat_client *client) {
+  if (desktop->cursor_client == client) {
+    return;
+  }
+  wl_list_remove(&desktop->cursor_client_destroy.link);
+  wl_list_init(&desktop->cursor_client_destroy.link);
+  desktop->cursor_client = client;
+  if (client != NULL) {
+    desktop->cursor_client_destroy.notify =
+        leme_desktop_handle_cursor_client_destroy;
+    wl_signal_add(&client->events.destroy, &desktop->cursor_client_destroy);
+  }
+}
+
 static void leme_desktop_handle_cursor_shape(struct wl_listener *listener,
                                              void *data) {
   struct leme_desktop *desktop =
@@ -180,13 +209,35 @@ static void leme_desktop_handle_cursor_shape(struct wl_listener *listener,
   wlr_cursor_set_xcursor(server->cursor, desktop->xcursor, name);
   desktop->cursor_name = name;
   desktop->cursor_themed = true;
+  leme_desktop_cursor_owner_set(desktop, event->seat_client);
 }
 
-void leme_desktop_cursor_surface_set(struct leme_server *server) {
+void leme_desktop_cursor_surface_set(struct leme_server *server,
+                                     struct wlr_seat_client *client) {
   if (server != NULL && server->desktop != NULL &&
       !leme_input_pointer_grab_active(server)) {
     server->desktop->cursor_themed = false;
+    leme_desktop_cursor_owner_set(server->desktop, client);
   }
+}
+
+bool leme_desktop_cursor_owned_by(const struct leme_server *server,
+                                  const struct wlr_seat_client *client) {
+  return server != NULL && server->desktop != NULL &&
+         server->desktop->cursor_client == client;
+}
+
+void leme_desktop_cursor_default(struct leme_server *server) {
+  struct leme_desktop *desktop;
+
+  if (server == NULL || server->desktop == NULL) {
+    return;
+  }
+  desktop = server->desktop;
+  desktop->cursor_themed = false;
+  desktop->cursor_name = NULL;
+  leme_desktop_cursor_owner_set(desktop, NULL);
+  leme_desktop_cursor_restore(server);
 }
 
 bool leme_desktop_cursor_override(struct leme_server *server,
@@ -298,6 +349,7 @@ bool leme_desktop_init(struct leme_server *server) {
   }
   desktop->server = server;
   wl_list_init(&desktop->xdg_decorations);
+  wl_list_init(&desktop->cursor_client_destroy.link);
   server->desktop = desktop;
   desktop->activation = wlr_xdg_activation_v1_create(server->display);
   server->xdg_dialog_manager = wlr_xdg_wm_dialog_v1_create(server->display, 1);
@@ -430,6 +482,7 @@ void leme_desktop_finish(struct leme_server *server) {
   if (desktop->request_set_shape.link.next != NULL) {
     wl_list_remove(&desktop->request_set_shape.link);
   }
+  wl_list_remove(&desktop->cursor_client_destroy.link);
   free(desktop->cursor_override_name);
   desktop->cursor_override_name = NULL;
   if (desktop->xcursor != NULL) {
