@@ -10,6 +10,8 @@ to a selected output and tag. It defaults to a read-only plan. See the
 ## Read state
 
 ```sh
+timao get session mode
+timao watch tags
 timao eval '(query (count (views)))'
 timao --raw eval '(query (get (session) "mode"))'
 timao eval '(query (get (session) "keyboard_layout"))'
@@ -72,7 +74,7 @@ The result acknowledges exec, not window creation or continued application healt
 
 ## Recovery and migration
 
-Replace the old `timao get` entrypoint with explicit query expressions, and `timao sub` with a watch. Stdout now defaults to JSON, not ad-hoc scalar lines; request `--raw` only when its restricted scalar representation is appropriate. Sensitive roots are unavailable while locked; use safe `status` information for lock state rather than assuming all queries remain readable.
+`timao get` now takes a root and field names, such as `timao get session mode`, and `timao sub` became `timao watch` with the same arguments. Anything more involved is a `query` or `watch` expression. Stdout now defaults to JSON, not ad-hoc scalar lines; request `--raw` only when its restricted scalar representation is appropriate. Sensitive roots are unavailable while locked; use safe `status` information for lock state rather than assuming all queries remain readable.
 
 Timao attempts to restore acknowledged watches after retryable connection failures while a handler, printer or await still uses them. Queries and actions are not replayed. Preserve the request/instance and diagnostic `details` when reporting partial or uncertain actions. Treat `outcome_unknown` as an action that may have happened, not a request to retry.
 

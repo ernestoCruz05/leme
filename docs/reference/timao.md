@@ -9,6 +9,8 @@ timao --help
 timao --version
 timao toggle_floating
 timao set_layout accordion
+timao get session mode
+timao watch tags
 timao eval '(query (views))'
 timao --raw eval '(query (get (session) "mode"))'
 timao run script.timao 'literal argument'
@@ -45,7 +47,7 @@ timao eval '(query (get (config) "diagnostics"))'
 timao eval '(watch (count (views)))'
 ```
 
-Use `query` and `watch` expressions for state access. `timao get` and `timao sub` are not supported entrypoints. Request the fields you need: returning a whole `config` or `runtime` value can exceed clone or response limits even when a single field would fit.
+`timao get ROOT [FIELD...]` prints one value and `timao watch ROOT [FIELD...]` streams it. ROOT is one of `views`, `tags`, `outputs`, `inputs`, `session`, `config`, `runtime` or `status`, and each FIELD reads one member, following references: `timao get session focused_output name` prints the focused output's name. Use `query` and `watch` expressions for anything else, such as filtering or counting. Request the fields you need: returning a whole `config` or `runtime` value can exceed clone or response limits even when a single field would fit.
 
 When eval returns an unattached watch, timao installs a default printer and keeps running. A definition returns null, so `(def w (watch ...))` alone does not install a printer. A watch with a user handler keeps that handler instead. A `watch:N` ID belongs to the current timao process; it is not the server's subscription token and cannot cancel another client's watch.
 

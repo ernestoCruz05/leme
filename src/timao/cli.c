@@ -31,7 +31,10 @@ static const char help[] =
     "  toggle_shortcuts_inhibit\n"
     "  scratchpad_send; scratchpad_toggle [NAME]; scratchpad_retrieve\n"
     "A configured named scratchpad may launch its configured program.\n"
-    "get/sub were removed: use eval '(query ...)' or eval '(watch ...)'.\n"
+    "Read state without writing expressions:\n"
+    "  get ROOT [FIELD...]    one value, e.g. get session focused_output name\n"
+    "  watch ROOT [FIELD...]  stream changes, e.g. watch tags\n"
+    "  ROOT: views, tags, outputs, inputs, session, config, runtime, status\n"
     "Use (launch (list PROGRAM ARG...)) for detached programs, never spawn.\n";
 
 static bool write_buffer(struct timao_runtime *runtime,
@@ -63,6 +66,37 @@ static bool write_buffer(struct timao_runtime *runtime,
         TIMAO_RUNTIME_PROGRESS)
       return false;
   }
+}
+
+static int access_source(const struct timao_cli_arguments *options,
+                         char *buffer, size_t capacity) {
+  size_t used = 0;
+  int written = snprintf(buffer, capacity, "(%s ",
+                         options->kind == TIMAO_CLI_GET ? "query" : "watch");
+  if (written < 0 || (size_t)written >= capacity)
+    return -1;
+  used = (size_t)written;
+  for (size_t i = 0; i < options->count; ++i) {
+    written = snprintf(buffer + used, capacity - used, "(get ");
+    if (written < 0 || (size_t)written >= capacity - used)
+      return -1;
+    used += (size_t)written;
+  }
+  written = snprintf(buffer + used, capacity - used, "(%s)", options->command);
+  if (written < 0 || (size_t)written >= capacity - used)
+    return -1;
+  used += (size_t)written;
+  for (size_t i = 0; i < options->count; ++i) {
+    written = snprintf(buffer + used, capacity - used, " \"%s\")",
+                       options->arguments[i]);
+    if (written < 0 || (size_t)written >= capacity - used)
+      return -1;
+    used += (size_t)written;
+  }
+  written = snprintf(buffer + used, capacity - used, ")");
+  if (written < 0 || (size_t)written >= capacity - used)
+    return -1;
+  return (int)(used + (size_t)written);
 }
 
 static int arguments(struct timao_runtime *runtime,
@@ -198,6 +232,7 @@ int timao_cli_main(int argc, char **argv) {
   if (status != 0)
     goto done;
   char command[128] = {0};
+  char access[TIMAO_CLI_FIELDS_MAX * (TIMAO_CLI_FIELD_MAX + 12) + 64] = {0};
   struct timao_input input = {.mode = TIMAO_EXPRESSION,
                               .name = LEME_PUBLIC_TEXT("<eval>")};
   if (options.kind == TIMAO_CLI_COMMAND) {
@@ -211,6 +246,15 @@ int timao_cli_main(int argc, char **argv) {
     }
     input.bytes = (struct leme_public_text){command, (size_t)length};
     input.name = LEME_PUBLIC_TEXT("<command>");
+  } else if (options.kind == TIMAO_CLI_GET || options.kind == TIMAO_CLI_WATCH) {
+    const int length = access_source(&options, access, sizeof(access));
+    if (length < 0) {
+      timao_error(&error, "resource_limit", "get/watch source exceeds limit");
+      status = 1;
+      goto done;
+    }
+    input.bytes = (struct leme_public_text){access, (size_t)length};
+    input.name = LEME_PUBLIC_TEXT("<get>");
   } else if (options.kind == TIMAO_CLI_EVAL) {
     input.bytes = (struct leme_public_text){options.source,
                                             strnlen(options.source, 1048577)};

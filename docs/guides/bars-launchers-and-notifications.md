@@ -37,7 +37,8 @@ in the event's `value` field:
 timao eval '(watch EXPRESSION)'
 ```
 
-Useful expressions:
+A single field also has a short form: `timao watch session mode` is the same
+as `timao eval '(watch (get (session) "mode"))'`. Useful expressions:
 
 | Shows | Expression |
 | --- | --- |

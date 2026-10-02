@@ -32,6 +32,27 @@ static const struct command_name commands[] = {
     {"scratchpad_toggle", 0, 1},
     {"scratchpad_retrieve", 0, 0}};
 
+static const char *const roots[] = {"views",   "tags",   "outputs", "inputs",
+                                    "session", "config", "runtime", "status"};
+
+static bool valid_root(const char *name) {
+  for (size_t i = 0; i < sizeof(roots) / sizeof(roots[0]); ++i)
+    if (strcmp(name, roots[i]) == 0)
+      return true;
+  return false;
+}
+
+static bool valid_field(const char *name) {
+  const size_t length = strnlen(name, TIMAO_CLI_FIELD_MAX + 1);
+  if (length == 0 || length > TIMAO_CLI_FIELD_MAX)
+    return false;
+  for (size_t i = 0; i < length; ++i)
+    if (!((name[i] >= 'a' && name[i] <= 'z') ||
+          (name[i] >= '0' && name[i] <= '9') || name[i] == '_'))
+      return false;
+  return true;
+}
+
 static int usage(struct timao_diagnostic *error, const char *message) {
   timao_error(error, "usage_error", message);
   return 2;
@@ -94,9 +115,25 @@ int timao_cli_parse(int argc, char *const *argv,
   if (index == count)
     return usage(error, "missing command; use --help");
   const char *name = argv[index++];
-  if (strcmp(name, "get") == 0 || strcmp(name, "sub") == 0)
-    return usage(error,
-                 "get/sub were removed; use eval with query/watch; see --help");
+  if (strcmp(name, "sub") == 0)
+    return usage(error, "sub is now watch: timao watch ROOT [FIELD...]");
+  if (strcmp(name, "get") == 0 || strcmp(name, "watch") == 0) {
+    if (index == count)
+      return usage(error, "usage: timao get|watch ROOT [FIELD...]");
+    if (!valid_root(argv[index]))
+      return usage(error, "unknown root; use views, tags, outputs, inputs, "
+                          "session, config, runtime or status");
+    if (count - index - 1 > TIMAO_CLI_FIELDS_MAX)
+      return usage(error, "too many fields");
+    for (size_t i = index + 1; i < count; ++i)
+      if (!valid_field(argv[i]))
+        return usage(error, "fields use lowercase letters, digits and _");
+    out->kind = strcmp(name, "get") == 0 ? TIMAO_CLI_GET : TIMAO_CLI_WATCH;
+    out->command = argv[index];
+    out->arguments = argv + index + 1;
+    out->count = count - index - 1;
+    return 0;
+  }
   if (strcmp(name, "eval") == 0) {
     if (count - index != 1)
       return usage(error, "usage: timao eval EXPR");

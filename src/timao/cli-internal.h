@@ -8,8 +8,13 @@ enum timao_cli_kind {
   TIMAO_CLI_EVAL,
   TIMAO_CLI_RUN,
   TIMAO_CLI_REPL,
-  TIMAO_CLI_COMMAND
+  TIMAO_CLI_COMMAND,
+  TIMAO_CLI_GET,
+  TIMAO_CLI_WATCH
 };
+#define TIMAO_CLI_FIELD_MAX 64
+#define TIMAO_CLI_FIELDS_MAX 16
+
 struct timao_cli_arguments {
   enum timao_cli_kind kind;
   enum timao_output_mode format;
