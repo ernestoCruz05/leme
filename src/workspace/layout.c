@@ -58,6 +58,17 @@ static unsigned int leme_layout_depth(const struct leme_layout_node *node) {
   return depth;
 }
 
+static enum leme_split
+leme_layout_split_for(const struct leme_layout_node *leaf) {
+  const struct leme_box box = leaf->arranged;
+
+  if (box.width <= 0 || box.height <= 0) {
+    return leme_layout_depth(leaf) % 2 == 0 ? LEME_SPLIT_HORIZONTAL
+                                            : LEME_SPLIT_VERTICAL;
+  }
+  return box.width >= box.height ? LEME_SPLIT_HORIZONTAL : LEME_SPLIT_VERTICAL;
+}
+
 struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
                                             struct leme_view *focused,
                                             struct leme_view *added) {
@@ -75,8 +86,7 @@ struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
     old_leaf = leme_layout_first(root);
   }
   retained_view = old_leaf->data.view;
-  split = leme_layout_depth(old_leaf) % 2 == 0 ? LEME_SPLIT_HORIZONTAL
-                                               : LEME_SPLIT_VERTICAL;
+  split = leme_layout_split_for(old_leaf);
   retained_leaf = leme_layout_leaf(retained_view);
   new_leaf = leme_layout_leaf(added);
   if (retained_leaf == NULL || new_leaf == NULL) {
@@ -142,6 +152,7 @@ static void leme_layout_arrange_node(struct leme_layout_node *node,
     return;
   }
   if (node->is_leaf) {
+    node->arranged = box;
     apply(node->data.view, box, data);
     return;
   }

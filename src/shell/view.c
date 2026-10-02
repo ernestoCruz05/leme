@@ -202,7 +202,7 @@ void leme_view_focus_history_remove(struct leme_view *view) {
   }
 }
 
-static void leme_view_update_tiled(struct leme_view *view) {
+void leme_view_update_tiled(struct leme_view *view) {
   uint32_t edges = WLR_EDGE_NONE;
 
   if (view->kind != LEME_VIEW_XDG || view->xdg_toplevel == NULL ||

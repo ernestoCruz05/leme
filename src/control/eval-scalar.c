@@ -2,6 +2,7 @@
 #include "public/value-internal.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 static enum leme_control_code make_bool(struct evaluator *ev, bool b,
@@ -135,6 +136,27 @@ eval_ensure_owned(struct evaluator *ev, const struct leme_public_value *val,
     return NULL;
   }
   return cloned;
+}
+
+static enum leme_control_code
+member_not_found(struct evaluator *ev,
+                 const struct leme_public_value *container,
+                 struct leme_public_text key) {
+  const struct leme_public_value *type_val = leme_public_get(
+      container, (struct leme_public_text){.data = "type", .length = 4});
+  struct leme_public_text type_text = {0};
+  const int key_length = key.length > 64 ? 64 : (int)key.length;
+  char message[160];
+
+  if (type_val != NULL && leme_public_kind(type_val) == LEME_PUBLIC_STRING)
+    leme_public_as_text(type_val, &type_text);
+  if (type_text.length > 0 && type_text.length <= 32)
+    (void)snprintf(message, sizeof(message), "member '%.*s' not found on %.*s",
+                   key_length, key.data, (int)type_text.length, type_text.data);
+  else
+    (void)snprintf(message, sizeof(message), "member '%.*s' not found",
+                   key_length, key.data);
+  return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND, message);
 }
 
 enum leme_control_code eval_scalar_call(struct evaluator *ev,
@@ -482,8 +504,9 @@ enum leme_control_code eval_scalar_call(struct evaluator *ev,
                             "get requires object");
     const struct leme_public_value *member = leme_public_get(v_cont, ktext);
     if (member == NULL)
-      return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
-                            "member not found");
+      member = eval_follow_reference(ev, v_cont, ktext);
+    if (member == NULL)
+      return member_not_found(ev, v_cont, ktext);
     *out = member;
     return LEME_CONTROL_OK;
   }

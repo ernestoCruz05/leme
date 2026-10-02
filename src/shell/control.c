@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wlr/util/log.h>
 
 struct shell_prepared_item {
   uint64_t serial;
@@ -907,6 +908,11 @@ static enum leme_control_code server_control_execute_one(
   case LEME_CONTROL_OP_RELOAD_CONFIG: {
     struct leme_config_reload *plan = (struct leme_config_reload *)prepared;
     leme_config_reload_commit(server, plan);
+    wlr_log(WLR_INFO, "leme: reloaded %s",
+            server->config != NULL && server->config->path != NULL
+                ? server->config->path
+                : "the configuration");
+    leme_server_report_diagnostics(server);
     *outcome = LEME_CONTROL_APPLIED;
     return LEME_CONTROL_OK;
   }

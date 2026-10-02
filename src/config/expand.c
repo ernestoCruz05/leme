@@ -50,6 +50,8 @@ struct leme_expander {
   uint16_t active_trail;
   struct leme_trail_table *trails;
   const struct leme_env_file *env_file;
+  const struct leme_scfg_block *pending_vars;
+  size_t pending_index;
 };
 
 static bool leme_trail_push(struct leme_trail_table *table, uint16_t parent,
@@ -175,6 +177,24 @@ static const char *leme_expand_lookup(const struct leme_expander *expander,
   return NULL;
 }
 
+static bool leme_expand_declared_later(const struct leme_expander *expander,
+                                       const char *name, size_t length) {
+  const struct leme_scfg_block *block = expander->pending_vars;
+
+  if (block == NULL) {
+    return false;
+  }
+  for (size_t index = expander->pending_index; index < block->directives_len;
+       index++) {
+    const char *declared = block->directives[index].name;
+
+    if (strlen(declared) == length && memcmp(declared, name, length) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool leme_buffer_append(char **buffer, size_t *length, const char *text,
                                size_t count) {
   if (count > SIZE_MAX - *length - 1) {
@@ -217,10 +237,12 @@ static char *leme_expand_field(struct leme_expander *expander,
       goto too_large;
     }
     if (input[index] != '$') {
-      if (!leme_buffer_append(&output, &length, &input[index], 1)) {
+      const size_t run = strcspn(&input[index], "$");
+
+      if (!leme_buffer_append(&output, &length, &input[index], run)) {
         goto out_of_memory;
       }
-      index++;
+      index += run;
       continue;
     }
     dollar_index = index;
@@ -372,6 +394,17 @@ static char *leme_expand_field(struct leme_expander *expander,
       index++;
     }
     value = leme_expand_lookup(expander, name, name_length);
+    if (value == NULL &&
+        leme_expand_declared_later(expander, name, name_length)) {
+      leme_config_set_error(expander->error,
+                            "%s:%d:%d: variable %.*s is used before it is "
+                            "declared; variables can only use names declared "
+                            "above them",
+                            expander->path, lineno, column, (int)name_length,
+                            name);
+      free(output);
+      return NULL;
+    }
     if (value == NULL) {
       leme_config_set_error(expander->error, "%s:%d:%d: unknown variable %.*s",
                             expander->path, lineno, column, (int)name_length,
@@ -992,8 +1025,11 @@ static bool leme_expand_collect_vars(struct leme_expander *expander,
           return false;
         }
       }
+      expander->pending_vars = &block->children;
+      expander->pending_index = entry_index;
       value =
           leme_expand_field(expander, entry->params[0], entry->param_spans[0]);
+      expander->pending_vars = NULL;
       if (value == NULL) {
         return false;
       }

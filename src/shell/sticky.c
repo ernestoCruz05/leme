@@ -299,6 +299,7 @@ void leme_sticky_commit_transient(struct leme_sticky_adoption **slot) {
   member = adoption->member;
   leme_ownership_commit(&adoption->owner);
   member->view->floating = true;
+  leme_view_update_tiled(member->view);
   member->view->sticky_member = member;
   wl_list_insert(&leme_sticky_descendant_tail(member->parent)->link,
                  &member->link);
@@ -375,6 +376,7 @@ static bool leme_sticky_enter(struct leme_view *view) {
   leme_ownership_commit(&owner);
   view->floating = true;
   view->fullscreen = false;
+  leme_view_update_tiled(view);
   view->sticky_member = member;
   wl_list_insert(&group->members, &member->link);
   wl_list_insert(&manager->groups, &group->link);

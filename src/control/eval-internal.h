@@ -29,6 +29,14 @@ enum leme_control_code eval_set_error(struct evaluator *ev, const char *path,
 enum leme_control_code eval_node(struct evaluator *ev, uint32_t node_idx,
                                  const struct leme_public_value **out);
 
+bool eval_entity_kind(struct leme_public_text text,
+                      enum leme_public_entity *out);
+
+const struct leme_public_value *
+eval_follow_reference(const struct evaluator *ev,
+                      const struct leme_public_value *value,
+                      struct leme_public_text key);
+
 enum leme_control_code eval_scalar_call(struct evaluator *ev,
                                         const struct leme_control_node *node,
                                         const struct leme_public_value **out);

@@ -394,6 +394,7 @@ leme_scratchpad_show(struct leme_scratchpad_manager *manager,
 
   view->floating = true;
   view->fullscreen = false;
+  leme_view_update_tiled(view);
   (void)leme_ownership_present_durable(view, LEME_DURABLE_OUTPUT, output);
   manager->shown = view;
   leme_scratchpad_promote(manager, view);
@@ -560,6 +561,7 @@ bool leme_scratchpad_send(struct leme_server *server, struct leme_view *view) {
   leme_scratchpad_transition_commit_started(server);
   leme_ownership_commit(&transition);
   view->floating = true;
+  leme_view_update_tiled(view);
   leme_scratchpad_promote(manager, view);
   leme_render_view_update_layer(view);
   leme_render_set_view_visible(view, false);
@@ -613,6 +615,7 @@ leme_scratchpad_claim_tagged(struct leme_scratchpad_manager *manager,
   leme_ownership_commit(&transition);
   view->scratchpad_name = claim;
   view->floating = true;
+  leme_view_update_tiled(view);
   leme_scratchpad_promote(manager, view);
   leme_render_view_update_layer(view);
   leme_render_set_view_visible(view, false);
@@ -757,6 +760,7 @@ bool leme_scratchpad_retrieve(struct leme_server *server,
   free(view->scratchpad_name);
   view->scratchpad_name = NULL;
   view->floating = true;
+  leme_view_update_tiled(view);
   leme_ownership_commit(&transition);
   leme_render_view_update_layer(view);
   leme_render_set_view_visible(view, true);

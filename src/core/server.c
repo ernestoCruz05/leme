@@ -24,6 +24,7 @@
 #include "shell/view.h"
 #include "shell/xwayland.h"
 
+#include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,7 +64,7 @@ static int leme_server_handle_signal(int signal_number, void *data) {
   return 0;
 }
 
-static void leme_server_report_diagnostics(const struct leme_server *server) {
+void leme_server_report_diagnostics(const struct leme_server *server) {
   const struct leme_config *config = server->config;
   size_t index;
 
@@ -112,6 +113,9 @@ static bool leme_server_load_config(struct leme_server *server) {
     leme_config_destroy(loaded);
     free(error);
     error = NULL;
+  } else if (path != NULL && errno != ENOENT) {
+    wlr_log(WLR_ERROR, "leme: cannot read %s: %s; starting with safe defaults",
+            path, strerror(errno));
   } else {
     wlr_log(WLR_INFO, "%s", "leme: using safe configuration defaults");
   }

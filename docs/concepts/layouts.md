@@ -4,9 +4,11 @@ Every tag has a layout. You can change the focused tag at runtime or set persist
 
 ## Dwindle
 
-Dwindle splits the tile containing the focused window. New splits alternate
-direction as windows are added. A tiled SUPER-drag previews a new position and
-reinserts the window when released.
+Dwindle splits the tile containing the focused window along its longer side:
+a wide tile splits side by side, a tall one top and bottom. The direction is
+chosen when the window is added, so resizing never flips existing splits. A
+tiled SUPER-drag previews a new position and reinserts the window when
+released.
 
 ## Master-stack
 

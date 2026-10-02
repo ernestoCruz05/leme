@@ -182,5 +182,6 @@ struct leme_server {
 bool leme_server_init(struct leme_server *server);
 int leme_server_run(struct leme_server *server);
 void leme_server_finish(struct leme_server *server);
+void leme_server_report_diagnostics(const struct leme_server *server);
 
 #endif

@@ -1,6 +1,6 @@
 #include "input/gesture_accel_internal.h"
 
-#include <stdio.h>
+#include <wlr/util/log.h>
 
 static const struct leme_gesture_accel_ops prod_ops = {
     .ref = libinput_device_ref,
@@ -72,18 +72,18 @@ bool leme_gesture_accel_begin_with_ops(
   if (ops->set_profile(ref, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT) !=
       LIBINPUT_CONFIG_STATUS_SUCCESS) {
     if (!leme_gesture_accel_restore(state)) {
-      fputs(
-          "leme: failed to restore gesture acceleration after override failure\n",
-          stderr);
+      wlr_log(WLR_ERROR, "%s",
+              "leme: failed to restore gesture acceleration after override "
+              "failure");
     }
     return false;
   }
 
   if (ops->set_speed(ref, 0.0) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
     if (!leme_gesture_accel_restore(state)) {
-      fputs(
-          "leme: failed to restore gesture acceleration after override failure\n",
-          stderr);
+      wlr_log(WLR_ERROR, "%s",
+              "leme: failed to restore gesture acceleration after override "
+              "failure");
     }
     return false;
   }

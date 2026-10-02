@@ -875,6 +875,18 @@ static void leme_input_follow_pointer_output(struct leme_server *server) {
   leme_output_set_focused(server, output, false);
 }
 
+static bool leme_input_surface_sets_cursor(struct leme_server *server,
+                                           struct wlr_surface *surface) {
+  struct wlr_seat_client *client;
+
+  if (surface == NULL) {
+    return false;
+  }
+  client = wlr_seat_client_for_wl_client(
+      server->seat, wl_resource_get_client(surface->resource));
+  return client != NULL && !wl_list_empty(&client->pointers);
+}
+
 static void leme_input_process_motion(struct leme_server *server,
                                       uint32_t time_msec,
                                       struct leme_render_hit *result,
@@ -894,6 +906,11 @@ static void leme_input_process_motion(struct leme_server *server,
       leme_tags_layout_kind(leme_focused_tags(server)) !=
           LEME_LAYOUT_ACCORDION) {
     leme_view_focus(hit->view);
+  }
+  if (hit->surface != server->seat->pointer_state.focused_surface &&
+      !leme_input_surface_sets_cursor(server, hit->surface) &&
+      server->seat->drag == NULL && !leme_input_pointer_grab_active(server)) {
+    leme_desktop_cursor_restore(server);
   }
   if (hit->surface == NULL) {
     wlr_seat_pointer_notify_clear_focus(server->seat);
@@ -1099,7 +1116,8 @@ void leme_input_workspace_gesture_reset(struct leme_server *server) {
     return;
   }
   if (!leme_gesture_accel_restore(&server->gesture.accel)) {
-    wlr_log(WLR_ERROR, "%s", "failed to restore gesture pointer acceleration");
+    wlr_log(WLR_ERROR, "%s",
+            "leme: failed to restore gesture pointer acceleration");
   }
   server->gesture = (struct leme_workspace_gesture_state){0};
 }

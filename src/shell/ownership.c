@@ -381,6 +381,7 @@ void leme_ownership_commit(struct leme_ownership_transition **slot) {
           .kind = LEME_VIEW_OWNER_NONE,
       };
       view->floating = true;
+      leme_view_update_tiled(view);
       leme_tags_attach_floating_prepared(tag, view, view == prepared->focused);
     }
     break;

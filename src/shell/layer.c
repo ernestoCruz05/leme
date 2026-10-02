@@ -49,7 +49,7 @@ static void leme_layer_focus(struct leme_layer_surface *layer) {
   }
   leme_view_clear_focus(server);
   server->focused_layer = layer;
-  wlr_log(WLR_INFO, "leme: focused layer %s",
+  wlr_log(WLR_DEBUG, "leme: focused layer %s",
           leme_layer_namespace(layer->wlr_layer_surface));
   leme_input_keyboard_enter(server, layer->wlr_layer_surface->surface);
   leme_input_protocols_update_keyboard_focus(server);

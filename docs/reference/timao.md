@@ -39,6 +39,7 @@ These commands use the compositor's command adapter. `spawn`, `quit` and `switch
 ```sh
 timao eval '(query (tags))'
 timao eval '(query (outputs))'
+timao eval '(query (get (get (session) "focused_output") "name"))'
 timao eval '(query (get (config) "path"))'
 timao eval '(query (get (config) "diagnostics"))'
 timao eval '(watch (count (views)))'

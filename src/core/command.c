@@ -79,22 +79,7 @@ static bool leme_command_reload(struct leme_server *server) {
   leme_config_reload_commit(server, plan);
   leme_config_reload_discard(&plan);
   wlr_log(WLR_INFO, "leme: reloaded %s", path);
-  if (server->config != NULL && server->config->diagnostics.count > 0) {
-    size_t index;
-
-    wlr_log(WLR_ERROR, "leme: %zu configuration problems in %s",
-            server->config->diagnostics.count, path);
-    for (index = 0; index < server->config->diagnostics.count; index++) {
-      const struct leme_diagnostic *entry =
-          &server->config->diagnostics.entries[index];
-
-      wlr_log(WLR_ERROR, "leme: %s:%d: %s", path, entry->line, entry->message);
-    }
-    if (server->config->diagnostics.truncated) {
-      wlr_log(WLR_ERROR, "%s",
-              "leme: further configuration problems were not recorded");
-    }
-  }
+  leme_server_report_diagnostics(server);
   return true;
 }
 

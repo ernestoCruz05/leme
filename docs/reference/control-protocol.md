@@ -20,7 +20,7 @@ Successful replies have `type: "reply"`, the original `id`, `instance`, `revisio
 
 ## Expressions and actions
 
-Expressions use explicit forms such as `{"literal": VALUE}`, `{"call": NAME, "args": [...]}` and item-relative `{"field": ["path", "segments"]}`. Operators and fields are validated before effects. Roots include views, tags, outputs, inputs, session, config, runtime and status. Published views include urgency and explicit ownership information. Remote item scopes and typed entity references are not arbitrary pointer or object access.
+Expressions use explicit forms such as `{"literal": VALUE}`, `{"call": NAME, "args": [...]}` and item-relative `{"field": ["path", "segments"]}`. Operators and fields are validated before effects. Roots include views, tags, outputs, inputs, session, config, runtime and status. Published views include urgency and explicit ownership information. Remote item scopes and typed entity references are not arbitrary pointer or object access. `get` and field paths read through a reference: a member the reference itself doesn't carry is read from the entity it names, so `(get (get (session) "focused_output") "name")` returns the focused output's name.
 
 `query` is read-only. `act` evaluates and preflights an action plan before applying it. The command adapter accepts the command names in the [client reference](timao.md); it does not expose compositor `spawn`, `quit` or `switch_vt`. If execution fails after some actions have run, those effects remain. The client does not replay queries or actions.
 

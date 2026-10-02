@@ -53,6 +53,24 @@ set_error(struct compiler *c, enum leme_control_code code, const char *msg) {
   return code;
 }
 
+static enum leme_control_code
+arity_error(struct compiler *c, const struct leme_control_operator *op,
+            size_t arg_count) {
+  const int name_length = op->name.length > 64 ? 64 : (int)op->name.length;
+  char message[128];
+
+  if (op->min_args == op->max_args)
+    (void)snprintf(message, sizeof(message),
+                   "%.*s takes %zu argument%s, got %zu", name_length,
+                   op->name.data, op->min_args, op->min_args == 1 ? "" : "s",
+                   arg_count);
+  else
+    (void)snprintf(message, sizeof(message),
+                   "%.*s takes %zu to %zu arguments, got %zu", name_length,
+                   op->name.data, op->min_args, op->max_args, arg_count);
+  return set_error(c, LEME_CONTROL_INVALID_ARGUMENT, message);
+}
+
 static size_t push_path_arg(struct compiler *c, size_t index) {
   size_t prev_len = c->path_len;
   int n = snprintf(c->path_buf + c->path_len, sizeof(c->path_buf) - c->path_len,
@@ -230,8 +248,7 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
 
   size_t arg_count = leme_public_length(args_val);
   if (arg_count < op->min_args || arg_count > op->max_args)
-    return set_error(c, LEME_CONTROL_INVALID_ARGUMENT,
-                     "operator arity mismatch");
+    return arity_error(c, op, arg_count);
 
   if (c->request_op != LEME_CONTROL_ACT &&
       op->effect == LEME_CONTROL_EFFECT_ACTION)

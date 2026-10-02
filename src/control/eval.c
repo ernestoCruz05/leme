@@ -27,6 +27,55 @@ enum leme_control_code eval_set_error(struct evaluator *ev, const char *path,
   return code;
 }
 
+bool eval_entity_kind(struct leme_public_text text,
+                      enum leme_public_entity *out) {
+  static const struct {
+    const char *name;
+    enum leme_public_entity kind;
+  } kinds[] = {
+      {"view", LEME_PUBLIC_VIEW},
+      {"tag", LEME_PUBLIC_TAG},
+      {"output", LEME_PUBLIC_OUTPUT},
+      {"input", LEME_PUBLIC_INPUT},
+  };
+
+  for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); ++i) {
+    if (text.length == strlen(kinds[i].name) &&
+        memcmp(text.data, kinds[i].name, text.length) == 0) {
+      *out = kinds[i].kind;
+      return true;
+    }
+  }
+  return false;
+}
+
+const struct leme_public_value *
+eval_follow_reference(const struct evaluator *ev,
+                      const struct leme_public_value *value,
+                      struct leme_public_text key) {
+  const struct leme_public_value *type_val = leme_public_get(
+      value, (struct leme_public_text){.data = "type", .length = 4});
+  const struct leme_public_value *id_val = leme_public_get(
+      value, (struct leme_public_text){.data = "id", .length = 2});
+  const struct leme_public_value *resolved = NULL;
+  struct leme_public_text type_text = {0};
+  struct leme_public_text id_text = {0};
+  enum leme_public_entity kind;
+
+  if (ev->snapshot == NULL || type_val == NULL || id_val == NULL ||
+      leme_public_kind(type_val) != LEME_PUBLIC_STRING ||
+      leme_public_kind(id_val) != LEME_PUBLIC_STRING)
+    return NULL;
+  leme_public_as_text(type_val, &type_text);
+  leme_public_as_text(id_val, &id_text);
+  if (!eval_entity_kind(type_text, &kind) ||
+      leme_public_snapshot_find(ev->snapshot, kind, id_text, &resolved) !=
+          LEME_PUBLIC_OK ||
+      resolved == NULL || resolved == value)
+    return NULL;
+  return leme_public_get(resolved, key);
+}
+
 enum leme_control_code eval_node(struct evaluator *ev, uint32_t node_idx,
                                  const struct leme_public_value **out) {
   if (leme_control_charge(&ev->meter, 1) != LEME_CONTROL_OK)
@@ -60,47 +109,8 @@ enum leme_control_code eval_node(struct evaluator *ev, uint32_t node_idx,
                               "field traversal failed");
       const struct leme_public_value *next =
           leme_public_get(cur, node->as.field.components[i]);
-      if (next == NULL && ev->snapshot != NULL) {
-        const struct leme_public_value *type_val = leme_public_get(
-            cur, (struct leme_public_text){.data = "type", .length = 4});
-        const struct leme_public_value *id_val = leme_public_get(
-            cur, (struct leme_public_text){.data = "id", .length = 2});
-        if (type_val != NULL && id_val != NULL &&
-            leme_public_kind(type_val) == LEME_PUBLIC_STRING &&
-            leme_public_kind(id_val) == LEME_PUBLIC_STRING) {
-          struct leme_public_text type_text = {0};
-          struct leme_public_text id_text = {0};
-          leme_public_as_text(type_val, &type_text);
-          leme_public_as_text(id_val, &id_text);
-          enum leme_public_entity ent = LEME_PUBLIC_VIEW;
-          bool known_ent = false;
-          if (type_text.length == 4 && memcmp(type_text.data, "view", 4) == 0) {
-            ent = LEME_PUBLIC_VIEW;
-            known_ent = true;
-          } else if (type_text.length == 6 &&
-                     memcmp(type_text.data, "output", 6) == 0) {
-            ent = LEME_PUBLIC_OUTPUT;
-            known_ent = true;
-          } else if (type_text.length == 3 &&
-                     memcmp(type_text.data, "tag", 3) == 0) {
-            ent = LEME_PUBLIC_TAG;
-            known_ent = true;
-          } else if (type_text.length == 5 &&
-                     memcmp(type_text.data, "input", 5) == 0) {
-            ent = LEME_PUBLIC_INPUT;
-            known_ent = true;
-          }
-          if (known_ent) {
-            const struct leme_public_value *resolved = NULL;
-            if (leme_public_snapshot_find(ev->snapshot, ent, id_text,
-                                          &resolved) == LEME_PUBLIC_OK &&
-                resolved != NULL) {
-              cur = resolved;
-              next = leme_public_get(cur, node->as.field.components[i]);
-            }
-          }
-        }
-      }
+      if (next == NULL)
+        next = eval_follow_reference(ev, cur, node->as.field.components[i]);
       if (next == NULL)
         return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
                               "field not found on item");

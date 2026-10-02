@@ -78,6 +78,7 @@ struct leme_layout_node {
     } branch;
     struct leme_view *view;
   } data;
+  struct leme_box arranged;
   bool is_leaf;
 };
 

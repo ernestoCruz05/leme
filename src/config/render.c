@@ -29,6 +29,138 @@ static bool leme_render_append_str(char **buffer, size_t *length,
   return leme_render_append(buffer, length, text, strlen(text));
 }
 
+#define LEME_RENDER_LINE_MAX 120
+
+struct leme_render_window {
+  size_t start;
+  size_t end;
+  size_t length;
+};
+
+static bool leme_render_continuation(const char *text, size_t index) {
+  return ((unsigned char)text[index] & 0xc0) == 0x80;
+}
+
+static struct leme_render_window
+leme_render_window_for(const char *text, size_t length, size_t focus) {
+  struct leme_render_window window = {
+      .start = 0, .end = length, .length = length};
+
+  if (length <= LEME_RENDER_LINE_MAX) {
+    return window;
+  }
+  window.start =
+      focus > LEME_RENDER_LINE_MAX / 2 ? focus - LEME_RENDER_LINE_MAX / 2 : 0;
+  while (window.start < length &&
+         leme_render_continuation(text, window.start)) {
+    window.start++;
+  }
+  window.end = length - window.start > LEME_RENDER_LINE_MAX
+                   ? window.start + LEME_RENDER_LINE_MAX
+                   : length;
+  while (window.end < length && window.end > window.start &&
+         leme_render_continuation(text, window.end)) {
+    window.end--;
+  }
+  return window;
+}
+
+static size_t leme_render_glyph(const char *text, size_t end, size_t index,
+                                char glyph[16], size_t *width) {
+  const unsigned char byte = (unsigned char)text[index];
+  size_t advance = 1;
+
+  *width = 1;
+  if (byte == '\t' || (byte >= 0x20 && byte < 0x7f)) {
+    glyph[0] = (char)byte;
+    glyph[1] = '\0';
+    return 1;
+  }
+  if (byte < 0x20 || byte == 0x7f) {
+    (void)snprintf(glyph, 16, "\\x%02x", (unsigned int)byte);
+    *width = 4;
+    return 1;
+  }
+  if (end - index >= 3 && memcmp(text + index, "\xef\xbb\xbf", 3) == 0) {
+    (void)snprintf(glyph, 16, "%s", "<U+FEFF>");
+    *width = 8;
+    return 3;
+  }
+  if (end - index >= 3 && memcmp(text + index, "\xe2\x80\x8b", 3) == 0) {
+    (void)snprintf(glyph, 16, "%s", "<U+200B>");
+    *width = 8;
+    return 3;
+  }
+  if (byte >= 0xf0) {
+    advance = 4;
+  } else if (byte >= 0xe0) {
+    advance = 3;
+  } else if (byte >= 0xc0) {
+    advance = 2;
+  }
+  if (advance > end - index) {
+    advance = end - index;
+  }
+  memcpy(glyph, text + index, advance);
+  glyph[advance] = '\0';
+  return advance;
+}
+
+static bool leme_render_line(char **buffer, size_t *length, const char *text,
+                             struct leme_render_window window) {
+  char glyph[16];
+  size_t width;
+
+  if (window.start > 0 && !leme_render_append_str(buffer, length, "...")) {
+    return false;
+  }
+  for (size_t index = window.start; index < window.end;) {
+    index += leme_render_glyph(text, window.end, index, glyph, &width);
+    if (!leme_render_append_str(buffer, length, glyph)) {
+      return false;
+    }
+  }
+  return window.end == window.length ||
+         leme_render_append_str(buffer, length, "...");
+}
+
+static bool leme_render_padding(char **buffer, size_t *length, const char *text,
+                                struct leme_render_window window,
+                                size_t focus) {
+  char glyph[16];
+  size_t width;
+
+  if (window.start > 0 && !leme_render_append_str(buffer, length, "   ")) {
+    return false;
+  }
+  for (size_t index = window.start; index < focus && index < window.end;) {
+    const char *pad = text[index] == '\t' ? "\t" : " ";
+
+    index += leme_render_glyph(text, window.end, index, glyph, &width);
+    for (size_t column = 0; column < width; column++) {
+      if (!leme_render_append_str(buffer, length, pad)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static size_t leme_render_width(const char *text,
+                                struct leme_render_window window, size_t from,
+                                size_t count) {
+  const size_t until = count < window.end - from ? from + count : window.end;
+  char glyph[16];
+  size_t width;
+  size_t total = 0;
+
+  for (size_t index = from; index < until;) {
+    index += leme_render_glyph(text, window.end, index, glyph, &width);
+    total += width;
+  }
+  return total;
+}
+
 static char *
 leme_render_format_iterations(const struct leme_trail_table *trails,
                               const uint16_t *iterations, size_t count) {
@@ -219,7 +351,8 @@ char *leme_diagnostic_render_rich_tables(
     for (size_t k = 0; k < span_count; k++) {
       const char *line_text = "";
       size_t line_length = 0;
-      size_t padding;
+      struct leme_render_window window;
+      size_t focus;
       size_t underline_len;
       const char *underline_char;
 
@@ -243,28 +376,28 @@ char *leme_diagnostic_render_rich_tables(
         line_length--;
       }
 
+      focus = spans[k].column > 0 ? (size_t)(spans[k].column - 1) : 0;
+      if (focus > line_length) {
+        focus = line_length;
+      }
+      window = leme_render_window_for(line_text, line_length, focus);
       snprintf(piece, sizeof(piece), " %*d | ", digits, spans[k].line);
       if (!leme_render_append_str(&buffer, &length, piece) ||
-          !leme_render_append(&buffer, &length, line_text, line_length) ||
+          !leme_render_line(&buffer, &length, line_text, window) ||
           !leme_render_append_str(&buffer, &length, "\n")) {
         goto fail;
       }
 
       snprintf(piece, sizeof(piece), "%*s| ", digits + 2, "");
-      if (!leme_render_append_str(&buffer, &length, piece)) {
+      if (!leme_render_append_str(&buffer, &length, piece) ||
+          !leme_render_padding(&buffer, &length, line_text, window, focus)) {
         goto fail;
       }
-      padding = spans[k].column > 0 ? (size_t)(spans[k].column - 1) : 0;
-      if (padding > line_length) {
-        padding = line_length;
+      underline_len = leme_render_width(
+          line_text, window, focus, spans[k].length > 0 ? spans[k].length : 1);
+      if (underline_len == 0) {
+        underline_len = 1;
       }
-      for (size_t p = 0; p < padding; p++) {
-        const char pad_char[2] = {line_text[p] == '\t' ? '\t' : ' ', '\0'};
-        if (!leme_render_append_str(&buffer, &length, pad_char)) {
-          goto fail;
-        }
-      }
-      underline_len = spans[k].length > 0 ? spans[k].length : 1;
       underline_char = spans[k].is_primary ? "^" : "-";
       if (colour) {
         if (!leme_render_append_str(

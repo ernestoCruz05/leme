@@ -330,15 +330,7 @@ static enum leme_control_code eval_by_id(struct evaluator *ev,
   struct leme_public_text kind_text = {0};
   leme_public_as_text(arg0, &kind_text);
   enum leme_public_entity entity_kind;
-  if (kind_text.length == 4 && memcmp(kind_text.data, "view", 4) == 0)
-    entity_kind = LEME_PUBLIC_VIEW;
-  else if (kind_text.length == 3 && memcmp(kind_text.data, "tag", 3) == 0)
-    entity_kind = LEME_PUBLIC_TAG;
-  else if (kind_text.length == 6 && memcmp(kind_text.data, "output", 6) == 0)
-    entity_kind = LEME_PUBLIC_OUTPUT;
-  else if (kind_text.length == 5 && memcmp(kind_text.data, "input", 5) == 0)
-    entity_kind = LEME_PUBLIC_INPUT;
-  else
+  if (!eval_entity_kind(kind_text, &entity_kind))
     return eval_set_error(ev, "/expr", LEME_CONTROL_INVALID_ARGUMENT,
                           "invalid by-id kind");
 

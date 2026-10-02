@@ -12,6 +12,7 @@
 #include "protocols/session.h"
 
 #include <libinput.h>
+#include <linux/input-event-codes.h>
 #include <wlr/backend/libinput.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -28,8 +29,8 @@ struct leme_keyboard {
   struct leme_public_id public_id;
   bool public_keymap_configured;
   bool is_virtual;
-  bool handled[256];
-  bool state_skipped[256];
+  bool handled[KEY_MAX + 1];
+  bool state_skipped[KEY_MAX + 1];
   struct wl_listener key;
   struct wl_listener keymap;
   struct wl_listener modifiers;

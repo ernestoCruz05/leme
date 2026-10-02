@@ -4273,6 +4273,39 @@ static void leme_config_report_syntax(const struct leme_scfg_source *source,
   free(joined);
 }
 
+static const char *const leme_config_block_names[] = {
+    "tags",       "animation", "style",       "keyboard",      "output",
+    "cursor",     "gestures",  "publication", "pointer",       "window",
+    "scratchpad", "binds",     "bind_group",  "config_errors", "env",
+    "exec",       "vars",      "lists",
+};
+
+static void leme_config_block_error(char **error, const char *path,
+                                    const struct leme_scfg_directive *block) {
+  const size_t count =
+      sizeof(leme_config_block_names) / sizeof(leme_config_block_names[0]);
+  const char *nearest;
+
+  for (size_t index = 0; index < count; index++) {
+    if (strcmp(block->name, leme_config_block_names[index]) == 0) {
+      leme_config_set_error(error, "%s:%d: duplicate block %s", path,
+                            block->lineno, block->name);
+      return;
+    }
+  }
+  nearest =
+      leme_config_nearest_key(block->name, leme_config_block_names, count);
+  if (nearest != NULL) {
+    leme_config_set_error(
+        error,
+        "%s:%d: unknown block %s; a block with a similar name exists: `%s`",
+        path, block->lineno, block->name, nearest);
+  } else {
+    leme_config_set_error(error, "%s:%d: unknown block %s", path, block->lineno,
+                          block->name);
+  }
+}
+
 struct leme_config *leme_config_load(const char *path, char **error) {
   struct leme_config *config = calloc(1, sizeof(*config));
   struct leme_scfg_source source = {0};
@@ -4419,8 +4452,7 @@ struct leme_config *leme_config_load(const char *path, char **error) {
       have_exec = true;
       valid = leme_config_parse_exec(config, directive, path, error);
     } else {
-      leme_config_set_error(error, "%s:%d: duplicate or unknown block %s", path,
-                            directive->lineno, directive->name);
+      leme_config_block_error(error, path, directive);
       valid = false;
     }
     if (!valid) {

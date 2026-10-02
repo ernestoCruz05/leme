@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static bool leme_scfg_source_index(struct leme_scfg_source *source) {
   size_t index;
@@ -45,6 +46,19 @@ leme_scfg_source_strip_carriage_returns(struct leme_scfg_source *source) {
   source->data[to] = '\0';
 }
 
+static void leme_scfg_source_strip_bom(struct leme_scfg_source *source) {
+  static const char bom[] = "\xef\xbb\xbf";
+  const size_t bom_length = sizeof(bom) - 1;
+
+  if (source->length < bom_length ||
+      memcmp(source->data, bom, bom_length) != 0) {
+    return;
+  }
+  memmove(source->data, source->data + bom_length,
+          source->length - bom_length + 1);
+  source->length -= bom_length;
+}
+
 bool leme_scfg_source_load(struct leme_scfg_source *source, const char *path) {
   FILE *file = fopen(path, "r");
   long size;
@@ -71,6 +85,7 @@ bool leme_scfg_source_load(struct leme_scfg_source *source, const char *path) {
   }
   source->data[source->length] = '\0';
   fclose(file);
+  leme_scfg_source_strip_bom(source);
   leme_scfg_source_strip_carriage_returns(source);
   if (!leme_scfg_source_index(source)) {
     leme_scfg_source_finish(source);
