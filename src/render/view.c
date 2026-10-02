@@ -70,11 +70,15 @@ struct leme_render_surface_tracker {
   struct wl_listener destroy;
   struct wl_listener new_subsurface;
   struct wl_listener subsurface_destroy;
+  struct wlr_scene_buffer *buffer;
+  struct wl_listener buffer_destroy;
 };
 
 struct leme_render_view_state {
   struct leme_view *view;
   struct wl_list roots;
+  struct wlr_box clip;
+  bool clip_applied;
 };
 
 struct leme_render_view_content_base {
@@ -549,37 +553,51 @@ void leme_render_view_sync_presentation(struct leme_view *view) {
   }
 }
 
-struct leme_render_surface_opacity {
-  struct wlr_surface *surface;
-  float opacity;
-};
-
-static void
-leme_render_view_apply_surface_opacity(struct wlr_scene_buffer *buffer, int sx,
-                                       int sy, void *data) {
-  const struct leme_render_surface_opacity *target = data;
-  struct wlr_scene_surface *scene_surface =
-      wlr_scene_surface_try_from_buffer(buffer);
+static void leme_render_tracker_find_buffer(struct wlr_scene_buffer *buffer,
+                                            int sx, int sy, void *data) {
+  struct leme_render_surface_tracker *tracker = data;
+  struct wlr_scene_surface *scene_surface;
 
   (void)sx;
   (void)sy;
-  if (scene_surface != NULL && scene_surface->surface == target->surface) {
-    wlr_scene_buffer_set_opacity(buffer, target->opacity);
+  if (tracker->buffer != NULL) {
+    return;
+  }
+  scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+  if (scene_surface != NULL && scene_surface->surface == tracker->surface) {
+    tracker->buffer = buffer;
   }
 }
 
 static void
-leme_render_view_apply_cached_surface_opacity(struct leme_view *view,
-                                              struct wlr_surface *surface) {
-  struct leme_render_surface_opacity target = {
-      .surface = surface,
-      .opacity = leme_render_view_effective_opacity(view),
-  };
+leme_render_tracker_handle_buffer_destroy(struct wl_listener *listener,
+                                          void *data) {
+  struct leme_render_surface_tracker *tracker =
+      wl_container_of(listener, tracker, buffer_destroy);
 
-  if (view->scene_tree != NULL) {
+  (void)data;
+  wl_list_remove(&tracker->buffer_destroy.link);
+  wl_list_init(&tracker->buffer_destroy.link);
+  tracker->buffer = NULL;
+}
+
+static void
+leme_render_tracker_apply_opacity(struct leme_render_surface_tracker *tracker) {
+  struct leme_view *view = tracker->state->view;
+
+  if (tracker->buffer == NULL && view->scene_tree != NULL) {
     wlr_scene_node_for_each_buffer(&view->scene_tree->node,
-                                   leme_render_view_apply_surface_opacity,
-                                   &target);
+                                   leme_render_tracker_find_buffer, tracker);
+    if (tracker->buffer != NULL) {
+      tracker->buffer_destroy.notify =
+          leme_render_tracker_handle_buffer_destroy;
+      wl_signal_add(&tracker->buffer->node.events.destroy,
+                    &tracker->buffer_destroy);
+    }
+  }
+  if (tracker->buffer != NULL) {
+    wlr_scene_buffer_set_opacity(tracker->buffer,
+                                 leme_render_view_effective_opacity(view));
   }
 }
 
@@ -595,6 +613,7 @@ static void leme_render_surface_tracker_finish(
   wl_list_remove(&tracker->map.link);
   wl_list_remove(&tracker->destroy.link);
   wl_list_remove(&tracker->new_subsurface.link);
+  wl_list_remove(&tracker->buffer_destroy.link);
   if (tracker->subsurface != NULL) {
     wl_list_remove(&tracker->subsurface_destroy.link);
   }
@@ -609,8 +628,7 @@ leme_render_surface_tracker_handle_commit(struct wl_listener *listener,
       wl_container_of(listener, tracker, commit);
 
   (void)data;
-  leme_render_view_apply_cached_surface_opacity(tracker->state->view,
-                                                tracker->surface);
+  leme_render_tracker_apply_opacity(tracker);
   if (tracker->subsurface == NULL) {
     leme_render_view_open_ready(tracker->state->view);
   }
@@ -622,8 +640,7 @@ static void leme_render_surface_tracker_handle_map(struct wl_listener *listener,
       wl_container_of(listener, tracker, map);
 
   (void)data;
-  leme_render_view_apply_cached_surface_opacity(tracker->state->view,
-                                                tracker->surface);
+  leme_render_tracker_apply_opacity(tracker);
 }
 
 static void
@@ -674,6 +691,7 @@ leme_render_surface_tracker_create(struct leme_render_view_state *state,
   tracker->surface = surface;
   tracker->subsurface = owner;
   wl_list_init(&tracker->children);
+  wl_list_init(&tracker->buffer_destroy.link);
   wl_list_insert(parent == NULL ? &state->roots : &parent->children,
                  &tracker->link);
   tracker->commit.notify = leme_render_surface_tracker_handle_commit;
@@ -707,7 +725,7 @@ leme_render_surface_tracker_create(struct leme_render_view_state *state,
       return false;
     }
   }
-  leme_render_view_apply_cached_surface_opacity(state->view, surface);
+  leme_render_tracker_apply_opacity(tracker);
   return true;
 }
 
@@ -1766,9 +1784,20 @@ void leme_render_view_clip_to_geometry(struct leme_view *view) {
                             geometry.width >= surface->current.width &&
                             geometry.height >= surface->current.height);
 
+  const struct wlr_box clip = needs_clip ? geometry : (struct wlr_box){0};
+  struct leme_render_view_state *state = view->render_state;
+
+  if (state != NULL && state->clip_applied &&
+      wlr_box_equal(&state->clip, &clip)) {
+    return;
+  }
   wlr_scene_subsurface_tree_set_clip(&view->scene_tree->node,
                                      needs_clip ? &geometry : NULL);
   leme_render_view_apply_cached_opacity(view);
+  if (state != NULL) {
+    state->clip = clip;
+    state->clip_applied = true;
+  }
 }
 
 void leme_render_view_set_box(struct leme_view *view, struct leme_box box) {

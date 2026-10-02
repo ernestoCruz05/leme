@@ -15,6 +15,7 @@ struct leme_control_limits {
 };
 
 #define LEME_CONTROL_CLOCK_INTERVAL 1024
+#define LEME_CONTROL_WATCH_INTERVAL_NS 16000000ULL
 
 struct leme_control_meter {
   size_t remaining;

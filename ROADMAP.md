@@ -39,7 +39,8 @@ presentation.
 Multiple outputs support persistent placement, directional focus and movement,
 pointer drag between outputs, temporary output-manager requests, power control,
 and hotplug recovery. Keyboard layouts, binding modes, pointer configuration,
-relative pointer, pointer constraints, and shortcut inhibition are available.
+relative pointer, pointer constraints, shortcut inhibition, and virtual
+keyboards and pointers for remote desktop clients are available.
 
 See the [multi-monitor guide](docs/guides/multi-monitor.md),
 [input troubleshooting](docs/troubleshooting/input.md), and the
@@ -51,7 +52,9 @@ Leme supports layer-shell programs, fail-closed session locking, idle
 notification and inhibition, clipboard and drag and drop, whole-output capture,
 direct window capture for compatible clients, XDG activation, dialogs and
 transient placement, server-side decoration, workspace and window publication
-with configurable activation policy, and optional lazy XWayland.
+with configurable activation policy, screen sharing through an
+xdg-desktop-portal backend, and optional lazy XWayland. See the
+[screen sharing guide](docs/guides/screen-sharing.md).
 
 Locking covers normal content immediately, restricts input and capture to lock
 content, and leaves an opaque blocker in place if the locker disappears. See
@@ -62,8 +65,12 @@ the [Wayland protocol reference](docs/reference/wayland-protocols.md).
 `leme-session` validates the runtime directory, sets the XDG desktop variables,
 creates a D-Bus session when needed, and rotates the session log. Direct
 sessions publish their display environment to D-Bus activation and, when
-available, the systemd user manager. Configuration can set child environment
-variables and start argument vectors once after compositor startup.
+available, the systemd user manager. `leme-session.target` binds
+`graphical-session.target`, so systemd user services that belong to the
+graphical session start with Leme and stop when it exits; on exit Leme also
+removes its display variables from the systemd user environment.
+Configuration can set child environment variables and start argument vectors
+once after compositor startup.
 
 Bars, launchers, wallpaper programs, notification daemons, portals, PipeWire,
 audio policy, and other desktop services remain external. Leme can start them
@@ -76,7 +83,7 @@ but does not supervise their complete lifetime. See the
 Leme uses reloadable scfg configuration with transactional application and
 recoverable diagnostics. `leme --config-check [PATH]` validates the same
 configuration without starting a compositor. Diagnostics are available in the
-session log and through `timao get config`.
+session log and through `timao eval '(query (get (config) "diagnostics"))'`.
 
 The `timao` client provides commands, state queries, and event subscriptions
 over a private Unix socket.
@@ -99,11 +106,10 @@ Add a small on-screen report for configuration errors. Diagnostics now carry spa
 
 ### Session-owned desktop services
 
-Add and document reliable supervision recipes for keeping portals, bars,
-wallpaper programs, notification daemons, policy agents, keyrings, and network
-applets tied to the graphical session. Leme can start them once and publish the
-activation environment, but it does not supervise or stop them when the
-compositor exits.
+Systemd user services tied to `graphical-session.target` already start and
+stop with Leme. Document supervision recipes for the rest: setups without
+systemd, such as OpenRC, and programs started from the `exec` block, which Leme
+starts once and does not stop when it exits.
 
 ## Planned
 
@@ -124,8 +130,8 @@ publication and capture protocols do not provide `xdg-foreign-v2`.
 
 ### Extended input
 
-Add pointer gestures, touch, tablet tools and pads, text input, input methods,
-and virtual keyboards under the existing focus and lock rules.
+Add pointer gestures, touch, tablet tools and pads, text input, and input
+methods under the existing focus and lock rules.
 
 ## Deferred
 

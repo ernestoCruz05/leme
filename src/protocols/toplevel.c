@@ -34,20 +34,6 @@ struct leme_publication_toplevel {
   struct wl_listener request_activate;
 };
 
-static const char *leme_toplevel_title(const struct leme_view *view) {
-  if (view->kind == LEME_VIEW_XDG) {
-    return view->xdg_toplevel == NULL ? NULL : view->xdg_toplevel->title;
-  }
-  return view->xwayland_surface == NULL ? NULL : view->xwayland_surface->title;
-}
-
-static const char *leme_toplevel_app_id(const struct leme_view *view) {
-  if (view->kind == LEME_VIEW_XDG) {
-    return view->xdg_toplevel == NULL ? NULL : view->xdg_toplevel->app_id;
-  }
-  return view->xwayland_surface == NULL ? NULL : view->xwayland_surface->class;
-}
-
 static bool leme_toplevel_eligible(const struct leme_view *view) {
   return leme_ownership_publication_eligible(view);
 }
@@ -223,8 +209,8 @@ leme_toplevel_create(struct leme_server *server, struct leme_view *view) {
     return NULL;
   }
   toplevel->view = view;
-  state.title = leme_toplevel_title(view);
-  state.app_id = leme_toplevel_app_id(view);
+  state.title = leme_view_title(view);
+  state.app_id = leme_view_identity(view);
   toplevel->ext_handle = wlr_ext_foreign_toplevel_handle_v1_create(
       server->foreign_toplevel_list, &state);
   if (toplevel->ext_handle == NULL) {
@@ -280,8 +266,8 @@ static void leme_toplevel_sync(struct leme_server *server,
   struct wlr_ext_foreign_toplevel_handle_v1_state state = {0};
   struct leme_output *output = leme_view_output(view);
   struct wlr_output *wlr_output = output == NULL ? NULL : output->wlr_output;
-  const char *title = leme_toplevel_title(view);
-  const char *app_id = leme_toplevel_app_id(view);
+  const char *title = leme_view_title(view);
+  const char *app_id = leme_view_identity(view);
   bool changed;
 
   if (toplevel == NULL) {

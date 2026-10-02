@@ -570,39 +570,6 @@ void leme_view_focus_unmanaged_xwayland(struct leme_view *view) {
   }
 }
 
-void leme_view_focus_next(struct leme_server *server) {
-  struct leme_tags *tags = leme_focused_tags(server);
-  struct leme_tag *tag;
-  struct wl_list *start;
-  struct wl_list *link;
-  struct leme_view *view;
-
-  if (tags->focused_is_candidate) {
-    return;
-  }
-  tag = tags->table[tags->focused_id];
-  if (tag == NULL || wl_list_empty(&tag->views)) {
-    return;
-  }
-  start = server->focused_view == NULL ||
-                  leme_ownership_tag(server->focused_view) != tag
-              ? tag->views.next
-              : server->focused_view->tag_link.next;
-  link = start;
-  do {
-    if (link == &tag->views) {
-      link = link->next;
-      continue;
-    }
-    view = wl_container_of(link, view, tag_link);
-    if (view->mapped && (!view->fullscreen || view == server->focused_view)) {
-      leme_view_focus(view);
-      return;
-    }
-    link = link->next;
-  } while (link != start);
-}
-
 static bool leme_view_focus_across_outputs(struct leme_server *server,
                                            enum leme_direction direction) {
   struct leme_output *adjacent;
@@ -831,8 +798,6 @@ void leme_view_discard_tiled_drag(struct leme_view *view,
   leme_layout_discard_detached(detach);
   view->detached = false;
 }
-
-void leme_view_close(struct leme_view *view) { leme_view_protocol_close(view); }
 
 bool leme_view_set_floating(struct leme_view *view, bool floating) {
   if (view == NULL || leme_view_is_scratchpad(view) ||

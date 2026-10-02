@@ -108,7 +108,6 @@ static void leme_layer_handle_commit(struct wl_listener *listener, void *data) {
   bool was_focused = layer->server->focused_layer == layer;
 
   (void)data;
-  leme_session_refresh_idle_inhibitors(layer->server);
   if (layer->wlr_layer_surface->initial_commit ||
       layer->wlr_layer_surface->current.committed != 0) {
     leme_render_layer_update_tree(layer);
@@ -170,7 +169,6 @@ static void leme_layer_popup_handle_commit(struct wl_listener *listener,
   struct leme_layer_popup *popup = wl_container_of(listener, popup, commit);
 
   (void)data;
-  leme_session_refresh_idle_inhibitors(popup->layer->server);
   if (popup->wlr_popup->base->initial_commit) {
     leme_render_layer_popup_unconstrain(popup,
                                         leme_layer_full_box(popup->layer));

@@ -26,6 +26,7 @@ struct leme_control_scheduler {
 static int on_scheduler_timer(void *data) {
   struct leme_control_scheduler *scheduler = data;
   scheduler->armed = false;
+  leme_control_scheduler_defer(scheduler);
   leme_control_scheduler_step(scheduler);
   return 0;
 }
@@ -35,12 +36,32 @@ static void close_peers(struct leme_control_scheduler *scheduler) {
   wl_list_for_each(peer, &scheduler->peers, link) leme_control_peer_close(peer);
 }
 
+static int paced_delay_ms(const struct leme_control_scheduler *scheduler) {
+  const struct leme_control_peer *peer = NULL;
+  uint64_t wake = 0;
+
+  wl_list_for_each(peer, &scheduler->peers, link) {
+    const uint64_t peer_wake = leme_control_peer_watch_wake_ns(peer);
+
+    if (peer_wake != 0 && (wake == 0 || peer_wake < wake))
+      wake = peer_wake;
+  }
+  if (wake == 0)
+    return 0;
+  const uint64_t now = leme_control_now_ns(NULL);
+  const uint64_t remaining = wake > now ? wake - now : 0;
+  return (int)(remaining / 1000000ULL) + 1;
+}
+
 static void arm(struct leme_control_scheduler *scheduler) {
-  if (scheduler->armed || scheduler->in_step ||
-      wl_list_empty(&scheduler->runnable_peers))
+  if (scheduler->armed || scheduler->in_step)
+    return;
+  const int delay =
+      wl_list_empty(&scheduler->runnable_peers) ? paced_delay_ms(scheduler) : 1;
+  if (delay == 0)
     return;
   if (scheduler->timer == NULL ||
-      wl_event_source_timer_update(scheduler->timer, 1) != 0) {
+      wl_event_source_timer_update(scheduler->timer, delay) != 0) {
     close_peers(scheduler);
     return;
   }

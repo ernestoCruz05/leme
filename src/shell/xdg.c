@@ -4,7 +4,6 @@
 #include "core/server.h"
 #include "input/input.h"
 #include "output/output.h"
-#include "protocols/session.h"
 #include "render/render.h"
 #include "shell/policy.h"
 #include "shell/rules.h"
@@ -35,7 +34,6 @@ static void leme_view_popup_handle_commit(struct wl_listener *listener,
   struct leme_view_popup *popup = wl_container_of(listener, popup, commit);
 
   (void)data;
-  leme_session_refresh_idle_inhibitors(popup->view->server);
   if (popup->wlr_popup->base->initial_commit) {
     leme_render_view_popup_unconstrain(popup, leme_view_full_box(popup->view));
   }
@@ -211,7 +209,6 @@ static void leme_view_handle_commit(struct wl_listener *listener, void *data) {
   struct leme_view *view = wl_container_of(listener, view, commit);
 
   (void)data;
-  leme_session_refresh_idle_inhibitors(view->server);
   if (view->mapped) {
     leme_render_view_clip_to_geometry(view);
   }

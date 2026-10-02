@@ -26,10 +26,11 @@ The standard build accepts wlroots versions from 0.20.0 up to, but not including
 pkg-config --modversion wlroots-0.20
 ```
 
-Both build variants use the yyjson revision pinned in
-`subprojects/yyjson.wrap`. Meson fetches it during setup, so the first build needs
-network access unless that source is already present. A system yyjson package
-does not replace this subproject.
+Meson uses a system yyjson 0.12.0 or newer when pkg-config finds one.
+Otherwise it falls back to the revision pinned in `subprojects/yyjson.wrap` and
+fetches it during setup, so that first build needs network access unless the
+source is already present. Pass `-Dwrap_mode=forcefallback` to always build the
+pinned revision.
 
 ## Build
 
@@ -37,25 +38,28 @@ From the repository root:
 
 ```sh
 meson setup build --buildtype=release --prefix=/usr
-meson compile -C build
+ninja -C build
 ```
 
 For an existing build directory, change the options explicitly and rebuild:
 
 ```sh
 meson configure build -Dbuildtype=release -Dprefix=/usr
-meson compile -C build
+ninja -C build
 ```
 
 Use `meson setup --wipe build --buildtype=release --prefix=/usr` to discard the
 cached build configuration, for example after changing compilers.
+
+Leme builds with `-Werror` by default. A newer compiler can add warnings that
+stop the build; packagers can pass `-Dwerror=false` to `meson setup`.
 
 ## Install
 
 With the `/usr` prefix configured above:
 
 ```sh
-sudo meson install -C build
+sudo ninja -C build install
 ```
 
 The install contains:
@@ -143,16 +147,16 @@ Use a separate build directory to keep the variants distinct:
 
 ```sh
 meson setup build-effects --buildtype=release --prefix=/usr -Deffects=true
-meson compile -C build-effects
-sudo meson install -C build-effects
+ninja -C build-effects
+sudo ninja -C build-effects install
 ```
 
 For an existing effects build:
 
 ```sh
 meson configure build-effects -Dbuildtype=release -Dprefix=/usr -Deffects=true
-meson compile -C build-effects
-sudo meson install -C build-effects
+ninja -C build-effects
+sudo ninja -C build-effects install
 ```
 
 The patched wlroots library, headers and pkg-config file are not installed.

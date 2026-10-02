@@ -212,7 +212,7 @@ static enum leme_public_status status_value(struct leme_public_builder *b,
       leme_public_put_bool(b, status, LEME_PUBLIC_TEXT("locked"),
                            leme_session_locked(server)) != LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, status, LEME_PUBLIC_TEXT("version"),
-                           LEME_PUBLIC_BUILD_VERSION) != LEME_PUBLIC_OK ||
+                           LEME_VERSION) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, status, LEME_PUBLIC_TEXT("api_version"),
                           LEME_PUBLIC_API_VERSION) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, status, LEME_PUBLIC_TEXT("capabilities"),
@@ -235,7 +235,7 @@ runtime_value(struct leme_public_builder *b, const struct leme_server *server,
       limits_value(b, model, &limits) != LEME_PUBLIC_OK ||
       leme_public_schema_value(b, &facts, NULL, 0, &schema) != LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, runtime, LEME_PUBLIC_TEXT("version"),
-                           LEME_PUBLIC_BUILD_VERSION) != LEME_PUBLIC_OK ||
+                           LEME_VERSION) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, runtime, LEME_PUBLIC_TEXT("api_version"),
                           LEME_PUBLIC_API_VERSION) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, runtime, LEME_PUBLIC_TEXT("capabilities"),

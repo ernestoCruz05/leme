@@ -42,7 +42,7 @@ Native event records have `type: "event"`, `event`, `subscription`, `sequence`, 
 - `suspended`: `reason: "session_locked"`, null revision, no value or error.
 - `error`: a terminal structured error, not a value.
 
-Sequences are canonical positive uint64 decimal strings; they increase, but gaps are allowed. Watches coalesce coherent current snapshots using full value equality. They are not a lossless event journal. Safe-root watches have null revisions.
+Sequences are canonical positive uint64 decimal strings; they increase, but gaps are allowed. Watches coalesce coherent current snapshots using full value equality. A connection's watches refresh at most once every 16 ms; changes in between are folded into the next snapshot, which always carries the latest state. They are not a lossless event journal. Safe-root watches have null revisions.
 
 The timao client normalizes these into local `watch:N` identities and generations. After recovery its reset reason can be `reconnect` or `instance_changed`; those client-local events are not new native wire kinds. Local watch IDs never address another process's registrations.
 

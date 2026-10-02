@@ -408,7 +408,7 @@ dispatch_request(struct leme_control_context *context,
     leme_public_object(b, 4, &hello_val);
     leme_public_put_int(b, hello_val, LEME_PUBLIC_TEXT("api_version"), 1);
     leme_public_put_cstr(b, hello_val, LEME_PUBLIC_TEXT("version"),
-                         LEME_PUBLIC_BUILD_VERSION);
+                         LEME_VERSION);
     leme_public_object_set(b, hello_val, LEME_PUBLIC_TEXT("capabilities"),
                            caps);
     leme_public_object_set(b, hello_val, LEME_PUBLIC_TEXT("limits"), lim_val);

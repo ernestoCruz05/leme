@@ -5,7 +5,6 @@
 #include "render/render.h"
 #include "input/input.h"
 #include "core/server.h"
-#include "protocols/session.h"
 #include "protocols/toplevel.h"
 #include "workspace/tag.h"
 #include "shell/policy.h"
@@ -40,7 +39,6 @@ struct leme_xwayland_view {
   struct wl_listener destroy;
   struct wl_listener map;
   struct wl_listener unmap;
-  struct wl_listener commit;
   struct wl_listener request_configure;
   struct wl_listener request_activate;
   struct wl_listener request_fullscreen;
@@ -225,15 +223,6 @@ static void leme_xwayland_handle_unmap(struct wl_listener *listener,
   leme_view_unmap(wrapper->view);
 }
 
-static void leme_xwayland_handle_commit(struct wl_listener *listener,
-                                        void *data) {
-  struct leme_xwayland_view *wrapper =
-      wl_container_of(listener, wrapper, commit);
-
-  (void)data;
-  leme_session_refresh_idle_inhibitors(wrapper->view->server);
-}
-
 static void
 leme_xwayland_finish_association(struct leme_xwayland_view *wrapper) {
   if (!wrapper->associated) {
@@ -242,7 +231,6 @@ leme_xwayland_finish_association(struct leme_xwayland_view *wrapper) {
   leme_view_unmap(wrapper->view);
   wl_list_remove(&wrapper->map.link);
   wl_list_remove(&wrapper->unmap.link);
-  wl_list_remove(&wrapper->commit.link);
   wrapper->associated = false;
 }
 
@@ -258,8 +246,6 @@ static void leme_xwayland_handle_associate(struct wl_listener *listener,
   wl_signal_add(&surface->events.map, &wrapper->map);
   wrapper->unmap.notify = leme_xwayland_handle_unmap;
   wl_signal_add(&surface->events.unmap, &wrapper->unmap);
-  wrapper->commit.notify = leme_xwayland_handle_commit;
-  wl_signal_add(&surface->events.commit, &wrapper->commit);
   wrapper->associated = true;
   if (surface->mapped) {
     leme_xwayland_surface_map(wrapper);

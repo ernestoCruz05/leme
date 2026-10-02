@@ -5,7 +5,7 @@ project(
 )
 
 add_project_arguments('-D_POSIX_C_SOURCE=200809L', '-DWLR_USE_UNSTABLE',
-  '-DLEME_PUBLIC_BUILD_VERSION="@0@"'.format(meson.project_version()), language: 'c')
+  '-DLEME_VERSION="@0@"'.format(meson.project_version()), language: 'c')
 
 leme_version_header = vcs_tag(
   input: 'src/version.h.in',
@@ -13,9 +13,6 @@ leme_version_header = vcs_tag(
   command: ['git', 'describe', '--always', '--dirty', '--exclude=*'],
   fallback: 'unknown',
 )
-leme_version_c_args = [
-  '-DLEME_VERSION="@0@"'.format(meson.project_version()),
-]
 
 cc = meson.get_compiler('c')
 add_project_arguments(
@@ -158,8 +155,8 @@ leme_control_core_sources = files('src/control/limits.c', 'src/control/memory.c'
 leme_control_ipc_sources = files('src/control/reply.c', 'src/ipc/frame.c', 'src/ipc/queue.c', 'src/ipc/connection.c', 'src/ipc/schedule.c', 'src/control/dispatch.c', 'src/control/watch.c', 'src/control/watch-event.c', 'src/ipc/watch-peer.c')
 leme_sources += files('src/public/json.c', 'src/public/server.c') + leme_public_model_sources + leme_control_core_sources + leme_control_ipc_sources
 
-yyjson_project = subproject('yyjson')
-yyjson_dep = yyjson_project.get_variable('yyjson_dep')
+yyjson_dep = dependency('yyjson', version: '>=0.12.0',
+  fallback: ['yyjson', 'yyjson_dep'])
 
 leme_dependencies = [
   wlroots_dep,
@@ -179,7 +176,6 @@ leme_exe = executable(
   leme_version_header,
   include_directories: leme_inc,
   dependencies: leme_dependencies,
-  c_args: leme_version_c_args,
   install: true,
 )
 
@@ -268,14 +264,17 @@ install_data(
   'session/leme-session',
   install_dir: get_option('bindir'),
   install_mode: 'rwxr-xr-x',
+  install_tag: 'runtime',
 )
 install_data(
   'session/leme.desktop',
   install_dir: get_option('datadir') / 'wayland-sessions',
+  install_tag: 'runtime',
 )
 install_data(
   'session/leme-portals.conf',
   install_dir: get_option('datadir') / 'xdg-desktop-portal',
+  install_tag: 'runtime',
 )
 systemd_dep = dependency('systemd', required: false)
 if systemd_dep.found()
@@ -289,6 +288,7 @@ endif
 install_data(
   'session/leme-session.target',
   install_dir: systemd_user_unit_dir,
+  install_tag: 'runtime',
 )
 
 fs = import('fs')

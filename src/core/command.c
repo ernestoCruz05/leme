@@ -339,7 +339,7 @@ bool leme_command_execute(struct leme_server *server,
     if (!leme_command_require_view(server, "close_view")) {
       return false;
     }
-    leme_view_close(server->focused_view);
+    leme_view_protocol_close(server->focused_view);
     return true;
   case LEME_COMMAND_SPAWN:
     return leme_process_spawn_detached(server, command->argv);

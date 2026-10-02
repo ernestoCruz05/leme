@@ -212,10 +212,26 @@ dispatch_peer_request(struct leme_control_peer *peer,
   return code;
 }
 
-static bool watch_job(const struct leme_control_peer *peer) {
+static bool watch_pending(const struct leme_control_peer *peer) {
   return peer->state == LEME_PEER_STATE_READY &&
-         leme_control_watch_has_work(peer->watches) &&
+         leme_control_watch_has_work(peer->watches);
+}
+
+static bool watch_paced(const struct leme_control_peer *peer) {
+  return peer->watch_ready_ns != 0 &&
+         leme_control_now_ns(NULL) < peer->watch_ready_ns;
+}
+
+static bool watch_job(const struct leme_control_peer *peer) {
+  return watch_pending(peer) && !watch_paced(peer) &&
          (peer->watch_next || wl_list_empty(&peer->pending_requests));
+}
+
+uint64_t leme_control_peer_watch_wake_ns(const struct leme_control_peer *peer) {
+  if (peer == NULL || !watch_pending(peer) || !watch_paced(peer)) {
+    return 0;
+  }
+  return peer->watch_ready_ns;
 }
 
 bool leme_control_peer_needs_fresh_turn(const struct leme_control_peer *peer) {
@@ -247,6 +263,8 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
   if (watch_job(peer)) {
     peer->watch_next = false;
     leme_control_watch_peer_step(peer);
+    peer->watch_ready_ns =
+        leme_control_now_ns(NULL) + LEME_CONTROL_WATCH_INTERVAL_NS;
     leme_control_peer_flush(peer);
     return;
   }
@@ -415,8 +433,7 @@ bool leme_control_peer_has_work(const struct leme_control_peer *peer) {
     return false;
   }
   return !wl_list_empty(&peer->pending_requests) ||
-         (peer->state == LEME_PEER_STATE_READY &&
-          leme_control_watch_has_work(peer->watches));
+         (watch_pending(peer) && !watch_paced(peer));
 }
 
 static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {

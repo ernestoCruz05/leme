@@ -165,7 +165,7 @@ int timao_cli_main(int argc, char **argv) {
   if (status != 0)
     goto done;
   if (options.kind == TIMAO_CLI_HELP || options.kind == TIMAO_CLI_VERSION) {
-    static const char version[] = "timao " LEME_PUBLIC_BUILD_VERSION "\n";
+    static const char version[] = "timao " LEME_VERSION "\n";
     const struct timao_output_buffer output = {
         .data = options.kind == TIMAO_CLI_HELP ? help : version,
         .length = options.kind == TIMAO_CLI_HELP ? sizeof(help) - 1

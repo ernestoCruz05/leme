@@ -182,14 +182,11 @@ bool leme_ownership_prepare_none_to_durable(
     return false;
   }
   prepared->views[0] = view;
-  *prepared = (struct leme_ownership_transition){
-      .kind = LEME_OWNERSHIP_NONE_TO_DURABLE,
-      .views = prepared->views,
-      .view_count = 1,
-      .reason = reason,
-      .presentation = presentation,
-      .output = output,
-  };
+  prepared->kind = LEME_OWNERSHIP_NONE_TO_DURABLE;
+  prepared->view_count = 1;
+  prepared->reason = reason;
+  prepared->presentation = presentation;
+  prepared->output = output;
   *transition = prepared;
   return true;
 }

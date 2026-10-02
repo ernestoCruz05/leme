@@ -27,6 +27,34 @@ exec {
 
 If you need a bar to remain tied to the graphical login, use the service manager or session wrapper provided by your distribution.
 
+## Data for a bar
+
+A bar can read Leme's state with `timao`. `watch` prints one JSON event per
+line: a `snapshot` first, then one each time the result changes. The result is
+in the event's `value` field:
+
+```sh
+timao eval '(watch EXPRESSION)'
+```
+
+Useful expressions:
+
+| Shows | Expression |
+| --- | --- |
+| Focused output | `(get (get (session) "focused_output") "name")` |
+| Tags to draw | `(select (where (tags) .navigable) .number .active .view_count .urgent .output.name)` |
+| Focused window | `(select (where (views) .focused) .title .app_id)` |
+| Layout of the focused output's tag | `(get (first (where (tags) (and .active (contains (list "DP-1") .output.name)))) "layout")` |
+| Keyboard layout | `(get (get (session) "keyboard_layout") "active")` |
+| Binding mode | `(get (session) "mode")` |
+
+`navigable` tags are the ones a bar should show: pinned tags, occupied tags,
+and the current empty one. `view_count` is the number of windows on a tag.
+The focused-window expression returns an empty list when nothing has focus;
+reading `title` straight from `(get (session) "focused_view")` fails then,
+because that field is `null`. Replace `DP-1` with the connector name of the
+output the bar sits on.
+
 ## Media keys
 
 Audio and media control remain external. If `wpctl` and `playerctl` are

@@ -107,6 +107,7 @@ struct leme_control_peer {
   struct leme_control_watch_set *watches;
   int watch_reply_slot;
   bool watch_next;
+  uint64_t watch_ready_ns;
   enum leme_control_peer_state state;
   bool negotiated;
   struct leme_control_outstanding outstanding[16];
@@ -124,5 +125,6 @@ void leme_control_peer_close(struct leme_control_peer *peer);
 void leme_control_peer_step(struct leme_control_peer *peer);
 bool leme_control_peer_has_work(const struct leme_control_peer *peer);
 bool leme_control_peer_needs_fresh_turn(const struct leme_control_peer *peer);
+uint64_t leme_control_peer_watch_wake_ns(const struct leme_control_peer *peer);
 
 #endif

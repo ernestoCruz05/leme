@@ -28,6 +28,8 @@ struct leme_idle_inhibitor {
   struct wlr_idle_inhibitor_v1 *inhibitor;
   struct wl_list link;
   struct wl_listener destroy;
+  struct wl_listener surface_map;
+  struct wl_listener surface_unmap;
 };
 
 bool leme_session_surface_allowed(const struct leme_server *server,
@@ -303,9 +305,31 @@ static void leme_session_handle_inhibitor_destroy(struct wl_listener *listener,
 
   (void)data;
   wl_list_remove(&wrapper->destroy.link);
+  wl_list_remove(&wrapper->surface_map.link);
+  wl_list_remove(&wrapper->surface_unmap.link);
   wl_list_remove(&wrapper->link);
   free(wrapper);
   leme_session_refresh_idle_inhibitors(server);
+}
+
+static void
+leme_session_handle_inhibitor_surface_map(struct wl_listener *listener,
+                                          void *data) {
+  struct leme_idle_inhibitor *wrapper =
+      wl_container_of(listener, wrapper, surface_map);
+
+  (void)data;
+  leme_session_refresh_idle_inhibitors(wrapper->session->server);
+}
+
+static void
+leme_session_handle_inhibitor_surface_unmap(struct wl_listener *listener,
+                                            void *data) {
+  struct leme_idle_inhibitor *wrapper =
+      wl_container_of(listener, wrapper, surface_unmap);
+
+  (void)data;
+  leme_session_refresh_idle_inhibitors(wrapper->session->server);
 }
 
 static void leme_session_handle_new_inhibitor(struct wl_listener *listener,
@@ -323,6 +347,10 @@ static void leme_session_handle_new_inhibitor(struct wl_listener *listener,
   wrapper->inhibitor = inhibitor;
   wrapper->destroy.notify = leme_session_handle_inhibitor_destroy;
   wl_signal_add(&inhibitor->events.destroy, &wrapper->destroy);
+  wrapper->surface_map.notify = leme_session_handle_inhibitor_surface_map;
+  wl_signal_add(&inhibitor->surface->events.map, &wrapper->surface_map);
+  wrapper->surface_unmap.notify = leme_session_handle_inhibitor_surface_unmap;
+  wl_signal_add(&inhibitor->surface->events.unmap, &wrapper->surface_unmap);
   wl_list_insert(&session->inhibitors, &wrapper->link);
   leme_session_refresh_idle_inhibitors(session->server);
 }

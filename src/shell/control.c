@@ -385,7 +385,7 @@ leme_shell_control_execute_one(struct leme_server *server,
     return LEME_CONTROL_OK;
   }
   case LEME_CONTROL_OP_CLOSE: {
-    leme_view_close(view);
+    leme_view_protocol_close(view);
     *outcome = LEME_CONTROL_ACCEPTED;
     return LEME_CONTROL_OK;
   }

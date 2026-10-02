@@ -514,83 +514,16 @@ bool leme_view_is_shown_scratchpad(const struct leme_view *view) {
          view->server->scratchpads.shown == view;
 }
 
-bool leme_scratchpad_send(struct leme_server *server, struct leme_view *view) {
-  struct leme_ownership_transition *transition = NULL;
-  struct leme_output *source;
-  struct leme_scratchpad_manager *manager;
-  struct leme_box anchor;
-
-  if (server == NULL || view == NULL || view->server != server ||
-      !view->mapped || view->unmanaged) {
-    return false;
-  }
-  manager = &server->scratchpads;
-  if (leme_view_is_shown_scratchpad(view)) {
-    if (manager->shown != view) {
-      return false;
-    }
-    leme_scratchpad_hide(manager, view, true);
-    leme_publication_invalidate(server);
-    return true;
-  }
-  if (leme_view_is_scratchpad(view) || view->scratchpad_name != NULL ||
-      leme_ownership_tag(view) == NULL) {
-    return false;
-  }
-  source = leme_view_output(view);
-  if (source == NULL) {
-    return false;
-  }
-  anchor = leme_output_usable_box(source);
-  leme_scratchpad_transition_reset(server);
-  if (!leme_ownership_prepare_tag_to_durable(view, LEME_DURABLE_SCRATCHPAD,
-                                             LEME_DURABLE_HIDDEN, NULL,
-                                             &transition)) {
-    return false;
-  }
-
-  leme_render_output_animations_finish(source);
-  leme_render_view_finish_animation(view);
-  leme_input_pointer_grab_cancel_view(view);
-  view->scratchpad_anchor_area = anchor;
-  if (view->fullscreen) {
-    view->fullscreen = false;
-    view->box = view->saved_box;
-    leme_view_ack_fullscreen(view, false);
-  }
-  leme_scratchpad_transition_commit_started(server);
-  leme_ownership_commit(&transition);
-  view->floating = true;
-  leme_view_update_tiled(view);
-  leme_scratchpad_promote(manager, view);
-  leme_render_view_update_layer(view);
-  leme_render_set_view_visible(view, false);
-  leme_view_focus_history_remove(view);
-  leme_scratchpad_restore_tag_focus(server);
-  leme_publication_invalidate(server);
-  return true;
-}
-
 static bool
-leme_scratchpad_claim_tagged(struct leme_scratchpad_manager *manager,
-                             struct leme_view *view, const char *name) {
+leme_scratchpad_stash_tagged(struct leme_scratchpad_manager *manager,
+                             struct leme_view *view, char *claim) {
   struct leme_server *server = manager->server;
   struct leme_ownership_transition *transition = NULL;
-  struct leme_output *source;
+  struct leme_output *source = leme_view_output(view);
   struct leme_box anchor;
-  char *claim;
 
-  if (view == NULL || view->server != server || !view->mapped ||
-      view->unmanaged || leme_view_is_scratchpad(view) ||
-      view->scratchpad_name != NULL || leme_ownership_tag(view) == NULL) {
-    return false;
-  }
-  source = leme_view_output(view);
   if (source == NULL) {
-    return false;
-  }
-  claim = strdup(name);
-  if (claim == NULL) {
+    free(claim);
     return false;
   }
   anchor = leme_output_usable_box(source);
@@ -622,6 +555,48 @@ leme_scratchpad_claim_tagged(struct leme_scratchpad_manager *manager,
   leme_view_focus_history_remove(view);
   leme_scratchpad_restore_tag_focus(server);
   return true;
+}
+
+bool leme_scratchpad_send(struct leme_server *server, struct leme_view *view) {
+  struct leme_scratchpad_manager *manager;
+
+  if (server == NULL || view == NULL || view->server != server ||
+      !view->mapped || view->unmanaged) {
+    return false;
+  }
+  manager = &server->scratchpads;
+  if (leme_view_is_shown_scratchpad(view)) {
+    if (manager->shown != view) {
+      return false;
+    }
+    leme_scratchpad_hide(manager, view, true);
+    leme_publication_invalidate(server);
+    return true;
+  }
+  if (leme_view_is_scratchpad(view) || view->scratchpad_name != NULL ||
+      leme_ownership_tag(view) == NULL ||
+      !leme_scratchpad_stash_tagged(manager, view, NULL)) {
+    return false;
+  }
+  leme_publication_invalidate(server);
+  return true;
+}
+
+static bool
+leme_scratchpad_claim_tagged(struct leme_scratchpad_manager *manager,
+                             struct leme_view *view, const char *name) {
+  char *claim;
+
+  if (view == NULL || view->server != manager->server || !view->mapped ||
+      view->unmanaged || leme_view_is_scratchpad(view) ||
+      view->scratchpad_name != NULL || leme_ownership_tag(view) == NULL) {
+    return false;
+  }
+  claim = strdup(name);
+  if (claim == NULL) {
+    return false;
+  }
+  return leme_scratchpad_stash_tagged(manager, view, claim);
 }
 
 bool leme_scratchpad_toggle_named(struct leme_server *server, const char *name,

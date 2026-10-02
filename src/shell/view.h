@@ -135,7 +135,6 @@ void leme_view_focus(struct leme_view *view);
 void leme_view_focus_unmanaged_xwayland(struct leme_view *view);
 void leme_view_focus_history_remove(struct leme_view *view);
 void leme_view_clear_focus(struct leme_server *server);
-void leme_view_focus_next(struct leme_server *server);
 bool leme_view_focus_direction(struct leme_server *server,
                                enum leme_direction direction);
 bool leme_view_focus_previous(struct leme_server *server);
@@ -151,7 +150,6 @@ bool leme_view_restore_tiled_drag(struct leme_view *view,
                                   struct leme_layout_detach **detach);
 void leme_view_discard_tiled_drag(struct leme_view *view,
                                   struct leme_layout_detach **detach);
-void leme_view_close(struct leme_view *view);
 void leme_view_arrange(struct leme_server *server);
 void leme_view_arrange_instant(struct leme_server *server);
 void leme_view_refresh_tag_focus(struct leme_server *server);

@@ -5,7 +5,7 @@ wlroots 0.20. It supports dwindle, master-stack, and accordion layouts,
 per-output adaptive tags, multiple monitors, native Wayland applications, and
 optional XWayland.
 
-Leme is early alpha and a personal project. It is usable for daily work but is not stable software: configuration and behavior may change, and physicalmulti-monitor support has had limited hardware testing. It is built primarily
+Leme is early alpha and a personal project. It is usable for daily work but is not stable software: configuration and behavior may change, and physical multi-monitor support has had limited hardware testing. It is built primarily
 for my own use. Issues and patches are welcome, but support is best-effort.
 
 ## What works
@@ -29,8 +29,8 @@ See the [current limitations](docs/reference/limitations.md) and the [roadmap](R
 ## Build
 
 ```sh
-meson setup build
-meson compile -C build
+meson setup build --buildtype=release --prefix=/usr
+ninja -C build
 ```
 
 The [installation guide](docs/getting-started/installation.md) covers dependencies, installation, and the user configuration path.
