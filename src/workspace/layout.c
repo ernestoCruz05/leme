@@ -759,6 +759,36 @@ struct leme_box leme_layout_saturate_box(struct leme_box box) {
   return box;
 }
 
+static void leme_layout_inset_axis(int leading, int trailing, int *origin,
+                                   int *length) {
+  int64_t before = leading;
+  int64_t after = trailing;
+  const int64_t budget = *length - 1;
+  const int64_t total = before + after;
+
+  if (total > budget) {
+    before = before * budget / total;
+    after = budget - before;
+  }
+  *length = leme_layout_saturate_dimension((int64_t)*length - before - after);
+  *origin = leme_layout_saturate_origin((int64_t)*origin + before, *length);
+}
+
+struct leme_box leme_layout_tiled_area(struct leme_box area,
+                                       const struct leme_gaps *outer,
+                                       bool smart_gaps, size_t tiled_count) {
+  if (area.width <= 0 || area.height <= 0) {
+    return area;
+  }
+  area = leme_layout_saturate_box(area);
+  if (outer == NULL || (smart_gaps && tiled_count <= 1)) {
+    return area;
+  }
+  leme_layout_inset_axis(outer->left, outer->right, &area.x, &area.width);
+  leme_layout_inset_axis(outer->top, outer->bottom, &area.y, &area.height);
+  return area;
+}
+
 struct leme_box leme_layout_move_box(struct leme_box box,
                                      enum leme_direction direction,
                                      int amount) {
@@ -895,12 +925,22 @@ static void leme_layout_arrange_column(struct leme_view *const *views,
   if (count == 0) {
     return;
   }
-  available = area.height - (int)(count - 1) * gap;
-  if (available < (int)count) {
-    available = (int)count;
+  if (count > (size_t)area.height) {
+    for (index = 0; index < count; index++) {
+      const int row =
+          index < (size_t)area.height ? (int)index : area.height - 1;
+      const struct leme_box box = {area.x, area.y + row, area.width, 1};
+      apply(views[index], box, data);
+    }
+    return;
   }
+  const int slots = (int)count;
+  if (slots > 1 && gap > (area.height - slots) / (slots - 1)) {
+    gap = 0;
+  }
+  available = area.height - (slots - 1) * gap;
   for (index = 0; index < count; index++) {
-    int height = available / (int)count;
+    int height = available / slots;
     struct leme_box box;
 
     if (index + 1 == count) {
@@ -935,15 +975,17 @@ static void leme_layout_arrange_master_stack(
     leme_layout_arrange_column(views, count, area, gap, apply, data);
     return;
   }
-  split = (int)((double)(area.width - gap) * layout->mfact);
-  if (split < 1) {
+  const int split_gap = gap <= area.width - 2 ? gap : 0;
+  const int available = area.width - split_gap;
+  split = (int)((double)available * layout->mfact);
+  if (available < 2 || split < 1) {
     split = 1;
-  } else if (split > area.width - gap - 1) {
-    split = area.width - gap - 1;
+  } else if (split >= available) {
+    split = available - 1;
   }
   master_area.width = split;
-  stack_area.x = area.x + split + gap;
-  stack_area.width = area.width - split - gap;
+  stack_area.x += available < 2 ? 0 : split + split_gap;
+  stack_area.width = available < 2 ? 1 : available - split;
   leme_layout_arrange_column(views, masters, master_area, gap, apply, data);
   leme_layout_arrange_column(&views[masters], count - masters, stack_area, gap,
                              apply, data);
@@ -969,18 +1011,30 @@ static void leme_layout_arrange_accordion(
       break;
     }
   }
+  if (count > (size_t)area.width) {
+    for (index = 0; index < count; index++) {
+      const int column =
+          index < (size_t)area.width ? (int)index : area.width - 1;
+      const struct leme_box box = {area.x + column, area.y, 1, area.height};
+      apply(views[index], box, data);
+    }
+    return;
+  }
+  const int slots = (int)count;
+  if (slots > 1 && gap > (area.width - slots) / (slots - 1)) {
+    gap = 0;
+  }
   if (collapse < 1) {
     collapse = 1;
   }
-  total_gap = (int)(count - 1) * gap;
-  while (count > 1 && collapse > 1 &&
-         (int)(count - 1) * collapse + total_gap + 1 > area.width) {
-    collapse--;
+  total_gap = (slots - 1) * gap;
+  if (slots > 1) {
+    const int maximum = (area.width - total_gap - 1) / (slots - 1);
+    if (collapse > maximum) {
+      collapse = maximum;
+    }
   }
-  expanded_width = area.width - (int)(count - 1) * collapse - total_gap;
-  if (expanded_width < 1) {
-    expanded_width = 1;
-  }
+  expanded_width = area.width - (slots - 1) * collapse - total_gap;
   for (index = 0; index < count; index++) {
     int width = index == expanded ? expanded_width : collapse;
     struct leme_box box = {
@@ -1000,6 +1054,10 @@ void leme_layout_arrange_subject(struct leme_layout *layout,
                                  const struct leme_view *focused,
                                  struct leme_box area, int gap,
                                  leme_layout_apply_fn apply, void *data) {
+  if (count == 0 || area.width <= 0 || area.height <= 0) {
+    return;
+  }
+  area = leme_layout_saturate_box(area);
   if (layout->has_gap) {
     gap = layout->gap;
   }

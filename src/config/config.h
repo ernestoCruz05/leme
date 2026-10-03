@@ -4,6 +4,7 @@
 #include "config/diagnostics.h"
 #include "config/expand.h"
 #include "config/source_table.h"
+#include "core/leme.h"
 #include "input/input.h"
 #include "output/placement.h"
 #include "render/animation.h"
@@ -224,6 +225,8 @@ struct leme_config {
   uint16_t max_tags;
   enum leme_drop_mode drop_mode;
   int gap;
+  struct leme_gaps gap_outer;
+  bool smart_gaps;
   int border_width;
   int corner_radius;
   int blur;

@@ -242,6 +242,11 @@ bool leme_config_validate(const struct leme_config *config, char **error) {
         error, "config: initial_tags must be between 1 and max_tags (max 64)");
     return false;
   }
+  if (config->gap_outer.top < 0 || config->gap_outer.right < 0 ||
+      config->gap_outer.bottom < 0 || config->gap_outer.left < 0) {
+    leme_config_set_error(error, "config: gap_outer sides must be nonnegative");
+    return false;
+  }
   if (config->gap < 0 || config->border_width < 0 ||
       config->corner_radius < 0 || config->blur < 0 || config->blur > 64) {
     leme_config_set_error(
@@ -501,10 +506,8 @@ bool leme_config_apply(struct leme_server *server, struct leme_config *next,
   leme_input_apply_pointer_config(server, next);
   leme_render_apply_fullscreen_coverage(server);
   leme_view_refresh_fullscreen(server);
+  leme_view_arrange_instant(server);
   if (leme_output_focused(server) != NULL) {
-    leme_tags_arrange_current(
-        leme_focused_tags(server),
-        leme_output_usable_box(leme_output_focused(server)), next->gap);
     leme_render_refresh_views(server);
     leme_tags_refresh_visibility(leme_focused_tags(server));
   }

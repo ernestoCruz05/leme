@@ -951,9 +951,11 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
   }
   if (!view->floating) {
     leme_input_pointer_grab_cancel_tiled(view->server);
-    if (!leme_layout_resize(&leme_ownership_tag(view)->layout, view, edge,
-                            amount,
-                            leme_output_usable_box(leme_view_output(view)))) {
+    if (!leme_layout_resize(
+            &leme_ownership_tag(view)->layout, view, edge, amount,
+            leme_tags_tiled_area(
+                leme_ownership_tag(view),
+                leme_output_usable_box(leme_view_output(view))))) {
       return false;
     }
     leme_view_arrange(view->server);

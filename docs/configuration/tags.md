@@ -73,9 +73,11 @@ The `SPEC` is one token. Whitespace inside it is invalid. An id must be within `
 | `drop_mode` | `simple`, `edges` | `simple` | tiled drag |
 | `mfact` | `0.10` through `0.90` | `0.5` | master-stack |
 | `nmaster` | `1` through `16` | `1` | master-stack |
-| `gap` | integer from `0` through `65535` | `style.gap` | all layouts |
+| `gap` | integer from `0` through `65535` | `style.gap` | inner spacing in all layouts |
 | `split_ratio` | `0.10` through `0.90` | `0.5` | dwindle |
 | `accordion_collapse_width` | `10` through `400` | `46` | accordion |
+
+Outer and smart gaps use the global [appearance settings](appearance.md#gaps).
 
 Settings for an adaptive tag apply when that tag materializes. Settings for a layout that is not currently active are retained and take effect if the tag later switches layout.
 

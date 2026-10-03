@@ -9,6 +9,13 @@
 
 #define LEME_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 
+struct leme_gaps {
+  int top;
+  int right;
+  int bottom;
+  int left;
+};
+
 struct leme_box {
   int x;
   int y;

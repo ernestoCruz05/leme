@@ -6,6 +6,8 @@ stack:
 ```scfg
 style {
     gap 8
+    gap_outer 10 20 30 40
+    smart_gaps true
     border_width 2
     border_active "#296bb8"
     border_inactive "#3a3a3a"
@@ -18,6 +20,8 @@ style {
 | Key | Values | Default |
 | --- | --- | --- |
 | `gap` | nonnegative integer in logical pixels | `0` |
+| `gap_outer` | one to four integers from `0` through `2147483647`, in logical pixels | `0` |
+| `smart_gaps` | `true` or `false` | `false` |
 | `border_width` | nonnegative integer in logical pixels | `0` |
 | `corner_radius` | nonnegative integer in logical pixels | `0` |
 | `blur` | integer from `0` through `64` | `0` |
@@ -26,6 +30,45 @@ style {
 | `opacity_active` | decimal from `0.0` through `1.0` | `1.0` |
 | `opacity_inactive` | decimal from `0.0` through `1.0` | `1.0` |
 | `fullscreen_covers` | `none`, `top`, or `overlay` | `top` |
+
+## Gaps
+
+`gap` sets the total spacing between tiled frames, with optional
+[per-tag overrides](tags.md#per-tag-settings). `gap_outer` adds margins around
+the tiled workspace using CSS shorthand:
+
+| Arguments | Top | Right | Bottom | Left |
+| --- | --- | --- | --- | --- |
+| `10` | 10 | 10 | 10 | 10 |
+| `10 20` | 10 | 20 | 10 | 20 |
+| `10 20 30` | 10 | 20 | 30 | 20 |
+| `10 20 30 40` | 10 | 20 | 30 | 40 |
+
+Outer margins start after bars reserve space and shrink to fit the usable area.
+They only affect tiled windows; floating, fullscreen, scratchpad and sticky
+windows keep their geometry.
+
+With `smart_gaps true`, outer margins disappear on tags with at most one mapped,
+managed tile. Floating, fullscreen and drag-detached windows do not count.
+Borders and inner gaps stay unchanged. Both settings are global.
+
+### Live settings
+
+The `loaded` and `effective` config records report configured values, even when
+margins shrink or are suppressed. `gap_outer` has integer `top`, `right`,
+`bottom` and `left` members.
+
+```sh
+timao get config effective style gap_outer
+timao get config effective style smart_gaps
+timao eval '(act (set-config (list "style" "gap_outer" "top") 20))'
+timao eval '(act (set-config (list "style" "smart_gaps") true))'
+```
+
+IPC writes each side separately; whole-object writes and CSS shorthand are
+unsupported. A successful reload clears live overrides.
+
+## Borders and effects
 
 The active and inactive border colors follow keyboard focus. Leme draws the border as its complete server-side decoration. It does not draw titlebars or buttons.
 

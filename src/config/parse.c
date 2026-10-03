@@ -1714,6 +1714,8 @@ static bool leme_config_parse_style(struct leme_config *config,
                                     const char *path, char **error) {
   static const char *const style_keys[] = {
       "gap",
+      "gap_outer",
+      "smart_gaps",
       "border_width",
       "corner_radius",
       "blur",
@@ -1724,6 +1726,8 @@ static bool leme_config_parse_style(struct leme_config *config,
       "fullscreen_covers",
   };
   const struct leme_scfg_directive *dir_gap = NULL;
+  const struct leme_scfg_directive *dir_gap_outer = NULL;
+  const struct leme_scfg_directive *dir_smart_gaps = NULL;
   const struct leme_scfg_directive *dir_border = NULL;
   const struct leme_scfg_directive *dir_corner_radius = NULL;
   const struct leme_scfg_directive *dir_blur = NULL;
@@ -1745,6 +1749,44 @@ static bool leme_config_parse_style(struct leme_config *config,
     int value;
     double decimal;
 
+    if (strcmp(entry->name, "gap_outer") == 0) {
+      if (dir_gap_outer != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_gap_outer,
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(
+                config, entry, -1, &extra,
+                "duplicate directive `gap_outer` in `style`")) {
+          return false;
+        }
+        continue;
+      }
+      int sides[4] = {0};
+      bool valid = entry->params_len >= 1 && entry->params_len <= 4 &&
+                   entry->children.directives_len == 0;
+      for (size_t arg = 0; valid && arg < entry->params_len; ++arg) {
+        valid = leme_config_parse_nonnegative(entry->params[arg], &sides[arg]);
+      }
+      if (!valid) {
+        if (!leme_config_reject(
+                config, entry, -1,
+                "gap_outer requires one to four nonnegative integers")) {
+          return false;
+        }
+        continue;
+      }
+      config->gap_outer = (struct leme_gaps){
+          .top = sides[0],
+          .right = entry->params_len >= 2 ? sides[1] : sides[0],
+          .bottom = entry->params_len >= 3 ? sides[2] : sides[0],
+          .left = entry->params_len == 4   ? sides[3]
+                  : entry->params_len >= 2 ? sides[1]
+                                           : sides[0],
+      };
+      dir_gap_outer = entry;
+      continue;
+    }
     if (entry->params_len != 1 || entry->children.directives_len != 0) {
       if (!leme_config_reject(config, entry, -1, "%s requires one value",
                               entry->name)) {
@@ -1774,6 +1816,27 @@ static bool leme_config_parse_style(struct leme_config *config,
       }
       config->gap = value;
       dir_gap = entry;
+    } else if (strcmp(entry->name, "smart_gaps") == 0) {
+      if (dir_smart_gaps != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_smart_gaps,
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(
+                config, entry, -1, &extra,
+                "duplicate directive `smart_gaps` in `style`")) {
+          return false;
+        }
+        continue;
+      }
+      if (!leme_config_parse_boolean(entry->params[0], &config->smart_gaps)) {
+        if (!leme_config_reject(config, entry, 0,
+                                "smart_gaps requires true or false")) {
+          return false;
+        }
+        continue;
+      }
+      dir_smart_gaps = entry;
     } else if (strcmp(entry->name, "border_width") == 0) {
       if (dir_border != NULL) {
         const struct leme_reject_extra extra = {
@@ -4357,7 +4420,7 @@ struct leme_config *leme_config_load(const char *path, char **error) {
           .threshold = 0.5,
           .deceleration = 0.997,
           .velocity_window_ms = 150,
-      };
+  };
   config->publication.activation = LEME_ACTIVATION_FOLLOW;
   leme_config_set_style_defaults(config);
   leme_config_set_output_defaults(config);

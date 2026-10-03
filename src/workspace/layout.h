@@ -132,6 +132,9 @@ bool leme_layout_resize_drag_begin(struct leme_layout_node *root,
 bool leme_layout_resize_drag_update(struct leme_layout_resize_drag *drag,
                                     int dx, int dy);
 struct leme_box leme_layout_saturate_box(struct leme_box box);
+struct leme_box leme_layout_tiled_area(struct leme_box area,
+                                       const struct leme_gaps *outer,
+                                       bool smart_gaps, size_t tiled_count);
 struct leme_box leme_layout_move_box(struct leme_box box,
                                      enum leme_direction direction, int amount);
 enum leme_grab_edge leme_layout_resize_edges(struct leme_box box,

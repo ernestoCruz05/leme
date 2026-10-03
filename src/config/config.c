@@ -239,6 +239,8 @@ void leme_config_set_output_defaults(struct leme_config *config) {
 }
 
 void leme_config_set_style_defaults(struct leme_config *config) {
+  config->gap_outer = (struct leme_gaps){0};
+  config->smart_gaps = false;
   config->border_active[0] = 0.16f;
   config->border_active[1] = 0.42f;
   config->border_active[2] = 0.72f;
@@ -364,7 +366,7 @@ struct leme_config *leme_config_defaults(void) {
           .threshold = 0.5,
           .deceleration = 0.997,
           .velocity_window_ms = 150,
-      };
+  };
   config->publication.activation = LEME_ACTIVATION_FOLLOW;
   config->config_errors = (struct leme_config_errors){
       .show = true,

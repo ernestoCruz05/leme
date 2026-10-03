@@ -341,10 +341,8 @@ void leme_config_reload_commit(struct leme_server *server,
   leme_render_apply_fullscreen_coverage(server);
   leme_view_refresh_fullscreen(server);
 
+  leme_view_arrange_instant(server);
   if (leme_output_focused(server) != NULL) {
-    leme_tags_arrange_current(
-        leme_focused_tags(server),
-        leme_output_usable_box(leme_output_focused(server)), next->gap);
     leme_render_refresh_views(server);
     leme_tags_refresh_visibility(leme_focused_tags(server));
   }

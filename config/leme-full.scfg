@@ -19,6 +19,8 @@ tags {
 
 style {
     gap 8
+    gap_outer 0
+    smart_gaps false
     border_width 2
     border_active "#296bb8"
     border_inactive "#3a3a3a"

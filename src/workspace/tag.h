@@ -100,6 +100,8 @@ leme_tags_pointer_drop_target(const struct leme_tags *tags,
                               double layout_y);
 bool leme_tags_swap_directional(struct leme_tags *tags, struct leme_view *view,
                                 enum leme_direction direction);
+struct leme_box leme_tags_tiled_area(const struct leme_tag *tag,
+                                     struct leme_box usable_box);
 void leme_tags_arrange_current(struct leme_tags *tags,
                                struct leme_box usable_box, int gap);
 bool leme_tags_prepare_detach(struct leme_view *view,

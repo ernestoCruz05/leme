@@ -451,6 +451,11 @@ leme_config_store_effective(const struct leme_config_store *store) {
 
 enum leme_live_setting_id {
   LEME_LIVE_STYLE_GAP,
+  LEME_LIVE_STYLE_GAP_OUTER_TOP,
+  LEME_LIVE_STYLE_GAP_OUTER_RIGHT,
+  LEME_LIVE_STYLE_GAP_OUTER_BOTTOM,
+  LEME_LIVE_STYLE_GAP_OUTER_LEFT,
+  LEME_LIVE_STYLE_SMART_GAPS,
   LEME_LIVE_STYLE_BORDER_WIDTH,
   LEME_LIVE_STYLE_CORNER_RADIUS,
   LEME_LIVE_STYLE_BLUR,
@@ -520,6 +525,8 @@ static int find_live_setting(const char *const *path, size_t path_count) {
     if (strcmp(path[0], "style") == 0) {
       if (strcmp(path[1], "gap") == 0)
         return LEME_LIVE_STYLE_GAP;
+      if (strcmp(path[1], "smart_gaps") == 0)
+        return LEME_LIVE_STYLE_SMART_GAPS;
       if (strcmp(path[1], "border_width") == 0)
         return LEME_LIVE_STYLE_BORDER_WIDTH;
       if (strcmp(path[1], "corner_radius") == 0)
@@ -575,6 +582,17 @@ static int find_live_setting(const char *const *path, size_t path_count) {
       return -1;
     }
   } else if (path_count == 3) {
+    if (strcmp(path[0], "style") == 0 && strcmp(path[1], "gap_outer") == 0) {
+      if (strcmp(path[2], "top") == 0)
+        return LEME_LIVE_STYLE_GAP_OUTER_TOP;
+      if (strcmp(path[2], "right") == 0)
+        return LEME_LIVE_STYLE_GAP_OUTER_RIGHT;
+      if (strcmp(path[2], "bottom") == 0)
+        return LEME_LIVE_STYLE_GAP_OUTER_BOTTOM;
+      if (strcmp(path[2], "left") == 0)
+        return LEME_LIVE_STYLE_GAP_OUTER_LEFT;
+      return -1;
+    }
     if (strcmp(path[0], "gestures") == 0 &&
         strcmp(path[1], "workspace_switch") == 0) {
       if (strcmp(path[2], "mode") == 0)
@@ -719,6 +737,10 @@ enum leme_control_code leme_config_live_prepare_set(
 
   switch (id) {
   case LEME_LIVE_STYLE_GAP:
+  case LEME_LIVE_STYLE_GAP_OUTER_TOP:
+  case LEME_LIVE_STYLE_GAP_OUTER_RIGHT:
+  case LEME_LIVE_STYLE_GAP_OUTER_BOTTOM:
+  case LEME_LIVE_STYLE_GAP_OUTER_LEFT:
   case LEME_LIVE_STYLE_BORDER_WIDTH:
   case LEME_LIVE_STYLE_CORNER_RADIUS:
   case LEME_LIVE_STYLE_BLUR:
@@ -799,6 +821,7 @@ enum leme_control_code leme_config_live_prepare_set(
     prep->parsed.num_val = dval;
     break;
   }
+  case LEME_LIVE_STYLE_SMART_GAPS:
   case LEME_LIVE_OUTPUT_CROSS_FOCUS:
   case LEME_LIVE_OUTPUT_CROSS_MOVE:
   case LEME_LIVE_OUTPUT_CROSS_DRAG:
@@ -940,6 +963,21 @@ enum leme_control_code leme_config_live_prepare_set(
   switch (id) {
   case LEME_LIVE_STYLE_GAP:
     noop = (cur->gap == prep->parsed.int_val);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_TOP:
+    noop = (cur->gap_outer.top == prep->parsed.int_val);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_RIGHT:
+    noop = (cur->gap_outer.right == prep->parsed.int_val);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_BOTTOM:
+    noop = (cur->gap_outer.bottom == prep->parsed.int_val);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_LEFT:
+    noop = (cur->gap_outer.left == prep->parsed.int_val);
+    break;
+  case LEME_LIVE_STYLE_SMART_GAPS:
+    noop = (cur->smart_gaps == prep->parsed.bool_val);
     break;
   case LEME_LIVE_STYLE_BORDER_WIDTH:
     noop = (cur->border_width == prep->parsed.int_val);
@@ -1171,6 +1209,31 @@ leme_config_live_execute_one(struct leme_server *server,
   switch (prep->setting_id) {
   case LEME_LIVE_STYLE_GAP:
     cfg->gap = prep->parsed.int_val;
+    leme_view_arrange_instant(server);
+    leme_render_refresh_views(server);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_TOP:
+    cfg->gap_outer.top = prep->parsed.int_val;
+    leme_view_arrange_instant(server);
+    leme_render_refresh_views(server);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_RIGHT:
+    cfg->gap_outer.right = prep->parsed.int_val;
+    leme_view_arrange_instant(server);
+    leme_render_refresh_views(server);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_BOTTOM:
+    cfg->gap_outer.bottom = prep->parsed.int_val;
+    leme_view_arrange_instant(server);
+    leme_render_refresh_views(server);
+    break;
+  case LEME_LIVE_STYLE_GAP_OUTER_LEFT:
+    cfg->gap_outer.left = prep->parsed.int_val;
+    leme_view_arrange_instant(server);
+    leme_render_refresh_views(server);
+    break;
+  case LEME_LIVE_STYLE_SMART_GAPS:
+    cfg->smart_gaps = prep->parsed.bool_val;
     leme_view_arrange_instant(server);
     leme_render_refresh_views(server);
     break;

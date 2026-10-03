@@ -21,6 +21,11 @@
 static void leme_tag_apply_settings(struct leme_tag *tag,
                                     const struct leme_tag_settings *settings);
 
+static bool leme_tags_view_tiled(const struct leme_view *view) {
+  return view->mapped && !view->unmanaged && !view->floating &&
+         !view->fullscreen && !view->detached;
+}
+
 static size_t leme_tags_tiled_views(const struct leme_tag *tag,
                                     struct leme_view **views, size_t capacity) {
   struct wl_list *link;
@@ -29,8 +34,7 @@ static size_t leme_tags_tiled_views(const struct leme_tag *tag,
   for (link = tag->views.next; link != &tag->views; link = link->next) {
     struct leme_view *view = wl_container_of(link, view, tag_link);
 
-    if (!view->mapped || view->unmanaged || view->floating ||
-        view->fullscreen) {
+    if (!leme_tags_view_tiled(view)) {
       continue;
     }
     if (count < capacity) {
@@ -914,6 +918,24 @@ static void leme_tags_apply_box(struct leme_view *view, struct leme_box box,
       view, box, view->server != NULL && !view->server->arrange_instant);
 }
 
+static struct leme_box leme_tags_area_for_count(const struct leme_tag *tag,
+                                                struct leme_box usable_box,
+                                                size_t count) {
+  if (tag == NULL || tag->owner == NULL || tag->owner->server == NULL ||
+      tag->owner->server->config == NULL) {
+    return usable_box;
+  }
+  const struct leme_config *config = tag->owner->server->config;
+  return leme_layout_tiled_area(usable_box, &config->gap_outer,
+                                config->smart_gaps, count);
+}
+
+struct leme_box leme_tags_tiled_area(const struct leme_tag *tag,
+                                     struct leme_box usable_box) {
+  return leme_tags_area_for_count(
+      tag, usable_box, tag == NULL ? 0 : leme_tags_tiled_views(tag, NULL, 0));
+}
+
 void leme_tags_arrange_current(struct leme_tags *tags,
                                struct leme_box usable_box, int gap) {
   struct leme_tag *tag;
@@ -928,6 +950,7 @@ void leme_tags_arrange_current(struct leme_tags *tags,
     return;
   }
   count = leme_tags_tiled_views(tag, NULL, 0);
+  usable_box = leme_tags_area_for_count(tag, usable_box, count);
   if (count == 0) {
     leme_layout_arrange_subject(&tag->layout, NULL, 0, tag->focused_view,
                                 usable_box, gap, leme_tags_apply_box, NULL);
@@ -981,8 +1004,7 @@ bool leme_tags_prepare_detach(struct leme_view *view,
        link != &leme_ownership_tag(view)->views; link = link->next) {
     struct leme_view *candidate = wl_container_of(link, candidate, tag_link);
 
-    if (candidate != view && candidate->mapped && !candidate->unmanaged &&
-        !candidate->floating && !candidate->fullscreen) {
+    if (candidate != view && leme_tags_view_tiled(candidate)) {
       count++;
     }
   }
@@ -1016,8 +1038,7 @@ bool leme_tags_prepare_detach(struct leme_view *view,
          link != &leme_ownership_tag(view)->views; link = link->next) {
       struct leme_view *candidate = wl_container_of(link, candidate, tag_link);
 
-      if (candidate != view && candidate->mapped && !candidate->unmanaged &&
-          !candidate->floating && !candidate->fullscreen) {
+      if (candidate != view && leme_tags_view_tiled(candidate)) {
         if (index >= count) {
           free((void *)plan->remaining);
           free(plan);
@@ -1036,7 +1057,8 @@ bool leme_tags_prepare_detach(struct leme_view *view,
   plan->remaining_count = count;
   if (leme_ownership_tag(view)->owner != NULL &&
       leme_ownership_tag(view)->owner->output != NULL) {
-    plan->area = leme_ownership_tag(view)->owner->output->usable_box;
+    plan->area = leme_tags_area_for_count(
+        plan->tag, plan->tag->owner->output->usable_box, count);
   }
   if (leme_ownership_tag(view)->owner != NULL &&
       leme_ownership_tag(view)->owner->server != NULL &&

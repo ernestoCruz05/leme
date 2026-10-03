@@ -100,13 +100,36 @@ static enum leme_public_status put_color(struct leme_public_builder *b,
       b, record, key, (struct leme_public_text){color, sizeof(color)}, false);
 }
 
+static enum leme_public_status
+outer_gaps_value(struct leme_public_builder *b, const struct leme_gaps *gaps,
+                 struct leme_public_value **out) {
+  struct leme_public_value *record = NULL;
+  if (leme_public_object(b, 4, &record) != LEME_PUBLIC_OK ||
+      leme_public_put_int(b, record, LEME_PUBLIC_TEXT("top"), gaps->top) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_int(b, record, LEME_PUBLIC_TEXT("right"), gaps->right) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_int(b, record, LEME_PUBLIC_TEXT("bottom"),
+                          gaps->bottom) != LEME_PUBLIC_OK ||
+      leme_public_put_int(b, record, LEME_PUBLIC_TEXT("left"), gaps->left) !=
+          LEME_PUBLIC_OK)
+    return leme_public_builder_status(b);
+  *out = record;
+  return LEME_PUBLIC_OK;
+}
+
 static enum leme_public_status style_value(struct leme_public_builder *b,
                                            const struct leme_config *config,
                                            struct leme_public_value **out) {
-  struct leme_public_value *style = NULL;
-  if (leme_public_object(b, 9, &style) != LEME_PUBLIC_OK ||
+  struct leme_public_value *style = NULL, *outer = NULL;
+  if (outer_gaps_value(b, &config->gap_outer, &outer) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 11, &style) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, style, LEME_PUBLIC_TEXT("gap"), config->gap) !=
           LEME_PUBLIC_OK ||
+      leme_public_object_set(b, style, LEME_PUBLIC_TEXT("gap_outer"), outer) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, style, LEME_PUBLIC_TEXT("smart_gaps"),
+                           config->smart_gaps) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, style, LEME_PUBLIC_TEXT("border_width"),
                           config->border_width) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, style, LEME_PUBLIC_TEXT("corner_radius"),
