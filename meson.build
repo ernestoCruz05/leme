@@ -1,6 +1,6 @@
 project(
   'leme', 'c',
-  version: '0.2.0',
+  version: '0.2.1',
   default_options: ['c_std=c17', 'warning_level=3', 'werror=true'],
 )
 

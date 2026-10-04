@@ -41,16 +41,6 @@ static void leme_output_handle_frame(struct wl_listener *listener, void *data) {
   leme_render_output_frame(output);
 }
 
-static struct leme_output *leme_output_first(struct leme_server *server) {
-  struct leme_output *output;
-
-  if (wl_list_empty(&server->outputs)) {
-    return NULL;
-  }
-  output = wl_container_of(server->outputs.next, output, link);
-  return output;
-}
-
 static struct leme_output *
 leme_output_from_wlr(struct leme_server *server,
                      const struct wlr_output *wlr_output) {
@@ -141,25 +131,6 @@ leme_output_config_for(const struct leme_config *config, const char *name) {
   return NULL;
 }
 
-static struct leme_output *leme_output_target(struct leme_server *server,
-                                              const struct leme_config *config,
-                                              bool startup) {
-  struct leme_output *target = NULL;
-  size_t index;
-
-  for (index = 0; index < config->output_count && target == NULL; index++) {
-    target = leme_output_find(server, config->outputs[index].name);
-  }
-  if (target == NULL && config->output_count > 0 && !startup) {
-    return NULL;
-  }
-  if (target == NULL) {
-    target = server->focused_output == NULL ? leme_output_first(server)
-                                            : server->focused_output;
-  }
-  return target;
-}
-
 static bool leme_output_logical_size(
     int physical_width,  // NOLINT(bugprone-easily-swappable-parameters)
     int physical_height, // NOLINT(bugprone-easily-swappable-parameters)
@@ -213,7 +184,7 @@ static bool leme_output_build_plans(struct leme_server *server,
                                     const struct leme_config *config,
                                     bool startup,
                                     struct leme_output_plan *plans,
-                                    size_t count, bool *used_mode_fallback) {
+                                    size_t count) {
   struct leme_output *output;
   size_t index = 0;
 
@@ -237,8 +208,10 @@ static bool leme_output_build_plans(struct leme_server *server,
       if (!startup) {
         return false;
       }
+      wlr_log(WLR_ERROR,
+              "leme: configured mode unavailable on %s, using preferred mode",
+              output->wlr_output->name);
       plan->mode = wlr_output_preferred_mode(output->wlr_output);
-      *used_mode_fallback = true;
     }
     if (plan->mode == NULL) {
       plan->mode = wlr_output_preferred_mode(output->wlr_output);
@@ -313,14 +286,12 @@ leme_output_configuration_head_for(
 
 static struct wlr_output_configuration_v1 *
 leme_output_build_persistent(struct leme_server *server,
-                             const struct leme_config *config, bool startup,
-                             bool *used_mode_fallback) {
+                             const struct leme_config *config, bool startup) {
   struct wlr_output_configuration_v1 *configuration = NULL;
   struct leme_output_plan *plans;
   size_t count = leme_output_count(server);
   size_t index;
 
-  *used_mode_fallback = false;
   if (count == 0) {
     return NULL;
   }
@@ -328,8 +299,7 @@ leme_output_build_persistent(struct leme_server *server,
   if (plans == NULL) {
     return NULL;
   }
-  if (!leme_output_build_plans(server, config, startup, plans, count,
-                               used_mode_fallback)) {
+  if (!leme_output_build_plans(server, config, startup, plans, count)) {
     goto cleanup;
   }
   if (!leme_output_resolve_plans(plans, count)) {
@@ -375,7 +345,6 @@ static bool leme_output_build_power_on_plan(struct leme_output *target,
   struct leme_output_plan *plans;
   size_t count = leme_output_count(server);
   size_t index;
-  bool used_mode_fallback = false;
   bool found = false;
 
   if (count == 0) {
@@ -385,8 +354,7 @@ static bool leme_output_build_power_on_plan(struct leme_output *target,
   if (plans == NULL) {
     return false;
   }
-  if (!leme_output_build_plans(server, server->config, false, plans, count,
-                               &used_mode_fallback)) {
+  if (!leme_output_build_plans(server, server->config, false, plans, count)) {
     goto cleanup;
   }
   for (index = 0; index < count; index++) {
@@ -1094,14 +1062,12 @@ failed:
 bool leme_output_test_config(struct leme_server *server,
                              const struct leme_config *config) {
   struct wlr_output_configuration_v1 *configuration;
-  bool mode_fallback;
   bool valid;
 
   if (server->outputs.next == NULL || wl_list_empty(&server->outputs)) {
     return true;
   }
-  configuration =
-      leme_output_build_persistent(server, config, false, &mode_fallback);
+  configuration = leme_output_build_persistent(server, config, false);
   if (configuration == NULL) {
     return false;
   }
@@ -1117,26 +1083,14 @@ bool leme_output_test_config(struct leme_server *server,
 bool leme_output_apply_config(struct leme_server *server,
                               const struct leme_config *config, bool startup) {
   struct wlr_output_configuration_v1 *configuration;
-  struct leme_output *target;
-  bool mode_fallback;
   bool committed;
 
   if (server->outputs.next == NULL || wl_list_empty(&server->outputs)) {
     return true;
   }
-  target = leme_output_target(server, config, startup);
-  configuration =
-      leme_output_build_persistent(server, config, startup, &mode_fallback);
-  if (configuration == NULL || target == NULL) {
-    if (configuration != NULL) {
-      wlr_output_configuration_v1_destroy(configuration);
-    }
+  configuration = leme_output_build_persistent(server, config, startup);
+  if (configuration == NULL) {
     return false;
-  }
-  if (mode_fallback) {
-    wlr_log(WLR_ERROR,
-            "leme: configured mode unavailable on %s, using preferred mode",
-            target->wlr_output->name);
   }
   if (!startup &&
       leme_output_configuration_matches_current(server, configuration)) {
@@ -1886,22 +1840,4 @@ bool leme_output_control_configuration_matches_current(
 bool leme_output_control_heads_overlap(
     const struct wlr_output_configuration_v1 *configuration) {
   return leme_output_heads_overlap(configuration);
-}
-
-bool leme_output_has_hardware_delta(struct leme_server *server,
-                                    const struct leme_config *config) {
-  if (server == NULL || server->outputs.next == NULL ||
-      wl_list_empty(&server->outputs)) {
-    return false;
-  }
-  bool mode_fallback = false;
-  struct wlr_output_configuration_v1 *configuration =
-      leme_output_build_persistent(server, config, false, &mode_fallback);
-  if (configuration == NULL) {
-    return true;
-  }
-  bool matches =
-      leme_output_configuration_matches_current(server, configuration);
-  wlr_output_configuration_v1_destroy(configuration);
-  return !matches;
 }

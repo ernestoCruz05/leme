@@ -49,7 +49,9 @@ When Leme exits, it removes `WAYLAND_DISPLAY`, `DISPLAY` and `LEME_SOCKET` from 
 systemctl --user status leme-session.target graphical-session.target xdg-desktop-portal.service
 ```
 
-If the unit is missing, check that `leme-session.target` is installed in a systemd user unit directory such as `/usr/lib/systemd/user`. If Leme crashes, the target stays active until the user manager exits, and services keep the old display environment. Stop it before starting a new session under the same user manager:
+If the unit is missing, check that `leme-session.target` is installed in a systemd user unit directory such as `/usr/lib/systemd/user`.
+
+If Leme crashes under `leme-session`, the wrapper stops the target and removes the same display variables, so services tied to the graphical session stop as well. It does this only when the target was inactive before that Leme started. Started without `leme-session`, a crashed Leme leaves the target active, and services keep the old display environment. Stop it before starting a new session under the same user manager:
 
 ```sh
 systemctl --user stop leme-session.target

@@ -26,15 +26,56 @@ if [ -z "$leme_log" ]; then
     fi
 fi
 
+leme_log_ready=false
 if [ -n "$leme_log" ] && [ "$leme_log" != none ]; then
     if mkdir -p "$(dirname "$leme_log")" 2>/dev/null; then
         if [ -f "$leme_log" ]; then
             mv -f "$leme_log" "$leme_log.1" 2>/dev/null || true
         fi
         if true 2>/dev/null >>"$leme_log"; then
-            exec leme "$@" >"$leme_log" 2>&1
+            leme_log_ready=true
         fi
     fi
 fi
 
-exec leme "$@"
+leme_target_active() {
+    systemctl --user is-active --quiet leme-session.target 2>/dev/null
+}
+
+leme_run() {
+    if [ "$leme_log_ready" = true ]; then
+        exec leme "$@" >"$leme_log" 2>&1
+    fi
+    exec leme "$@"
+}
+
+leme_may_own_target=false
+if command -v systemctl >/dev/null 2>&1 && ! leme_target_active; then
+    leme_may_own_target=true
+fi
+
+command exec 3<&0 2>/dev/null || exec 3</dev/null
+leme_run "$@" <&3 3<&- &
+leme_pid=$!
+exec 3<&-
+
+leme_signalled=false
+trap 'leme_signalled=true; kill -TERM "$leme_pid" 2>/dev/null' TERM HUP INT
+wait "$leme_pid"
+leme_status=$?
+while [ "$leme_signalled" = true ]; do
+    leme_signalled=false
+    wait "$leme_pid"
+    leme_next=$?
+    if [ "$leme_next" -ne 127 ]; then
+        leme_status=$leme_next
+    fi
+done
+trap '' TERM HUP INT
+
+if [ "$leme_may_own_target" = true ] && leme_target_active; then
+    systemctl --user --no-block stop leme-session.target
+    systemctl --user unset-environment WAYLAND_DISPLAY DISPLAY LEME_SOCKET
+fi
+
+exit "$leme_status"

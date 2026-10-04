@@ -33,6 +33,7 @@ struct leme_config_reload {
   struct leme_tags_resize *resizes;
   size_t resize_count;
   struct xkb_keymap *keymap;
+  bool pointers_changed;
 };
 
 static bool leme_config_same_text(const char *first, const char *second) {
@@ -162,14 +163,9 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
     return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT, msg);
   }
 
-  if (leme_output_has_hardware_delta(server, next)) {
-    return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
-                               "unsupported live output configuration change");
-  }
-
-  if (leme_pointers_have_delta(server, next)) {
-    return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
-                               "unsupported live pointer configuration change");
+  if (!leme_output_test_config(server, next)) {
+    return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
+                               "output configuration rejected");
   }
 
   struct xkb_keymap *km = leme_input_compile_keymap(next);
@@ -198,6 +194,7 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
   plan->account = account;
   plan->next = next;
   plan->keymap = km;
+  plan->pointers_changed = leme_pointers_have_delta(server, next);
 
   size_t output_count = 0;
   if (server->outputs.next != NULL) {
@@ -335,6 +332,15 @@ void leme_config_reload_commit(struct leme_server *server,
     leme_session_environment_cursor(server);
     leme_desktop_commit_cursor_config(server, plan->cursor_manager);
     plan->cursor_manager = NULL;
+  }
+
+  if (!leme_output_apply_config(server, server->config, false)) {
+    wlr_log(WLR_ERROR, "%s",
+            "leme: output configuration failed after reload; keeping the "
+            "previous output layout");
+  }
+  if (plan->pointers_changed) {
+    leme_input_apply_pointer_config(server, server->config);
   }
 
   leme_input_replace_modes(server, next->modes, next->mode_count);

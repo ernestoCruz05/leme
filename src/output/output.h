@@ -45,8 +45,6 @@ bool leme_output_test_config(struct leme_server *server,
                              const struct leme_config *config);
 bool leme_output_apply_config(struct leme_server *server,
                               const struct leme_config *config, bool startup);
-bool leme_output_has_hardware_delta(struct leme_server *server,
-                                    const struct leme_config *config);
 bool leme_output_set_power(struct leme_output *output, bool on);
 void leme_output_publish_configuration(struct leme_server *server);
 struct leme_box leme_output_usable_box(const struct leme_output *output);
