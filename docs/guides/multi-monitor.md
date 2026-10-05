@@ -51,6 +51,14 @@ output {
 
 Use `cross_output_focus` when directional focus should leave the current monitor. Use `cross_output_move` when a keyboard movement at the edge should carry the view to the adjacent monitor. Use `cross_output_drag` for pointer drags. `warp_cursor` controls pointer warping after an output-focus command.
 
+## Unplug and reconnect
+
+When an output goes away, its windows move to the same tag numbers on a remaining output. Leme remembers which output and tag each window came from, along with the output's focused tag and the layouts of its tags. When an output with the same connector name comes back, those windows return to their tags and the output shows its old focused tag. Sticky windows return to their output too.
+
+Switching to another VT counts as an unplug: wlroots removes every output while the session is inactive and adds them back when you return.
+
+A window you move yourself in the meantime, to another tag or output, stays where you put it. Leme matches outputs by connector name, so a monitor plugged into a different port is a new output.
+
 ## Temporary output changes
 
 Clients using `zwlr_output_manager_v1` can request temporary positions, modes, scales, and transforms. Those requests do not rewrite scfg. A later configuration reload restores the persistent output policy.

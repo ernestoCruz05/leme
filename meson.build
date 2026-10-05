@@ -106,6 +106,7 @@ leme_sources = files(
   'src/output/output.c',
   'src/output/public.c',
   'src/output/placement.c',
+  'src/output/home.c',
   'src/output/control.c',
   'src/render/graphics.c',
   'src/workspace/tag.c',

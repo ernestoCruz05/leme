@@ -3,6 +3,7 @@
 #include "core/gate.h"
 #include "core/server.h"
 #include "input/input.h"
+#include "output/home.h"
 #include "output/output.h"
 #include "protocols/publication.h"
 #include "render/render.h"
@@ -16,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 struct leme_sticky_member {
   struct leme_sticky_group *group;
@@ -31,6 +33,7 @@ struct leme_sticky_group {
   struct wlr_scene_tree *scene_tree;
   struct wl_list members;
   struct wl_list link;
+  char *home_output;
   bool pending_attach;
 };
 
@@ -189,6 +192,7 @@ static void leme_sticky_group_destroy(struct leme_sticky_group *group,
     wl_list_remove(&group->link);
   }
   leme_render_durable_group_destroy(&group->scene_tree);
+  free(group->home_output);
   free(group);
 }
 
@@ -567,6 +571,8 @@ bool leme_sticky_move_to_output(struct leme_view *view,
   }
   free(boxes);
   free((void *)views);
+  free(group->home_output);
+  group->home_output = NULL;
   if (follow) {
     leme_output_set_focused(view->server, output, false);
     leme_view_focus(view);
@@ -908,6 +914,9 @@ leme_sticky_handle_output_destroy(
         leme_ownership_effective_output(group->root) != output) {
       continue;
     }
+    if (group->home_output == NULL && leme_output_home_tracked(output)) {
+      group->home_output = strdup(output->wlr_output->name);
+    }
     wl_list_for_each(member, &group->members, link) {
       (void)leme_ownership_present_durable(
           member->view,
@@ -929,6 +938,41 @@ leme_sticky_handle_output_destroy(
       leme_view_clear_focus(server);
     }
   }
+}
+
+bool leme_sticky_restore_output(struct leme_server *server,
+                                struct leme_output *output, const char *name) {
+  struct leme_sticky_group *group;
+  bool restored = false;
+
+  if (server == NULL || output == NULL || name == NULL ||
+      server->sticky.groups.next == NULL) {
+    return false;
+  }
+  wl_list_for_each(group, &server->sticky.groups, link) {
+    struct leme_sticky_member *member;
+
+    if (group->home_output == NULL || strcmp(group->home_output, name) != 0) {
+      continue;
+    }
+    free(group->home_output);
+    group->home_output = NULL;
+    wl_list_for_each(member, &group->members, link) {
+      if (!leme_ownership_present_durable(member->view, LEME_DURABLE_OUTPUT,
+                                          output)) {
+        continue;
+      }
+      if (member->view->render_tree != NULL) {
+        wlr_scene_node_set_enabled(&member->view->render_tree->node, true);
+      }
+      member->view->box = leme_view_policy_reanchor_box(
+          member->view->box, member->anchor_area, output->usable_box);
+      member->anchor_area = output->usable_box;
+      leme_render_view_set_box(member->view, member->view->box);
+    }
+    restored = true;
+  }
+  return restored;
 }
 
 void leme_sticky_handle_usable_area(struct leme_output *output) {

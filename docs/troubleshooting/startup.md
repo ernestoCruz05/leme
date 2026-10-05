@@ -23,6 +23,12 @@ less "$state_home/leme/session.log"
 
 Set `LEME_SESSION_LOG` to another path, or to `none` to disable the session log. Keep the first error in the file; later failures often follow from it.
 
+`leme --debug` (or `-d`) also logs wlroots debug messages, such as DRM hotplug events and XWayland clipboard requests. The log grows quickly, so use it only while reproducing a problem. `leme-session` passes its arguments to Leme:
+
+```sh
+exec leme-session --debug
+```
+
 Record the build when reporting a problem:
 
 ```sh

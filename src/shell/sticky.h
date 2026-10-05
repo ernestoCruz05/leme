@@ -66,6 +66,8 @@ void leme_sticky_discard_outputs(struct leme_sticky_output_plan **plan);
 void leme_sticky_handle_output_destroy(struct leme_server *server,
                                        struct leme_output *output,
                                        struct leme_output *successor);
+bool leme_sticky_restore_output(struct leme_server *server,
+                                struct leme_output *output, const char *name);
 void leme_sticky_handle_usable_area(struct leme_output *output);
 void leme_sticky_raise_group(struct leme_view *view);
 struct leme_view *leme_sticky_focus_candidate(struct leme_server *server,

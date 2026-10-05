@@ -9,7 +9,7 @@
 #include <wlr/util/log.h>
 
 static void leme_usage(FILE *stream) {
-  fputs("usage: leme\n"
+  fputs("usage: leme [--debug]\n"
         "       leme --config-check [PATH]\n"
         "       leme --help\n"
         "       leme --version\n"
@@ -19,6 +19,7 @@ static void leme_usage(FILE *stream) {
 
 int main(int argc, char *argv[]) {
   struct leme_server server = {0};
+  enum wlr_log_importance importance = WLR_INFO;
   int status;
 
   if (argc > 1) {
@@ -44,11 +45,15 @@ int main(int argc, char *argv[]) {
       return leme_config_check(argc == 3 ? argv[2] : leme_config_path(),
                                stderr);
     }
-    leme_usage(stderr);
-    return 2;
+    if (argc != 2 ||
+        (strcmp(argv[1], "--debug") != 0 && strcmp(argv[1], "-d") != 0)) {
+      leme_usage(stderr);
+      return 2;
+    }
+    importance = WLR_DEBUG;
   }
 
-  wlr_log_init(WLR_INFO, NULL);
+  wlr_log_init(importance, NULL);
 
   if (!leme_server_init(&server)) {
     leme_server_finish(&server);

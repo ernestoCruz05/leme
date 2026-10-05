@@ -1,5 +1,6 @@
 #include "core/gate.h"
 #include "output/control.h"
+#include "output/home.h"
 #include "output/output.h"
 #include "public/server.h"
 
@@ -28,6 +29,7 @@
 #include <wlr/backend.h>
 #include <wlr/backend/headless.h>
 #include <wlr/backend/multi.h>
+#include <wlr/backend/session.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_management_v1.h>
@@ -1409,26 +1411,21 @@ leme_output_surviving(struct leme_server *server,
   return NULL;
 }
 
-static void leme_output_migrate_views(struct leme_output *from,
-                                      struct leme_output *to) {
-  struct leme_tags *source = leme_output_tags(from);
-  struct leme_tags *destination = leme_output_tags(to);
-  uint16_t id;
+static bool leme_output_session_active(const struct leme_server *server) {
+  return server->session == NULL || server->session->active;
+}
 
-  if (source == NULL || destination == NULL || source == destination) {
-    return;
-  }
-  for (id = 1; id <= source->max_tags; id++) {
-    while (source->table[id] != NULL &&
-           !wl_list_empty(&source->table[id]->views)) {
-      struct leme_view *view =
-          wl_container_of(source->table[id]->views.next, view, tag_link);
+static void leme_output_refresh_restored(struct leme_server *server) {
+  struct leme_output *output;
 
-      if (!leme_tags_adopt_view(destination, view, id)) {
-        break;
-      }
+  leme_view_refresh_fullscreen(server);
+  leme_view_arrange_instant(server);
+  wl_list_for_each(output, &server->outputs, link) {
+    if (output->wlr_output->enabled) {
+      leme_tags_refresh_visibility(leme_output_tags(output));
     }
   }
+  leme_publication_invalidate(server);
 }
 
 static void leme_output_ensure_fallback(struct leme_server *server) {
@@ -1523,7 +1520,7 @@ static void leme_output_handle_destroy(struct wl_listener *listener,
     successor = leme_output_surviving(server, output);
   }
   if (successor != NULL) {
-    leme_output_migrate_views(output, successor);
+    leme_output_home_evacuate(output, successor);
   }
   if (was_active) {
     server->focused_output = successor;
@@ -1539,7 +1536,8 @@ static void leme_output_handle_destroy(struct wl_listener *listener,
   }
   free(output);
   if (!wl_list_empty(&server->outputs)) {
-    if (!leme_output_apply_config(server, server->config, true)) {
+    if (leme_output_session_active(server) &&
+        !leme_output_apply_config(server, server->config, true)) {
       wlr_log(WLR_ERROR, "%s",
               "leme: failed to reconfigure the remaining outputs");
     }
@@ -1606,6 +1604,15 @@ static void leme_output_handle_new(struct wl_listener *listener, void *data) {
     wlr_log(WLR_ERROR, "leme: failed to configure output %s", wlr_output->name);
     leme_output_publish_configuration(server);
   }
+  if (wlr_output->enabled) {
+    const bool views = leme_output_home_restore(output, wlr_output->name);
+    const bool sticky =
+        leme_sticky_restore_output(server, output, wlr_output->name);
+
+    if (views || sticky) {
+      leme_output_refresh_restored(server);
+    }
+  }
   if (wlr_output->backend != server->headless_backend) {
     leme_output_retire_fallback(server);
   }
@@ -1613,6 +1620,7 @@ static void leme_output_handle_new(struct wl_listener *listener, void *data) {
 
 bool leme_output_init(struct leme_server *server) {
   wl_list_init(&server->outputs);
+  leme_output_home_init(server);
   server->xdg_output_manager =
       wlr_xdg_output_manager_v1_create(server->display, server->output_layout);
   server->output_manager = wlr_output_manager_v1_create(server->display);
@@ -1646,6 +1654,7 @@ void leme_output_finish(struct leme_server *server) {
     server->output_manager_test.link.prev = NULL;
   }
   server->output_manager = NULL;
+  leme_output_home_finish(server);
   if (server->outputs.next == NULL) {
     return;
   }

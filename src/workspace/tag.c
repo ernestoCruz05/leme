@@ -480,6 +480,17 @@ struct leme_tag *leme_tags_focus_id(struct leme_tags *tags, uint16_t id) {
   return leme_tags_focus_id_direction(tags, id, direction);
 }
 
+bool leme_tags_restore_focus(struct leme_tags *tags, uint16_t id) {
+  if (tags == NULL || tags->table == NULL || id == 0 || id > tags->max_tags) {
+    return false;
+  }
+  tags->focused_id = id;
+  tags->focused_is_candidate = tags->table[id] == NULL;
+  tags->previous_valid = false;
+  leme_publication_invalidate(tags->server);
+  return true;
+}
+
 static uint16_t leme_tags_last_materialized(const struct leme_tags *tags) {
   uint16_t id;
 

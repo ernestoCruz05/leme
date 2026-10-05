@@ -22,7 +22,7 @@ See the [documentation index](docs/README.md) for the user path and exact refere
 
 ## Current limits
 
-Leme does not yet provide persistent VRR policy, touch and tablet input, text-input protocols, color management, HDR, gamma control, or DRM leasing. A disconnected view does not return to its original monitor when that output reconnects.
+Leme does not yet provide persistent VRR policy, touch and tablet input, text-input protocols, color management, HDR, gamma control, or DRM leasing.
 
 See the [current limitations](docs/reference/limitations.md) and the [roadmap](ROADMAP.md).
 

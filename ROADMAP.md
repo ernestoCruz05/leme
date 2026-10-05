@@ -140,7 +140,6 @@ The following work is outside the current daily-driver target:
 - color management and HDR;
 - gamma control and night-light integration;
 - DRM leasing;
-- restoring views to their original output after disconnect and reconnect;
 - session restoration across compositor or graphical-session restarts;
 - broader desktop automation beyond the existing `timao` control interface.
 

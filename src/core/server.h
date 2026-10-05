@@ -124,6 +124,7 @@ struct leme_server {
   bool publication_dirty;
   struct leme_output *focused_output;
   struct wl_list outputs;
+  struct wl_list output_homes;
   struct leme_capture *capture;
   struct leme_ipc *ipc;
   struct leme_public_model *public_model;

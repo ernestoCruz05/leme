@@ -8,7 +8,8 @@ A useful report includes:
 - the output of `leme --version`;
 - the smallest configuration that still reproduces the crash;
 - exact reproduction steps, including native Wayland or XWayland clients;
-- the complete Leme stderr or session log from startup through the crash;
+- the complete Leme stderr or session log from startup through the crash,
+  from a session started with `--debug` if you can reproduce it;
 - relevant kernel lines;
 - a backtrace or core dump when available;
 - output, GPU, driver, input device, login manager, and session-service details.

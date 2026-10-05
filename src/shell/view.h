@@ -85,6 +85,8 @@ struct leme_view {
   struct wl_listener new_popup;
   struct wl_listener destroy;
   char *scratchpad_name;
+  char *home_output;
+  uint16_t home_tag;
   struct leme_sticky_member *sticky_member;
   struct leme_box scratchpad_anchor_area;
   struct leme_box deferred_configure_box;

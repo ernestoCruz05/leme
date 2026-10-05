@@ -82,6 +82,7 @@ leme_tags_step_occupied(struct leme_tags *tags,
 uint16_t leme_tags_adjacent_id(const struct leme_tags *tags,
                                enum leme_tag_change_direction direction);
 bool leme_tags_focus_last(struct leme_tags *tags);
+bool leme_tags_restore_focus(struct leme_tags *tags, uint16_t id);
 bool leme_tags_remove_empty(struct leme_tags *tags, uint16_t id);
 bool leme_tags_assign_view_to(struct leme_tags *tags, struct leme_view *view,
                               uint16_t id);

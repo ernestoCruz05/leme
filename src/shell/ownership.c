@@ -2,6 +2,7 @@
 #include "public/server.h"
 
 #include "core/gate.h"
+#include "output/home.h"
 #include "output/output.h"
 #include "shell/ownership_internal.h"
 #include "shell/view.h"
@@ -465,6 +466,7 @@ void leme_ownership_replace_tag(struct leme_view *view, struct leme_tag *source,
   assert(view != NULL && source != NULL && destination != NULL &&
          view->owner.kind == LEME_VIEW_OWNER_TAG &&
          view->owner.value.tag == source);
+  leme_output_home_forget_view(view);
   view->owner.value.tag = destination;
   leme_public_server_invalidate(view->server);
 }
@@ -473,6 +475,7 @@ void leme_ownership_release_tag(struct leme_view *view, struct leme_tag *tag) {
   assert(view != NULL && tag != NULL &&
          view->owner.kind == LEME_VIEW_OWNER_TAG &&
          view->owner.value.tag == tag);
+  leme_output_home_forget_view(view);
   view->owner = (struct leme_view_owner){
       .kind = LEME_VIEW_OWNER_NONE,
   };
