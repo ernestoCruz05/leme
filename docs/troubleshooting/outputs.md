@@ -22,6 +22,24 @@ Remove a hardware-specific `output` block to recover. Leme then uses each output
 
 Output-management clients can request temporary positions and modes. Reload restores scfg policy. Overlapping output geometry and requests that disable every output are rejected.
 
+## Monitor on a secondary GPU stays dark
+
+On a laptop, some ports are often wired to the discrete GPU. With `secondary_gpu on_demand`, the default, Leme opens that GPU only after the kernel reports the hotplug. The log shows each step:
+
+```text
+leme: /dev/dri/card0 stays closed until a monitor is connected
+leme: opened /dev/dri/card0
+leme: closing /dev/dri/card0, nothing is connected to it
+```
+
+If plugging the monitor in prints nothing, check that the kernel sends the event:
+
+```sh
+udevadm monitor --kernel --subsystem-match=drm
+```
+
+A `change` line for that card should appear when you plug the monitor in. If none appears, set `secondary_gpu always` in the unnamed `output` block and reload. The reload opens the GPU and finds the monitor that is already plugged in.
+
 ## Output does not power off or return
 
 Confirm that Leme advertises the power-management global:

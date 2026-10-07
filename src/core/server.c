@@ -11,6 +11,7 @@
 #include "public/server.h"
 #include "render/graphics.h"
 #include "shell/layer.h"
+#include "output/gpu.h"
 #include "output/output.h"
 #include "protocols/output_power.h"
 #include "render/render.h"
@@ -148,9 +149,7 @@ bool leme_server_init(struct leme_server *server) {
             "leme: public model unavailable; compositor startup continues");
   }
 
-  server->backend = wlr_backend_autocreate(
-      wl_display_get_event_loop(server->display), &server->session);
-  if (server->backend == NULL) {
+  if (!leme_gpu_create_backend(server)) {
     wlr_log(WLR_ERROR, "%s", "leme: failed to create backend");
     return false;
   }
@@ -353,6 +352,7 @@ void leme_server_finish(struct leme_server *server) {
     server->session_active.link.next = NULL;
     server->session_active.link.prev = NULL;
   }
+  leme_gpu_finish(server);
   if (server->backend != NULL) {
     wlr_backend_destroy(server->backend);
     server->backend = NULL;

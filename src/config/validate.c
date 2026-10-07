@@ -7,6 +7,7 @@
 #include "core/session_environment.h"
 #include "input/input.h"
 #include "input/public.h"
+#include "output/gpu.h"
 #include "output/output.h"
 #include "protocols/desktop.h"
 #include "render/render.h"
@@ -511,6 +512,7 @@ bool leme_config_apply(struct leme_server *server, struct leme_config *next,
     leme_render_refresh_views(server);
     leme_tags_refresh_visibility(leme_focused_tags(server));
   }
+  leme_gpu_apply_config(server);
   leme_config_destroy(old);
   free(resizes);
   return true;

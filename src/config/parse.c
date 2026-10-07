@@ -2709,15 +2709,14 @@ leme_config_parse_output_policy(struct leme_config *config,
                                 const struct leme_scfg_directive *directive,
                                 const char *path, char **error) {
   static const char *const output_policy_keys[] = {
-      "cross_output_focus",
-      "cross_output_move",
-      "cross_output_drag",
-      "warp_cursor",
+      "cross_output_focus", "cross_output_move", "cross_output_drag",
+      "warp_cursor",        "secondary_gpu",
   };
   const struct leme_scfg_directive *dir_focus = NULL;
   const struct leme_scfg_directive *dir_move = NULL;
   const struct leme_scfg_directive *dir_drag = NULL;
   const struct leme_scfg_directive *dir_warp = NULL;
+  const struct leme_scfg_directive *dir_gpu = NULL;
   size_t index;
 
   (void)path;
@@ -2725,13 +2724,65 @@ leme_config_parse_output_policy(struct leme_config *config,
   for (index = 0; index < directive->children.directives_len; index++) {
     const struct leme_scfg_directive *entry =
         &directive->children.directives[index];
+    const size_t key_count =
+        sizeof(output_policy_keys) / sizeof(output_policy_keys[0]);
+    size_t key = 0;
     bool value;
 
+    while (key < key_count &&
+           strcmp(entry->name, output_policy_keys[key]) != 0) {
+      key++;
+    }
+    if (key == key_count) {
+      const char *nearest =
+          leme_config_nearest_key(entry->name, output_policy_keys, key_count);
+      char help_buf[128] = {0};
+      struct leme_reject_extra extra = {0};
+
+      if (nearest != NULL) {
+        snprintf(help_buf, sizeof(help_buf),
+                 "a directive with a similar name exists: `%s`", nearest);
+        extra.help = help_buf;
+      }
+      if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                       "unknown output policy property %s",
+                                       entry->name)) {
+        return false;
+      }
+      continue;
+    }
     if (entry->params_len != 1 || entry->children.directives_len != 0) {
       if (!leme_config_reject(config, entry, -1,
                               "output policy property requires one value")) {
         return false;
       }
+      continue;
+    }
+    if (strcmp(entry->name, "secondary_gpu") == 0) {
+      if (dir_gpu != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_gpu,
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(
+                config, entry, -1, &extra,
+                "duplicate output policy property secondary_gpu")) {
+          return false;
+        }
+        continue;
+      }
+      if (strcmp(entry->params[0], "on_demand") == 0) {
+        config->output_policy.secondary_gpu = LEME_SECONDARY_GPU_ON_DEMAND;
+      } else if (strcmp(entry->params[0], "always") == 0) {
+        config->output_policy.secondary_gpu = LEME_SECONDARY_GPU_ALWAYS;
+      } else {
+        if (!leme_config_reject(config, entry, 0,
+                                "secondary_gpu must be on_demand or always")) {
+          return false;
+        }
+        continue;
+      }
+      dir_gpu = entry;
       continue;
     }
     if (strcmp(entry->params[0], "true") == 0) {
@@ -2805,23 +2856,6 @@ leme_config_parse_output_policy(struct leme_config *config,
       }
       config->output_policy.warp_cursor = value;
       dir_warp = entry;
-    } else {
-      const char *nearest = leme_config_nearest_key(
-          entry->name, output_policy_keys,
-          sizeof(output_policy_keys) / sizeof(output_policy_keys[0]));
-      char help_buf[128] = {0};
-      struct leme_reject_extra extra = {0};
-
-      if (nearest != NULL) {
-        snprintf(help_buf, sizeof(help_buf),
-                 "a directive with a similar name exists: `%s`", nearest);
-        extra.help = help_buf;
-      }
-      if (!leme_config_reject_detailed(config, entry, -1, &extra,
-                                       "unknown output policy property %s",
-                                       entry->name)) {
-        return false;
-      }
     }
   }
   return true;

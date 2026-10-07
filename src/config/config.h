@@ -60,11 +60,17 @@ struct leme_output_config {
   bool has_position;
 };
 
+enum leme_secondary_gpu {
+  LEME_SECONDARY_GPU_ON_DEMAND,
+  LEME_SECONDARY_GPU_ALWAYS,
+};
+
 struct leme_output_policy {
   bool cross_output_focus;
   bool cross_output_move;
   bool cross_output_drag;
   bool warp_cursor;
+  enum leme_secondary_gpu secondary_gpu;
 };
 
 #define LEME_CURSOR_SIZE_DEFAULT 24

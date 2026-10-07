@@ -184,7 +184,9 @@ PUBLIC_SCHEMA(OUTPUT_POLICY, "output_policy", false,
   PUBLIC_FIELD("cross_output_drag", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
       "Configured cross output drag"),
   PUBLIC_FIELD("warp_cursor", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
-      "Configured warp cursor")
+      "Configured warp cursor"),
+  PUBLIC_FIELD("secondary_gpu", SECONDARY_GPU, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "When secondary GPUs are opened")
 )
 PUBLIC_SCHEMA(CURSOR, "cursor", false,
   PUBLIC_FIELD("theme", STRING, true, true, NULL, SENSITIVE, ALWAYS, "config_writes",

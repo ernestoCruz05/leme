@@ -120,6 +120,7 @@ output {
     cross_output_move false
     cross_output_drag true
     warp_cursor true
+    secondary_gpu on_demand
 }
 
 output "DP-1" {

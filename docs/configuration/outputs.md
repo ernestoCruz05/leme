@@ -65,6 +65,25 @@ output {
 
 The unnamed policy block and named connector blocks are independent.
 
+## Secondary GPUs
+
+On machines with more than one GPU, such as a laptop with integrated and discrete graphics, Leme renders on the boot GPU. The other GPUs are only needed for monitors plugged into them. `secondary_gpu` in the unnamed `output` block decides when Leme opens them:
+
+```scfg
+output {
+    secondary_gpu on_demand
+}
+```
+
+| Value | Effect |
+| --- | --- |
+| `on_demand` (default) | Leme opens a secondary GPU when a monitor is connected to it and closes it 5 seconds after the last one is unplugged. |
+| `always` | Leme opens every GPU at startup and keeps them open. |
+
+With `on_demand`, Leme checks each secondary GPU's connectors once at startup and again whenever the kernel reports a hotplug on that GPU. Both checks wake the GPU briefly. While nothing is connected to it, Leme keeps no file open on it, so its driver can power it down and the card can be unbound or handed to a virtual machine.
+
+`reload_config` applies a change. Setting `WLR_DRM_DEVICES` in the environment overrides this setting: Leme then opens exactly the devices it lists, as plain wlroots does.
+
 ## Publication
 
 Leme publishes tags and managed windows for bars, taskbars, and window pickers. The `publication` block controls what happens when an activation request would change the focused output or tag:

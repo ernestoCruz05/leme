@@ -22,6 +22,7 @@ struct leme_capture;
 struct leme_ipc;
 struct leme_data;
 struct leme_desktop;
+struct leme_gpu;
 struct leme_xwayland;
 struct leme_input_protocols;
 struct leme_layer_surface;
@@ -79,6 +80,7 @@ struct leme_server {
   struct wlr_backend *backend;
   struct wlr_backend *headless_backend;
   struct wlr_session *session;
+  struct leme_gpu *gpu;
   struct wlr_renderer *renderer;
   uint32_t render_timing_seconds;
   bool arrange_instant;

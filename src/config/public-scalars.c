@@ -39,6 +39,16 @@ static const char *coverage_name(enum leme_fullscreen_coverage coverage) {
   return NULL;
 }
 
+static const char *secondary_gpu_name(enum leme_secondary_gpu policy) {
+  switch (policy) {
+  case LEME_SECONDARY_GPU_ON_DEMAND:
+    return "on_demand";
+  case LEME_SECONDARY_GPU_ALWAYS:
+    return "always";
+  }
+  return NULL;
+}
+
 static const char *gesture_name(enum leme_workspace_gesture_mode mode) {
   switch (mode) {
   case LEME_WORKSPACE_GESTURE_SINGLE:
@@ -192,7 +202,7 @@ output_policy_value(struct leme_public_builder *b,
                     const struct leme_config *config,
                     struct leme_public_value **out) {
   struct leme_public_value *policy = NULL;
-  if (leme_public_object(b, 4, &policy) != LEME_PUBLIC_OK ||
+  if (leme_public_object(b, 5, &policy) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, policy, LEME_PUBLIC_TEXT("cross_output_focus"),
                            config->output_policy.cross_output_focus) !=
           LEME_PUBLIC_OK ||
@@ -203,7 +213,11 @@ output_policy_value(struct leme_public_builder *b,
                            config->output_policy.cross_output_drag) !=
           LEME_PUBLIC_OK ||
       leme_public_put_bool(b, policy, LEME_PUBLIC_TEXT("warp_cursor"),
-                           config->output_policy.warp_cursor) != LEME_PUBLIC_OK)
+                           config->output_policy.warp_cursor) !=
+          LEME_PUBLIC_OK ||
+      put_enum(b, policy, LEME_PUBLIC_TEXT("secondary_gpu"),
+               secondary_gpu_name(config->output_policy.secondary_gpu)) !=
+          LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = policy;
   return LEME_PUBLIC_OK;

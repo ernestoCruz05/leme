@@ -46,6 +46,8 @@ wayland_server_dep = dependency('wayland-server', version: '>=1.22')
 xkbcommon_dep = dependency('xkbcommon', version: '>=1.5')
 libinput_dep = dependency('libinput')
 pixman_dep = dependency('pixman-1')
+libdrm_dep = dependency('libdrm')
+libudev_dep = dependency('libudev')
 wayland_scanner = find_program('wayland-scanner')
 layer_shell_header = custom_target(
   'wlr-layer-shell-server-header',
@@ -103,6 +105,7 @@ leme_sources = files(
   'src/input/pointer.c',
   'src/input/swipe_tracker.c',
   'src/input/control.c',
+  'src/output/gpu.c',
   'src/output/output.c',
   'src/output/public.c',
   'src/output/placement.c',
@@ -165,6 +168,8 @@ leme_dependencies = [
   xkbcommon_dep,
   libinput_dep,
   pixman_dep,
+  libdrm_dep,
+  libudev_dep,
   leme_public_math_dep,
   yyjson_dep,
 ]

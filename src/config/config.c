@@ -221,6 +221,7 @@ void leme_config_set_output_defaults(struct leme_config *config) {
       .cross_output_move = false,
       .cross_output_drag = true,
       .warp_cursor = true,
+      .secondary_gpu = LEME_SECONDARY_GPU_ON_DEMAND,
   };
   config->tag_defaults = (struct leme_tag_settings){
       .layout = LEME_LAYOUT_DWINDLE,
