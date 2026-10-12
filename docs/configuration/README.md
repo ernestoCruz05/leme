@@ -14,8 +14,8 @@ A valid reload applies the smallest recoverable changes it can. Some malformed d
 
 ## Examples
 
-- [`config/leme.scfg`](../../config/leme.scfg) is the small starting point. Copy it before your first session.
-- [`config/leme-full.scfg`](../../config/leme-full.scfg) is the complete annotated example. It includes hardware-specific output and pointer examples, modes, binding groups, window rules, publication, and startup commands.
+- [`config/leme.scfg`](https://github.com/ernestoCruz05/leme/blob/main/config/leme.scfg) is the small starting point. Copy it before your first session.
+- [`config/leme-full.scfg`](https://github.com/ernestoCruz05/leme/blob/main/config/leme-full.scfg) is the complete annotated example. It includes hardware-specific output and pointer examples, modes, binding groups, window rules, publication, and startup commands.
 
 The complete file is linked rather than pasted here. Change connector names, modes, pointer device names, and external programs before using those parts of it.
 

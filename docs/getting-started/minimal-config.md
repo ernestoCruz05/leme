@@ -1,6 +1,6 @@
 # Minimal configuration
 
-The repository ships a small starting point at [`config/leme.scfg`](../../config/leme.scfg). Copy it to Leme's user configuration path:
+The repository ships a small starting point at [`config/leme.scfg`](https://github.com/ernestoCruz05/leme/blob/main/config/leme.scfg). Copy it to Leme's user configuration path:
 
 ```sh
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -21,4 +21,4 @@ Replace `foot` with the terminal command you use. The `spawn` command receives a
 
 The minimal file leaves output selection, pointer settings, appearance, window rules, startup commands, and extra binding modes at their defaults. See the [configuration reference](../configuration/README.md) when you need one of those settings.
 
-For a complete annotated example, see [`config/leme-full.scfg`](../../config/leme-full.scfg). It includes hardware-specific output and pointer examples, binding groups, modes, rules, publication policy, and startup commands. Adapt those values before using them.
+For a complete annotated example, see [`config/leme-full.scfg`](https://github.com/ernestoCruz05/leme/blob/main/config/leme-full.scfg). It includes hardware-specific output and pointer examples, binding groups, modes, rules, publication policy, and startup commands. Adapt those values before using them.
