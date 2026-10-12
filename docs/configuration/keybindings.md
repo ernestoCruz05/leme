@@ -85,4 +85,4 @@ Rules for inheritance are:
 - a name cannot be used for both a group and a mode;
 - unused and empty groups are allowed.
 
-The full group and mode example is in [`config/leme-full.scfg`](../../config/leme-full.scfg). The [timao scripting guide](../guides/writing-timao-scripts.md) shows how an external script can select a mode.
+The full group and mode example is in [`config/leme-full.scfg`](https://github.com/ernestoCruz05/leme/blob/main/config/leme-full.scfg). The [timao scripting guide](../guides/writing-timao-scripts.md) shows how an external script can select a mode.

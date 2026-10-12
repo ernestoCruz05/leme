@@ -132,7 +132,7 @@ Query the configuration path separately with `timao eval '(query (get (config) "
 The `config_errors` block is accepted, but the current build does not draw an
 on-screen report. Its `show`, `position`, and
 `timeout` values have no visible effect. Use the session log or the diagnostics
-query above until the banner listed on the [roadmap](../../ROADMAP.md) is available.
+query above until the banner listed on the [roadmap](https://github.com/ernestoCruz05/leme/blob/main/ROADMAP.md) is available.
 
 A successful reload is transactional. Leme parses, compiles, and tests the
 replacement before changing the running session. See [startup and

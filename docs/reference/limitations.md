@@ -1,6 +1,6 @@
 # Limitations
 
-These limitations describe the current build. Planned and deferred work is tracked in the [roadmap](../../ROADMAP.md).
+These limitations describe the current build. Planned and deferred work is tracked in the [roadmap](https://github.com/ernestoCruz05/leme/blob/main/ROADMAP.md).
 
 - Leme has no persistent VRR or adaptive-sync policy.
 - Touch, tablet, gesture, text-input, and input-method support is not implemented.
