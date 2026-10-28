@@ -34,6 +34,15 @@ enum leme_tag_change_direction {
   LEME_TAG_CHANGE_FORWARD = 1,
 };
 
+#define LEME_TAGS_MAX 64
+
+struct leme_tag_memory {
+  enum leme_layout_kind kind;
+  double mfact;
+  uint16_t nmaster;
+  bool valid;
+};
+
 struct leme_tag {
   uint16_t id;
   struct leme_tags *owner;
@@ -59,6 +68,7 @@ struct leme_tags {
   enum leme_tag_change_direction last_change_direction;
   bool last_change_direction_valid;
   struct leme_tag **table;
+  struct leme_tag_memory memory[LEME_TAGS_MAX + 1];
 };
 
 bool leme_tags_init(struct leme_tags *tags, uint16_t initial_tags,
@@ -87,6 +97,8 @@ bool leme_tags_remove_empty(struct leme_tags *tags, uint16_t id);
 bool leme_tags_assign_view_to(struct leme_tags *tags, struct leme_view *view,
                               uint16_t id);
 void leme_tags_assign_view(struct leme_tags *tags, struct leme_view *view);
+struct leme_view *leme_tags_insert_anchor(const struct leme_tag *tag,
+                                          const struct leme_view *added);
 bool leme_tags_move_view(struct leme_tags *tags, struct leme_view *view,
                          uint16_t id);
 bool leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
@@ -123,12 +135,13 @@ void leme_tags_attach_floating(struct leme_tags *tags, struct leme_view *view,
                                uint16_t id);
 void leme_tags_remove_view(struct leme_view *view);
 void leme_tags_refresh_visibility(struct leme_tags *tags);
-enum leme_layout_kind leme_tags_layout_kind(const struct leme_tags *tags);
 bool leme_tags_swap_list_order(struct leme_tag *tag, struct leme_view *first,
                                struct leme_view *second);
 bool leme_tags_set_layout(struct leme_tags *tags, enum leme_layout_kind kind);
 bool leme_tag_set_layout(struct leme_tag *tag, enum leme_layout_kind kind);
 bool leme_tags_cycle_layout(struct leme_tags *tags);
+enum leme_layout_kind leme_tags_id_layout(const struct leme_tags *tags,
+                                          uint16_t id);
 void leme_tags_apply_settings(struct leme_tags *tags,
                               const struct leme_config *previous,
                               const struct leme_config *next);
@@ -138,6 +151,8 @@ double leme_tags_ring_wrap(double position, size_t count);
 size_t leme_tags_ring(const struct leme_tags *tags,
                       enum leme_tag_change_direction direction, uint16_t *ids,
                       size_t capacity);
+size_t leme_tags_occupied_ring(const struct leme_tags *tags, uint16_t *ids,
+                               size_t capacity);
 bool leme_tags_ring_index(const struct leme_tags *tags, uint16_t tag_id,
                           size_t *index_out);
 double leme_tags_position(const struct leme_tags *tags);

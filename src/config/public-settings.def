@@ -120,9 +120,7 @@ PUBLIC_SCHEMA(TAG_SETTINGS, "tag_settings", false,
   PUBLIC_FIELD("gap", PIXELS, false, true, "logical_px", SENSITIVE, ALWAYS, NULL,
       "Resolved gap; inherits global style gap when not assigned"),
   PUBLIC_FIELD("split_ratio", LAYOUT_RATIO, false, true, "ratio", SENSITIVE, ALWAYS, NULL,
-      "Dwindle split fraction"),
-  PUBLIC_FIELD("collapse_width", COLLAPSE, false, true, "logical_px", SENSITIVE, ALWAYS, NULL,
-      "Accordion collapsed width")
+      "Dwindle split fraction")
 )
 PUBLIC_SCHEMA(TAG_ASSIGNMENTS, "tag_assignments", true,
   PUBLIC_FIELD("layout", LAYOUT, false, false, NULL, SENSITIVE, ALWAYS, NULL,
@@ -136,9 +134,7 @@ PUBLIC_SCHEMA(TAG_ASSIGNMENTS, "tag_assignments", true,
   PUBLIC_FIELD("gap", U16, false, false, "logical_px", SENSITIVE, ALWAYS, NULL,
       "Resolved gap; inherits global style gap when not assigned"),
   PUBLIC_FIELD("split_ratio", LAYOUT_RATIO, false, false, "ratio", SENSITIVE, ALWAYS, NULL,
-      "Dwindle split fraction"),
-  PUBLIC_FIELD("collapse_width", COLLAPSE, false, false, "logical_px", SENSITIVE, ALWAYS, NULL,
-      "Accordion collapsed width")
+      "Dwindle split fraction")
 )
 PUBLIC_SCHEMA(TAG_RULE, "tag_rule", false,
   PUBLIC_FIELD("ids", TAG_NUMBERS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
@@ -205,6 +201,8 @@ PUBLIC_SCHEMA(POINTER_DEFAULTS, "pointer_defaults", false,
       "Requested left handed"),
   PUBLIC_FIELD("tap", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
       "Requested tap"),
+  PUBLIC_FIELD("focus_follows_mouse", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
+      "Focus the view the pointer enters"),
   PUBLIC_FIELD("rules", POINTER_RULES, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Device rules in configuration order")
 )
@@ -258,7 +256,9 @@ PUBLIC_SCHEMA(WORKSPACE_SWITCH, "workspace_switch", false,
   PUBLIC_FIELD("deceleration", OPEN_RATIO, false, true, "ratio", SENSITIVE, ALWAYS, "config_writes",
       "Inertial deceleration strictly between zero and one"),
   PUBLIC_FIELD("velocity_window", POSITIVE_INT, false, true, "ms", SENSITIVE, ALWAYS, "config_writes",
-      "Velocity sampling window")
+      "Velocity sampling window"),
+  PUBLIC_FIELD("occupied", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
+      "Swipe only through tags that have a window")
 )
 PUBLIC_SCHEMA(PUBLICATION, "publication", false,
   PUBLIC_FIELD("activation", ACTIVATION, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
@@ -310,7 +310,9 @@ PUBLIC_SCHEMA(BINDING, "binding", false,
   PUBLIC_FIELD("keysym", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Public XKB keysym name"),
   PUBLIC_FIELD("command", COMMAND, false, true, NULL, SENSITIVE, ALWAYS, NULL,
-      "Configured public command; not authorization to invoke it remotely")
+      "Configured public command; not authorization to invoke it remotely"),
+  PUBLIC_FIELD("repeat", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "The command repeats while the key is held")
 )
 PUBLIC_SCHEMA(COMMAND, "command", false,
   PUBLIC_FIELD("name", NONEMPTY, false, true, NULL, SENSITIVE, ALWAYS, NULL,

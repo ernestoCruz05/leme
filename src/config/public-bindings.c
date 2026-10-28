@@ -20,6 +20,8 @@ static const char *command_name(enum leme_command_type type) {
     return "focus_last_tag";
   case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
     return "focus_previous_view";
+  case LEME_COMMAND_FOCUS_URGENT:
+    return "focus_urgent";
   case LEME_COMMAND_MOVE_DIRECTION:
     return "move";
   case LEME_COMMAND_MOVE_VIEW_TO_TAG:
@@ -199,6 +201,7 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
     break;
   case LEME_COMMAND_FOCUS_LAST_TAG:
   case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
+  case LEME_COMMAND_FOCUS_URGENT:
   case LEME_COMMAND_SWITCH_LAYOUT:
   case LEME_COMMAND_TOGGLE_FLOATING:
   case LEME_COMMAND_TOGGLE_STICKY:
@@ -288,7 +291,7 @@ static enum leme_public_status binding_value(struct leme_public_builder *b,
   if (written <= 0 || (size_t)written >= sizeof(keysym))
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
   struct leme_public_value *record = NULL, *modifiers = NULL, *command = NULL;
-  if (leme_public_object(b, 3, &record) != LEME_PUBLIC_OK ||
+  if (leme_public_object(b, 4, &record) != LEME_PUBLIC_OK ||
       modifiers_value(b, binding->modifiers, &modifiers) != LEME_PUBLIC_OK ||
       command_value(b, &binding->command, &command) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("modifiers"),
@@ -297,7 +300,9 @@ static enum leme_public_status binding_value(struct leme_public_builder *b,
                            (struct leme_public_text){keysym, (size_t)written},
                            false) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("command"), command) !=
-          LEME_PUBLIC_OK)
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("repeat"),
+                           binding->repeat) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = record;
   return LEME_PUBLIC_OK;

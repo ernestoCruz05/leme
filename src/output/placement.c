@@ -98,6 +98,8 @@ void leme_placement_resolve(const struct leme_placement_request *requests,
                             size_t count, struct leme_placement *placements) {
   size_t index;
   bool progress;
+  int min_x = 0;
+  int min_y = 0;
 
   for (index = 0; index < count; index++) {
     placements[index] = (struct leme_placement){0};
@@ -128,5 +130,18 @@ void leme_placement_resolve(const struct leme_placement_request *requests,
         leme_placement_right_edge(requests, count, placements);
     placements[index].y = 0;
     placements[index].placed = true;
+  }
+
+  for (index = 0; index < count; index++) {
+    if (placements[index].x < min_x) {
+      min_x = placements[index].x;
+    }
+    if (placements[index].y < min_y) {
+      min_y = placements[index].y;
+    }
+  }
+  for (index = 0; index < count; index++) {
+    placements[index].x = leme_placement_subtract(placements[index].x, min_x);
+    placements[index].y = leme_placement_subtract(placements[index].y, min_y);
   }
 }

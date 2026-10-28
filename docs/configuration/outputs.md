@@ -41,7 +41,9 @@ A block accepts at most one relation. Placement resolves explicit positions firs
 
 A block may contain both `position` and a relation. `position` wins and the ignored relation is logged. Overlapping outputs are rejected on reload and fall back to automatic placement at startup.
 
-The scfg output block is persistent policy. `zwlr_output_manager_v1` clients can request temporary modes, scales, transforms, positions, and multi-output arrangements. The next configuration reload restores scfg values. Adaptive sync requests remain rejected.
+When placement leaves an output at a negative coordinate, Leme shifts the whole layout so it starts at 0. X11 programs can't reach negative coordinates: Xwayland's screen always starts at 0, so clicks on X11 windows there would miss. With `eDP-1` at `position 0 0` and `DP-3` `top_of "eDP-1"`, DP-3 ends up at 0,0 and eDP-1 at 0,1080. Every connected output counts, including one that is powered off, so eDP-1 keeps its place until DP-3 is unplugged.
+
+The scfg output block is persistent policy. `zwlr_output_manager_v1` clients can request temporary modes, scales, transforms, positions, and multi-output arrangements. They aren't shifted, so a negative position requested that way breaks input for X11 windows on that output. The next configuration reload restores scfg values. Adaptive sync requests remain rejected.
 
 ## Cross-output policy
 

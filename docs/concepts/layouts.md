@@ -17,10 +17,6 @@ sets that area's share of the available width. Remaining windows occupy the
 stack beside it. Use `move` and `resize` for adjustments; tiled SUPER-drag is
 for dwindle tags.
 
-## Accordion
-
-Accordion keeps non-focused views as narrow strips in tag order and gives the focused view the remaining space. It focuses a strip on click instead of on pointer hover. Otherwise, moving the pointer over a strip could change the geometry underneath it and move focus again.
-
 ## Persistent and runtime changes
 
 A `set_layout` command changes the live tag. Runtime layout changes do not rewrite the scfg file. A configuration reload resets a tag only when its effective configured settings changed; unrelated reloads preserve runtime layout and resize adjustments.

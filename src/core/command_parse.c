@@ -20,13 +20,14 @@ static const struct leme_command_usage leme_command_usages[] = {
     {"focus_tag", "focus_tag ID"},
     {"focus_last_tag", "focus_last_tag"},
     {"focus_previous_view", "focus_previous_view"},
+    {"focus_urgent", "focus_urgent"},
     {"focus", "focus left|right|up|down"},
     {"move", "move left|right|up|down [PIXELS]"},
     {"move_view_to_tag", "move_view_to_tag next|previous|ID [follow]"},
     {"focus_output", "focus_output left|right|up|down|NAME"},
     {"move_view_to_output",
      "move_view_to_output left|right|up|down|NAME [follow]"},
-    {"set_layout", "set_layout dwindle|master_stack|accordion"},
+    {"set_layout", "set_layout dwindle|master_stack"},
     {"switch_layout", "switch_layout"},
     {"remove_empty_tag", "remove_empty_tag ID"},
     {"toggle_floating", "toggle_floating"},
@@ -88,13 +89,13 @@ static bool leme_command_parse_u16(const char *text, uint16_t *value) {
   return true;
 }
 
-static bool leme_command_parse_nonnegative(const char *text, int *value) {
+static bool leme_command_parse_int(const char *text, long minimum, int *value) {
   char *end;
   long parsed;
 
   errno = 0;
   parsed = strtol(text, &end, 10);
-  if (errno != 0 || text[0] == '\0' || *end != '\0' || parsed < 0 ||
+  if (errno != 0 || text[0] == '\0' || *end != '\0' || parsed < minimum ||
       parsed > INT_MAX) {
     return false;
   }
@@ -108,8 +109,6 @@ static bool leme_command_parse_layout_kind(const char *text,
     *kind = LEME_LAYOUT_DWINDLE;
   } else if (strcmp(text, "master_stack") == 0) {
     *kind = LEME_LAYOUT_MASTER_STACK;
-  } else if (strcmp(text, "accordion") == 0) {
-    *kind = LEME_LAYOUT_ACCORDION;
   } else {
     return false;
   }
@@ -210,12 +209,14 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
     command->type = LEME_COMMAND_FOCUS_LAST_TAG;
   } else if (strcmp(name, "focus_previous_view") == 0 && arguments == 0) {
     command->type = LEME_COMMAND_FOCUS_PREVIOUS_VIEW;
+  } else if (strcmp(name, "focus_urgent") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_FOCUS_URGENT;
   } else if (strcmp(name, "move") == 0 && (arguments == 1 || arguments == 2)) {
     command->type = LEME_COMMAND_MOVE_DIRECTION;
     command->amount = 40;
     if (!leme_command_parse_direction(params[1], &command->direction) ||
         (arguments == 2 &&
-         (!leme_command_parse_nonnegative(params[2], &command->amount) ||
+         (!leme_command_parse_int(params[2], 0, &command->amount) ||
           command->amount == 0))) {
       goto invalid;
     }
@@ -279,7 +280,7 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
     } else {
       goto invalid;
     }
-    if (!leme_command_parse_nonnegative(params[2], &command->amount) ||
+    if (!leme_command_parse_int(params[2], -INT_MAX, &command->amount) ||
         command->amount == 0) {
       goto invalid;
     }

@@ -8,7 +8,7 @@
 timao --help
 timao --version
 timao toggle_floating
-timao set_layout accordion
+timao set_layout master_stack
 timao get session mode
 timao watch tags
 timao eval '(query (views))'
@@ -26,7 +26,7 @@ The client uses `--socket` when supplied. Otherwise it uses a nonempty `LEME_SOC
 
 Command names and argument syntax are documented in the [command reference](commands.md):
 
-- `focus_next_tag`, `focus_previous_tag`, `focus_last_tag`, `focus_previous_view`
+- `focus_next_tag`, `focus_previous_tag`, `focus_last_tag`, `focus_previous_view`, `focus_urgent`
 - `focus_tag`, `focus`, `focus_output`
 - `switch_layout`, `set_layout`, `remove_empty_tag`, `mode`
 - `toggle_floating`, `toggle_sticky`, `toggle_fullscreen`, `close_view`

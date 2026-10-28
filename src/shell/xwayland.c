@@ -277,7 +277,7 @@ static void leme_xwayland_handle_request_configure(struct wl_listener *listener,
   if (!view->mapped) {
     view->box = leme_xwayland_requested_box(wrapper, requested);
     leme_view_configure(view, view->box);
-  } else if (view->floating) {
+  } else if (view->floating && !view->fullscreen) {
     view->box = leme_xwayland_requested_box(
         wrapper, leme_render_view_frame_box(view, requested));
     leme_render_view_set_box(view, view->box);

@@ -21,6 +21,7 @@
 #include "workspace/layout.h"
 #include "workspace/tag.h"
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -284,13 +285,12 @@ enum leme_control_code leme_shell_control_prepare(
 
     double amt_num = 0.0;
     leme_public_as_number(amt_val, &amt_num);
-    int amount = (int)amt_num;
-    if (amount <= 0) {
+    if (amt_num == 0.0 || amt_num < -INT_MAX || amt_num > INT_MAX) {
       return shell_prepare_fail(server, prep, error,
                                 LEME_CONTROL_INVALID_ARGUMENT,
-                                "resize amount must be positive");
+                                "resize amount must be a non-zero pixel count");
     }
-    prep->resize_amount = amount;
+    prep->resize_amount = (int)amt_num;
   }
 
   *out = (struct leme_control_prepared *)prep;
@@ -516,6 +516,7 @@ static bool command_control_lowered(enum leme_command_type type) {
   switch (type) {
   case LEME_COMMAND_FOCUS_DIRECTION:
   case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
+  case LEME_COMMAND_FOCUS_URGENT:
   case LEME_COMMAND_FOCUS_LAST_TAG:
   case LEME_COMMAND_FOCUS_OUTPUT:
   case LEME_COMMAND_MOVE_DIRECTION:
@@ -679,7 +680,8 @@ command_control_execute_one(struct leme_server *server,
   }
 
   if (prep->cmd.type == LEME_COMMAND_FOCUS_DIRECTION ||
-      prep->cmd.type == LEME_COMMAND_FOCUS_PREVIOUS_VIEW) {
+      prep->cmd.type == LEME_COMMAND_FOCUS_PREVIOUS_VIEW ||
+      prep->cmd.type == LEME_COMMAND_FOCUS_URGENT) {
     if (server->focused_view != old_view) {
       *outcome = LEME_CONTROL_APPLIED;
     } else {

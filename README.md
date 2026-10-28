@@ -1,7 +1,7 @@
 # Leme
 
 Leme is a tiling Wayland compositor written in C17 and built on
-wlroots 0.20. It supports dwindle, master-stack, and accordion layouts,
+wlroots 0.20. It supports dwindle and master-stack layouts,
 per-output adaptive tags, multiple monitors, native Wayland applications, and
 optional XWayland.
 
@@ -11,7 +11,7 @@ for my own use. Issues and patches are welcome, but support is best-effort.
 ## What works
 
 - Native Wayland windows with optional lazy XWayland support
-- Adaptive tags with dwindle, master-stack, and accordion layouts
+- Adaptive tags with dwindle and master-stack layouts
 - Multiple outputs with directional focus, movement, and pointer drag
 - Configurable keyboard layouts, pointer devices, binding modes, and window rules
 - Optional window animations and workspace transitions

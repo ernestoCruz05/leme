@@ -65,8 +65,6 @@ static const char *layout_kind_name(enum leme_layout_kind kind) {
     return "dwindle";
   case LEME_LAYOUT_MASTER_STACK:
     return "master_stack";
-  case LEME_LAYOUT_ACCORDION:
-    return "accordion";
   }
   return "dwindle";
 }
@@ -1288,6 +1286,25 @@ enum leme_control_code leme_control_command_lower(
     (void)snprintf(tag, sizeof(tag), "%d", cmd.tag_id);
     make_cmd_argv(b, (const char *const[]){"remove_empty_tag", tag}, 2,
                   &c_args);
+    intents[0].args = c_args;
+    const struct leme_public_value *roots[1] = {c_args};
+    leme_public_builder_seal(b, roots, 1);
+    out->intents = intents;
+    out->count = 1;
+    out->builder = b;
+    return LEME_CONTROL_OK;
+  }
+
+  case LEME_COMMAND_FOCUS_URGENT: {
+    struct leme_control_intent *intents = alloc_intents(account, 1);
+    if (intents == NULL) {
+      leme_public_builder_destroy(b);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "out of memory");
+    }
+    intents[0].opcode = LEME_CONTROL_OP_COMMAND;
+    struct leme_public_value *c_args = NULL;
+    make_cmd_argv(b, (const char *const[]){"focus_urgent"}, 1, &c_args);
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};
     leme_public_builder_seal(b, roots, 1);

@@ -230,7 +230,6 @@ void leme_config_set_output_defaults(struct leme_config *config) {
       .nmaster = 1,
       .gap = 0,
       .split_ratio = 0.5,
-      .collapse_width = 46,
       .has_gap = false,
   };
   config->tag_rules = NULL;
@@ -304,9 +303,6 @@ void leme_config_tag_settings(const struct leme_config *config, uint16_t id,
       if ((rule->fields & LEME_TAG_FIELD_SPLIT_RATIO) != 0) {
         settings->split_ratio = rule->settings.split_ratio;
       }
-      if ((rule->fields & LEME_TAG_FIELD_COLLAPSE_WIDTH) != 0) {
-        settings->collapse_width = rule->settings.collapse_width;
-      }
       return;
     }
   }
@@ -323,6 +319,7 @@ void leme_config_set_pointer_defaults(struct leme_config *config) {
       .left_handed = false,
       .tap = true,
   };
+  config->focus_follows_mouse = true;
 }
 
 bool leme_config_set_default_keyboard(struct leme_config *config) {

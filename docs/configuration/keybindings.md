@@ -9,13 +9,15 @@ binds "common" {
 }
 
 binds "resize" {
-    h resize left 32
-    j resize down 32
-    k resize up 32
-    l resize right 32
+    h repeat resize right -32
+    l repeat resize right 32
+    k repeat resize down -32
+    j repeat resize down 32
     Escape mode common
 }
 ```
+
+`repeat` before the command makes the binding fire again while the key is held, at the keyboard's `repeat_rate` and `repeat_delay` (see [keyboard](keyboard.md)). Without it, a binding fires once per press. Pressing or releasing any other key stops the repeat.
 
 The supported modifiers are `SUPER`, `ALT`, `CTRL` or `CONTROL`, and `SHIFT`. Their order does not matter, but each may appear only once. Matching uses the exact modifier combination, so an extra held modifier prevents the binding from firing.
 

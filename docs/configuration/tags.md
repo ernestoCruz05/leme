@@ -16,11 +16,9 @@ tags {
     }
 
     tag 4-6 {
-        layout accordion
         drop_mode edges
         gap 4
         split_ratio 0.5
-        accordion_collapse_width 46
     }
 }
 ```
@@ -31,7 +29,7 @@ tags {
 | --- | --- | --- | --- |
 | `initial` | positive integer, no greater than `maximum` | `3` | pinned tags on every output |
 | `maximum` | positive integer, up to `64` | `9` | highest tag id |
-| `layout` | `dwindle`, `master_stack`, `accordion` | `dwindle` | all tags |
+| `layout` | `dwindle`, `master_stack` | `dwindle` | all tags |
 | `drop_mode` | `simple`, `edges` | `simple` | tiled drag insertion |
 
 `initial` and `maximum` are optional. Without them, Leme starts with three
@@ -60,7 +58,6 @@ tags {
         nmaster 2
         gap 4
         split_ratio 0.5
-        accordion_collapse_width 46
     }
 }
 ```
@@ -69,13 +66,12 @@ The `SPEC` is one token. Whitespace inside it is invalid. An id must be within `
 
 | Key | Values | Default | Used by |
 | --- | --- | --- | --- |
-| `layout` | `dwindle`, `master_stack`, `accordion` | `dwindle` | all layouts |
+| `layout` | `dwindle`, `master_stack` | `dwindle` | all layouts |
 | `drop_mode` | `simple`, `edges` | `simple` | tiled drag |
 | `mfact` | `0.10` through `0.90` | `0.5` | master-stack |
 | `nmaster` | `1` through `16` | `1` | master-stack |
 | `gap` | integer from `0` through `65535` | `style.gap` | inner spacing in all layouts |
-| `split_ratio` | `0.10` through `0.90` | `0.5` | dwindle |
-| `accordion_collapse_width` | `10` through `400` | `46` | accordion |
+| `split_ratio` | `0.10` through `0.90` | `0.5` | dwindle: the share a tile keeps when a new window splits it |
 
 Outer and smart gaps use the global [appearance settings](appearance.md#gaps).
 

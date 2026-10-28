@@ -20,5 +20,6 @@ void leme_input_protocols_update_keyboard_focus(struct leme_server *server);
 bool leme_input_protocols_shortcuts_inhibited(const struct leme_server *server);
 bool leme_input_protocols_toggle_shortcuts_inhibit(struct leme_server *server);
 bool leme_input_protocols_pointer_locked(const struct leme_server *server);
+bool leme_input_protocols_constraint_active(const struct leme_server *server);
 
 #endif

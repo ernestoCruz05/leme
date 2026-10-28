@@ -171,7 +171,7 @@ bool leme_config_validate_command(const struct leme_config *config,
            command->direction <= LEME_DIRECTION_DOWN;
   case LEME_COMMAND_SET_LAYOUT:
     return command->layout >= LEME_LAYOUT_DWINDLE &&
-           command->layout <= LEME_LAYOUT_ACCORDION;
+           command->layout <= LEME_LAYOUT_MASTER_STACK;
   case LEME_COMMAND_SWITCH_LAYOUT:
     return true;
   case LEME_COMMAND_FOCUS_OUTPUT:
@@ -197,6 +197,7 @@ bool leme_config_validate_command(const struct leme_config *config,
   case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
   case LEME_COMMAND_FOCUS_LAST_TAG:
   case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
+  case LEME_COMMAND_FOCUS_URGENT:
   case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
   case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
   case LEME_COMMAND_TOGGLE_FLOATING:

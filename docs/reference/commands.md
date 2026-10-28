@@ -11,13 +11,14 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `focus_tag ID` | Select a pinned, occupied, or empty candidate tag up to `maximum`. |
 | `focus_last_tag` | Swap the current and previous tag states, including a candidate. |
 | `focus_previous_view` | Focus the most recently focused alternative on the current tag. |
+| `focus_urgent` | Focus the window that most recently became urgent, switching to its output and tag. Nothing happens when no window is urgent. |
 | `focus DIR` | Focus the nearest visible view in a direction. |
 | `move DIR [PIXELS]` | Swap a tiled view with its directional neighbor, or move a floating view. The default is 40 pixels. With no neighbor in that direction, nothing moves and IPC reports `noop`. |
 | `move_view_to_tag next\|previous\|ID [follow]` | Move the focused view to an adjacent or numbered tag. `follow` selects the destination. |
 | `focus_output DIR\|NAME` | Focus an adjacent output or named connector. |
 | `move_view_to_output DIR\|NAME [follow]` | Move the focused view to the target output's current tag. `follow` also moves focus and the pointer. |
-| `set_layout dwindle\|master_stack\|accordion` | Set the focused tag's layout and retile its views. |
-| `switch_layout` | Cycle dwindle, master-stack, and accordion. |
+| `set_layout dwindle\|master_stack` | Set the focused tag's layout and retile its views. |
+| `switch_layout` | Switch between dwindle and master-stack. |
 | `remove_empty_tag ID` | Remove an empty non-initial materialized tag. |
 | `toggle_floating` | Toggle the focused managed view between tiled and floating. Sticky views refuse this command. |
 | `toggle_sticky` | Keep the focused managed window visible across tags on its current output, or attach its complete sticky group to that output's current tag. Takes no arguments. |
@@ -25,7 +26,7 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `scratchpad_send` | Put the focused managed view in the global scratchpad pool. A normal tagged view becomes unnamed. |
 | `scratchpad_toggle [NAME]` | Without a name, show or hide the newest unnamed pool member. With a configured name, show, hide, move, adopt, or start that named scratchpad. |
 | `scratchpad_retrieve` | Return the shown scratchpad to the focused tag, or return the newest unnamed member when none is shown. |
-| `resize DIR PIXELS` | Resize the focused view along one edge. The amount must be greater than zero. |
+| `resize DIR PIXELS` | Move one edge of the focused view. A positive amount moves the edge outward and grows the view; a negative amount moves it back in and shrinks it, down to the client's minimum size. Zero is rejected. A tiled view can only move an edge that has a neighbour. |
 | `close_view` | Ask the focused client to close. |
 | `spawn PROGRAM [ARG ...]` | Start one detached process with the listed argument vector. |
 | `reload_config` | Parse, validate, and apply the configuration file. |

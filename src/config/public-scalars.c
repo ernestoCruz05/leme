@@ -169,7 +169,7 @@ static enum leme_public_status tags_value(struct leme_public_builder *b,
   if (config->initial_tags > config->max_tags)
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
   if (leme_public_object(b, 3, &tags) != LEME_PUBLIC_OK ||
-      leme_public_object(b, 7, &defaults) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 6, &defaults) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, tags, LEME_PUBLIC_TEXT("initial"),
                           config->initial_tags) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, tags, LEME_PUBLIC_TEXT("maximum"),
@@ -188,8 +188,6 @@ static enum leme_public_status tags_value(struct leme_public_builder *b,
           LEME_PUBLIC_OK ||
       leme_public_put_number(b, defaults, LEME_PUBLIC_TEXT("split_ratio"),
                              settings->split_ratio) != LEME_PUBLIC_OK ||
-      leme_public_put_int(b, defaults, LEME_PUBLIC_TEXT("collapse_width"),
-                          settings->collapse_width) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, tags, LEME_PUBLIC_TEXT("defaults"), defaults) !=
           LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
@@ -228,7 +226,7 @@ static enum leme_public_status pointer_value(struct leme_public_builder *b,
                                              struct leme_public_value **out) {
   const struct leme_pointer_settings *settings = &config->pointer_defaults;
   struct leme_public_value *pointer = NULL;
-  if (leme_public_object(b, 5, &pointer) != LEME_PUBLIC_OK ||
+  if (leme_public_object(b, 6, &pointer) != LEME_PUBLIC_OK ||
       put_enum(b, pointer, LEME_PUBLIC_TEXT("accel_profile"),
                leme_config_public_profile(settings->profile)) !=
           LEME_PUBLIC_OK ||
@@ -239,7 +237,9 @@ static enum leme_public_status pointer_value(struct leme_public_builder *b,
       leme_public_put_bool(b, pointer, LEME_PUBLIC_TEXT("left_handed"),
                            settings->left_handed) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, pointer, LEME_PUBLIC_TEXT("tap"),
-                           settings->tap) != LEME_PUBLIC_OK)
+                           settings->tap) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, pointer, LEME_PUBLIC_TEXT("focus_follows_mouse"),
+                           config->focus_follows_mouse) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = pointer;
   return LEME_PUBLIC_OK;
@@ -252,7 +252,7 @@ static enum leme_public_status gestures_value(struct leme_public_builder *b,
       &config->gestures.workspace_switch;
   struct leme_public_value *gestures = NULL, *workspace = NULL;
   if (leme_public_object(b, 1, &gestures) != LEME_PUBLIC_OK ||
-      leme_public_object(b, 6, &workspace) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 7, &workspace) != LEME_PUBLIC_OK ||
       put_enum(b, workspace, LEME_PUBLIC_TEXT("mode"),
                gesture_name(settings->mode)) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, workspace, LEME_PUBLIC_TEXT("fingers"),
@@ -265,6 +265,8 @@ static enum leme_public_status gestures_value(struct leme_public_builder *b,
                              settings->deceleration) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, workspace, LEME_PUBLIC_TEXT("velocity_window"),
                           settings->velocity_window_ms) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, workspace, LEME_PUBLIC_TEXT("occupied"),
+                           settings->occupied) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, gestures, LEME_PUBLIC_TEXT("workspace_switch"),
                              workspace) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);

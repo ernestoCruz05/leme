@@ -418,6 +418,11 @@ bool leme_input_protocols_pointer_locked(const struct leme_server *server) {
          protocols->active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED;
 }
 
+bool leme_input_protocols_constraint_active(const struct leme_server *server) {
+  return server->input_protocols != NULL &&
+         server->input_protocols->active_constraint != NULL;
+}
+
 bool leme_input_protocols_constrain_motion(struct leme_server *server,
                                            double *dx, double *dy) {
   struct leme_input_protocols *protocols = server->input_protocols;

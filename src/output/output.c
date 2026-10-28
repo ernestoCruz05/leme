@@ -8,6 +8,7 @@
 #include "config/live.h"
 #include "shell/layer.h"
 #include "shell/layer_layout.h"
+#include "shell/policy.h"
 #include "shell/scratchpad.h"
 #include "shell/sticky.h"
 #include "render/render.h"
@@ -680,6 +681,12 @@ static bool leme_output_configuration_commit(
   return leme_output_configuration_run(server, configuration, true);
 }
 
+static bool leme_output_boxes_equal(struct leme_box left,
+                                    struct leme_box right) {
+  return left.x == right.x && left.y == right.y && left.width == right.width &&
+         left.height == right.height;
+}
+
 static bool leme_output_reconcile(struct leme_server *server,
                                   struct leme_sticky_output_plan **sticky) {
   struct leme_output *first = NULL;
@@ -723,7 +730,33 @@ static bool leme_output_reconcile(struct leme_server *server,
   }
   wl_list_for_each(output, &server->outputs, link) {
     if (output->wlr_output->enabled) {
+      const struct leme_box previous = output->full_box;
+
       leme_output_refresh_geometry(output);
+      if (previous.width < 1 || previous.height < 1 ||
+          leme_output_boxes_equal(previous, output->full_box)) {
+        continue;
+      }
+      for (uint16_t id = 1; id <= output->tags.max_tags; id++) {
+        struct leme_view *view;
+
+        if (output->tags.table[id] == NULL) {
+          continue;
+        }
+        wl_list_for_each(view, &output->tags.table[id]->views, tag_link) {
+          struct leme_box *box =
+              view->fullscreen ? &view->saved_box : &view->box;
+
+          if (!view->mapped || !view->floating) {
+            continue;
+          }
+          *box =
+              leme_view_policy_reanchor_box(*box, previous, output->full_box);
+          if (!view->fullscreen) {
+            leme_render_view_set_box(view, *box);
+          }
+        }
+      }
     }
   }
   leme_desktop_output_changed(server);
@@ -1682,12 +1715,6 @@ struct leme_box leme_output_usable_box(const struct leme_output *output) {
 
 struct leme_box leme_output_full_box(const struct leme_output *output) {
   return output == NULL ? (struct leme_box){0} : output->full_box;
-}
-
-static bool leme_output_boxes_equal(struct leme_box left,
-                                    struct leme_box right) {
-  return left.x == right.x && left.y == right.y && left.width == right.width &&
-         left.height == right.height;
 }
 
 void leme_output_refresh_geometry(struct leme_output *output) {

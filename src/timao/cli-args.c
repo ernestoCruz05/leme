@@ -12,6 +12,7 @@ static const struct command_name commands[] = {
     {"focus", 1, 1},
     {"focus_last_tag", 0, 0},
     {"focus_previous_view", 0, 0},
+    {"focus_urgent", 0, 0},
     {"move", 1, 2},
     {"move_view_to_tag", 1, 2},
     {"focus_output", 1, 1},

@@ -162,11 +162,23 @@ void leme_toplevel_activate_view(struct leme_view *view) {
     leme_publication_invalidate(server);
     return;
   }
-  if (output != leme_output_focused(server)) {
-    leme_output_set_focused(server, output, true);
+  leme_toplevel_reveal_view(view);
+}
+
+void leme_toplevel_reveal_view(struct leme_view *view) {
+  struct leme_server *server = view->server;
+  struct leme_output *output = leme_view_output(view);
+
+  if (leme_session_locked(server) || output == NULL) {
+    return;
   }
-  leme_tags_focus_id(tags, leme_ownership_tag(view)->id);
-  leme_view_refresh_tag_focus(server);
+  if (leme_ownership_tag(view) != NULL) {
+    if (output != leme_output_focused(server)) {
+      leme_output_set_focused(server, output, true);
+    }
+    leme_tags_focus_id(leme_output_tags(output), leme_ownership_tag(view)->id);
+    leme_view_refresh_tag_focus(server);
+  }
   leme_view_focus(view);
   leme_publication_invalidate(server);
 }

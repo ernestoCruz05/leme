@@ -111,6 +111,7 @@ struct leme_view {
   struct leme_publication_toplevel *publication;
   struct leme_box box;
   struct leme_box saved_box;
+  struct leme_box float_box;
 };
 
 void leme_view_init(struct leme_server *server);
@@ -118,6 +119,8 @@ void leme_view_finish(struct leme_server *server);
 struct wlr_surface *leme_view_surface(const struct leme_view *view);
 const char *leme_view_identity(const struct leme_view *view);
 const char *leme_view_title(const struct leme_view *view);
+int leme_view_min_length(const struct leme_view *view, enum leme_split split);
+int leme_view_max_length(const struct leme_view *view, enum leme_split split);
 struct leme_view *leme_view_from_surface(struct leme_server *server,
                                          struct wlr_surface *surface);
 void leme_view_set_activated(struct leme_view *view, bool activated);
@@ -166,6 +169,8 @@ bool leme_view_set_floating(struct leme_view *view, bool floating);
 void leme_view_update_tiled(struct leme_view *view);
 void leme_view_follow_committed_size(struct leme_view *view);
 bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen);
+bool leme_view_is_transient_of(const struct leme_view *view,
+                               const struct leme_view *ancestor);
 void leme_view_refresh_fullscreen(struct leme_server *server);
 bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
                       int amount);

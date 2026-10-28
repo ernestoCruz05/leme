@@ -75,9 +75,6 @@ enum leme_control_code leme_workspace_control_prepare(
     } else if (layout_text.length == 12 &&
                memcmp(layout_text.data, "master_stack", 12) == 0) {
       parsed_layout = LEME_LAYOUT_MASTER_STACK;
-    } else if (layout_text.length == 9 &&
-               memcmp(layout_text.data, "accordion", 9) == 0) {
-      parsed_layout = LEME_LAYOUT_ACCORDION;
     } else {
       return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                  "invalid layout name");
