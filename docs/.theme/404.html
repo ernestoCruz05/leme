@@ -1,0 +1,6 @@
+{% extends "main.html" %}
+{% block title %}Page not found - {{ config.site_name|e }}{% endblock %}
+{% block content %}
+<h1>Page not found</h1>
+<p>This address does not match a documentation page. Try the search field or return to the <a href="{{ nav.homepage.url|url }}">documentation overview</a>.</p>
+{% endblock %}

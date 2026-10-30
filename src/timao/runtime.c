@@ -4,6 +4,7 @@
 #include "timao/value.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <string.h>
@@ -317,13 +318,22 @@ timao_runtime_poll_fd(struct timao_runtime *runtime, uint64_t deadline,
       {.fd = timao_transport_fd(runtime->transport),
        .events = timao_transport_events(runtime->transport)},
       {.fd = runtime->writing ? runtime->writing_fd : -1, .events = POLLOUT}};
-  for (size_t i = 0; i < 16; ++i)
+  uint64_t due = timao_client_next_due(runtime->client);
+  if (deadline < due)
+    due = deadline;
+  for (size_t i = 0; i < 16; ++i) {
     descriptors[i + 3] = (struct pollfd){
         .fd = timao_launch_fd(runtime->launches[i]), .events = POLLIN};
+    if (runtime->launches[i] != NULL && due > now + 20)
+      due = now + 20;
+  }
   descriptors[19] =
       (struct pollfd){.fd = input != NULL ? input->fd : -1,
                       .events = input != NULL ? input->events : 0};
-  const int timeout = deadline - now > 20 ? 20 : (int)(deadline - now);
+  const int timeout = due == UINT64_MAX     ? -1
+                      : due <= now          ? 0
+                      : due - now > INT_MAX ? INT_MAX
+                                            : (int)(due - now);
   const int ready = poll(descriptors, 20, timeout);
   if (ready < 0 && errno != EINTR) {
     runtime->io_error = true;

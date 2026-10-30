@@ -14,6 +14,7 @@ void leme_toplevel_finish(struct leme_server *server);
 void leme_toplevel_reconcile(struct leme_server *server);
 void leme_toplevel_untrack(struct leme_view *view);
 void leme_toplevel_activate_view(struct leme_view *view);
+void leme_toplevel_reveal_view(struct leme_view *view);
 struct leme_view *leme_toplevel_view_from_handle(
     struct wlr_ext_foreign_toplevel_handle_v1 *handle);
 struct wlr_foreign_toplevel_handle_v1 *

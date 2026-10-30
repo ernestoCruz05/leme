@@ -150,8 +150,6 @@ size_t leme_desk_menu_build(struct leme_server *server,
                                                  .value = LEME_LAYOUT_DWINDLE};
     rows[count++] = (struct leme_desk_menu_item){
         .label = "Master and stack", .value = LEME_LAYOUT_MASTER_STACK};
-    rows[count++] = (struct leme_desk_menu_item){
-        .label = "Accordion", .value = LEME_LAYOUT_ACCORDION};
     for (size_t i = 0; i < count; i++) {
       rows[i].action = LEME_DESK_MENU_LAYOUT;
       rows[i].enabled = true;
@@ -785,8 +783,7 @@ static void leme_desk_menu_run(struct leme_desk_menu *menu,
   }
   case LEME_DESK_MENU_LAYOUT:
     if (item.value != LEME_LAYOUT_DWINDLE &&
-        item.value != LEME_LAYOUT_MASTER_STACK &&
-        item.value != LEME_LAYOUT_ACCORDION) {
+        item.value != LEME_LAYOUT_MASTER_STACK) {
       return;
     }
     command.type = LEME_COMMAND_CONTAINER_LAYOUT;

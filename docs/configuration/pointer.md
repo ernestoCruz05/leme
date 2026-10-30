@@ -19,6 +19,9 @@ pointer {
 | `natural_scroll` | `true` or `false` | `false` |
 | `left_handed` | `true` or `false` | `false` |
 | `tap` | `true` or `false` | `true` |
+| `focus_follows_mouse` | `true` or `false` | `true` |
+
+With `focus_follows_mouse true`, a view takes focus when the pointer enters it; moving inside the focused view, or keyboard focus changes, don't move focus back. With `false`, clicking a view focuses it, and moving the pointer to another output doesn't change the focused output. A click focuses a view either way. `focus_follows_mouse` belongs only in the unnamed block.
 
 A named block matches the exact libinput device name and overrides only the fields it contains:
 

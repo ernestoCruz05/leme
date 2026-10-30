@@ -19,8 +19,9 @@
 #include <wlr/util/edges.h>
 #include <wlr/util/log.h>
 
-static struct leme_box leme_view_full_box(const struct leme_view *view) {
-  return leme_output_full_box(leme_view_output(view));
+static struct leme_box leme_view_popup_area(const struct leme_view *view) {
+  return view->fullscreen ? leme_output_full_box(leme_view_output(view))
+                          : leme_output_usable_box(leme_view_output(view));
 }
 
 static void leme_view_popup_finish(struct leme_view_popup *popup) {
@@ -39,7 +40,8 @@ static void leme_view_popup_handle_commit(struct wl_listener *listener,
 
   (void)data;
   if (popup->wlr_popup->base->initial_commit) {
-    leme_render_view_popup_unconstrain(popup, leme_view_full_box(popup->view));
+    leme_render_view_popup_unconstrain(popup,
+                                       leme_view_popup_area(popup->view));
   }
 }
 
@@ -48,7 +50,7 @@ static void leme_view_popup_handle_reposition(struct wl_listener *listener,
   struct leme_view_popup *popup = wl_container_of(listener, popup, reposition);
 
   (void)data;
-  leme_render_view_popup_unconstrain(popup, leme_view_full_box(popup->view));
+  leme_render_view_popup_unconstrain(popup, leme_view_popup_area(popup->view));
 }
 
 static void leme_view_popup_handle_destroy(struct wl_listener *listener,
@@ -157,6 +159,9 @@ static void leme_view_handle_map(struct wl_listener *listener, void *data) {
 
   leme_view_policy_apply_rules(view->server, &rules, &destination, &floating,
                                parent != NULL);
+  view->rule_fields =
+      rules.fields |
+      (parent != NULL ? LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT : 0);
 
   const bool sticky_parent = parent != NULL && leme_view_is_sticky(parent);
   const struct leme_view_map_options options = {
@@ -273,6 +278,7 @@ static void leme_view_handle_set_title(struct wl_listener *listener,
   struct leme_view *view = wl_container_of(listener, view, set_title);
 
   (void)data;
+  leme_view_apply_late_rules(view);
   leme_public_server_invalidate(view->server);
   leme_desk_decoration_refresh(view);
   leme_render_view_set_activated(view, view == view->server->focused_view);
@@ -284,6 +290,7 @@ static void leme_view_handle_set_app_id(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(view);
+  leme_view_apply_late_rules(view);
   if (view->mapped) {
     leme_view_arrange_instant(view->server);
   }

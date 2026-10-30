@@ -17,10 +17,6 @@ sets that area's share of the available width. Remaining windows occupy the
 stack beside it. Use `move` and `resize` for adjustments; tiled SUPER-drag is
 for dwindle tags.
 
-## Accordion
-
-Accordion keeps non-focused views as narrow strips in tag order and gives the focused view the remaining space. It focuses a strip on click instead of on pointer hover. Otherwise, moving the pointer over a strip could change the geometry underneath it and move focus again.
-
 ## Desktop (experimental)
 
 Desktop leaves windows freely placed. Use SUPER-drag to move them and
@@ -242,15 +238,14 @@ members catch up on release. Resizing a half or quarter clears placement at the
 current size. A maximized group must be restored first. Members cannot resize
 their own tiles through a standalone floating resize.
 
-`container_layout dwindle|master_stack|accordion` selects the inner layout.
+`container_layout dwindle|master_stack` selects the inner layout.
 `resize` changes that layout's split or sizing parameter. In a dwindle group,
 SUPER-right drag on a member moves the split at the nearest edge or corner, as on
-tiled tags; master-stack and accordion groups have no pointer split resize.
+tiled tags; master-stack groups have no pointer split resize.
 `move left|right|up|down` swaps the focused member with its neighbor in that
 direction and does nothing at the edge of the group. Dwindle splits the hit
-member in the previewed direction. In master-stack and accordion, left/up inserts
-before the hit member and right/down after it. The preview shows the resulting
-layout cell. Accordion members expand on hover without raising the group.
+member in the previewed direction. In master-stack, left/up inserts before the
+hit member and right/down after it. The preview shows the resulting layout cell.
 
 `container_detach` releases the focused member as a normal desktop window at its
 current content location. SUPER-left drag does the same after moving more than
@@ -275,8 +270,8 @@ transitions remain instant.
 
 With [`animation { move }`](../configuration/animation.md#desktop-animations),
 placement and inner layout changes animate the frame and members together.
-Creation, insertion, member removal, swaps, keyboard resizing and accordion focus
-changes use the same settings. Closing members can fade without an individual
+Creation, insertion, member removal, swaps and keyboard resizing use the same
+settings. Closing members can fade without an individual
 titlebar. Pointer moves and resizing stay tied to the cursor; output transfers
 and dissolution are instant.
 
@@ -393,7 +388,6 @@ maximized placement is reported to clients as maximized. Halves and quarters are
 reported to native clients through their tiled edges. The `snap` and `place`
 commands set placements from the keyboard; see the
 [command reference](../reference/commands.md).
-
 ## Persistent and runtime changes
 
 A `set_layout` command changes the live tag. Runtime layout changes do not rewrite the scfg file. A configuration reload resets a tag only when its effective configured settings changed; unrelated reloads preserve runtime layout and resize adjustments.

@@ -136,8 +136,8 @@ where the window is shown at that moment.
 ### Desktop animations
 
 Maximize, restore, halves and quarters animate for standalone desktop windows and
-containers. Container creation, insertion, member removal, layout switches,
-keyboard split resizing and accordion focus changes use the same settings. The
+containers. Container creation, insertion, member removal, layout switches and
+keyboard split resizing use the same settings. The
 frame and moving members wait for native clients to acknowledge their new size,
 up to 200 ms, then start together. Borders keep their configured thickness.
 Members can run the configured `close` animation without an individual titlebar;

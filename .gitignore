@@ -2,6 +2,7 @@ build/
 build-*/
 compile_commands.json
 runtime/
+/site/
 subprojects/wlroots/
 subprojects/yyjson/
 subprojects/packagecache/

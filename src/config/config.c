@@ -233,7 +233,6 @@ void leme_config_set_output_defaults(struct leme_config *config) {
       .nmaster = 1,
       .gap = 0,
       .split_ratio = 0.5,
-      .collapse_width = 46,
       .has_gap = false,
   };
   config->tag_rules = NULL;
@@ -307,9 +306,6 @@ void leme_config_tag_settings(const struct leme_config *config, uint16_t id,
       if ((rule->fields & LEME_TAG_FIELD_SPLIT_RATIO) != 0) {
         settings->split_ratio = rule->settings.split_ratio;
       }
-      if ((rule->fields & LEME_TAG_FIELD_COLLAPSE_WIDTH) != 0) {
-        settings->collapse_width = rule->settings.collapse_width;
-      }
       return;
     }
   }
@@ -326,6 +322,7 @@ void leme_config_set_pointer_defaults(struct leme_config *config) {
       .left_handed = false,
       .tap = true,
   };
+  config->focus_follows_mouse = true;
 }
 
 bool leme_config_set_default_keyboard(struct leme_config *config) {
@@ -351,6 +348,11 @@ struct leme_config *leme_config_defaults(void) {
   struct leme_config *config = calloc(1, sizeof(*config));
   struct leme_mode *common;
   size_t index;
+  char shell_flag[] = "-c";
+  char terminal_script[] =
+      "for t in \"$TERMINAL\" foot alacritty kitty wezterm ghostty xterm; do "
+      "command -v \"$t\" >/dev/null 2>&1 && exec \"$t\"; done";
+  char *terminal_params[] = {shell_flag, terminal_script};
 
   if (config == NULL) {
     return NULL;
@@ -410,7 +412,8 @@ struct leme_config *leme_config_defaults(void) {
   common->bindings[0].command.text = strdup("common");
   leme_config_default_binding(common, 1, WLR_MODIFIER_LOGO, XKB_KEY_Return,
                               LEME_COMMAND_SPAWN);
-  common->bindings[1].command.argv = leme_config_copy_argv("foot", NULL, 0);
+  common->bindings[1].command.argv =
+      leme_config_copy_argv("/bin/sh", terminal_params, 2);
   leme_config_default_binding(common, 2, WLR_MODIFIER_LOGO, XKB_KEY_r,
                               LEME_COMMAND_RELOAD_CONFIG);
   leme_config_default_binding(common, 3, WLR_MODIFIER_LOGO, XKB_KEY_q,

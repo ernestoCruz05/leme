@@ -60,7 +60,7 @@ static bool visible(const struct leme_view *view) {
   const struct leme_view *candidate = NULL;
   wl_list_for_each(candidate, &tag->views, tag_link) {
     if (candidate->mapped && candidate->fullscreen)
-      return candidate == view;
+      return candidate == view || leme_view_is_transient_of(view, candidate);
   }
   return true;
 }

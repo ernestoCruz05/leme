@@ -449,9 +449,18 @@ leme_render_workspace_transition_prepare_gesture(
       return NULL;
     }
   }
-  return leme_workspace_transition_prepare_with_ops(
-      output, source_id, destination_id, direction, &leme_workspace_default_ops,
-      true);
+  struct leme_workspace_transition *transition =
+      leme_workspace_transition_prepare_with_ops(
+          output, source_id, destination_id, direction,
+          &leme_workspace_default_ops, true);
+
+  if (transition != NULL &&
+      output->server->config->gestures.workspace_switch.occupied) {
+    transition->ring_count =
+        leme_tags_occupied_ring(leme_output_tags(output), transition->ring,
+                                LEME_ARRAY_LENGTH(transition->ring));
+  }
+  return transition;
 }
 
 static void
@@ -508,6 +517,7 @@ static void leme_render_workspace_transition_done(void *data) {
       }
     }
     leme_render_workspace_transition_refresh_views(output);
+    leme_input_pointer_rebase(output->server);
   }
   leme_workspace_effect_destroy(transition->effect);
   transition->effect = NULL;

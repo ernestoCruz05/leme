@@ -116,6 +116,7 @@ struct leme_server {
   struct wlr_scene_tree *scene_durable;
   struct wlr_scene_tree *scene_top;
   struct wlr_scene_tree *scene_fullscreen;
+  struct wlr_scene_tree *scene_unmanaged;
   struct wlr_scene_tree *scene_overlay;
   struct wlr_scene_tree *scene_drag;
   struct wlr_scene_tree *scene_lock;
@@ -136,6 +137,10 @@ struct leme_server {
   struct wlr_ext_foreign_toplevel_list_v1 *foreign_toplevel_list;
   struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
   struct wl_event_source *publication_idle;
+  struct wl_event_source *pointer_rebase_idle;
+  struct wl_event_source *binding_repeat_timer;
+  const struct leme_binding *binding_repeat;
+  int binding_repeat_interval;
   struct wl_list workspace_entries;
   struct wl_listener workspace_commit;
   bool publication_dirty;
@@ -164,6 +169,7 @@ struct leme_server {
   struct leme_session *session_protocols;
   struct leme_tearing *tearing;
   struct leme_view *focused_view;
+  struct leme_view *hovered_view;
   struct leme_scratchpad_manager scratchpads;
   struct leme_sticky_manager sticky;
   struct leme_layer_surface *focused_layer;

@@ -17,6 +17,7 @@
 #include "shell/xwayland.h"
 #include "protocols/input.h"
 #include "protocols/session.h"
+#include "protocols/toplevel.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -214,6 +215,24 @@ bool leme_command_execute(struct leme_server *server,
       wlr_log(WLR_DEBUG, "%s", "leme: no previous view");
     }
     return true;
+  case LEME_COMMAND_FOCUS_URGENT: {
+    struct leme_view *urgent = NULL;
+
+    wl_list_for_each(view, &server->views, link) {
+      if (view->mapped && view->public_meta.urgent &&
+          (urgent == NULL ||
+           view->public_meta.urgent_since > urgent->public_meta.urgent_since)) {
+        urgent = view;
+      }
+    }
+    if (urgent == NULL) {
+      wlr_log(WLR_DEBUG, "%s", "leme: no urgent view");
+      return true;
+    }
+    leme_input_pointer_grab_cancel_tiled(server);
+    leme_toplevel_reveal_view(urgent);
+    return true;
+  }
   case LEME_COMMAND_MOVE_DIRECTION:
     if (!leme_command_require_view(server, "move")) {
       return false;

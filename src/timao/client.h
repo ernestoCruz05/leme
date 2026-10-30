@@ -71,6 +71,7 @@ void timao_client_lost(struct timao_client *client,
                        struct timao_client_loss loss);
 void timao_client_closed(struct timao_client *client, uint64_t epoch);
 void timao_client_tick(struct timao_client *client);
+uint64_t timao_client_next_due(const struct timao_client *client);
 bool timao_client_ready(const struct timao_client *client);
 enum leme_public_status
 timao_client_peek_write(struct timao_client *client,

@@ -107,6 +107,15 @@ void leme_input_init(struct leme_server *server) {
 }
 
 void leme_input_finish(struct leme_server *server) {
+  if (server->pointer_rebase_idle != NULL) {
+    wl_event_source_remove(server->pointer_rebase_idle);
+    server->pointer_rebase_idle = NULL;
+  }
+  if (server->binding_repeat_timer != NULL) {
+    wl_event_source_remove(server->binding_repeat_timer);
+    server->binding_repeat_timer = NULL;
+  }
+  server->binding_repeat = NULL;
   leme_input_listener_remove(&server->new_input);
   leme_input_listener_remove(&server->new_virtual_keyboard);
   leme_input_listener_remove(&server->new_virtual_pointer);

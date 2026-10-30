@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% if page and not page.is_homepage %}{{ page.title|e }} - {% endif %}{{ config.site_name|e }}{% endblock %}</title>
+  <meta name="description" content="{{ config.site_description|e }}">
+  {% if page and page.canonical_url %}<link rel="canonical" href="{{ page.canonical_url|e }}">{% endif %}
+  <link rel="stylesheet" href="{{ 'style.css'|url }}">
+  <script src="{{ 'navigation.js'|url }}" defer></script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header class="site-header">
+    <a class="site-name" href="{{ nav.homepage.url|url }}">Leme documentation</a>
+    <form role="search" action="{{ 'search.html'|url }}" method="get">
+      <label for="mkdocs-search-query">Search docs</label>
+      <div class="search-controls">
+        <input type="search" id="mkdocs-search-query" name="q" maxlength="200" required>
+        <button type="submit">Search</button>
+      </div>
+    </form>
+    <a class="repo" href="{{ config.repo_url|e }}">GitHub</a>
+  </header>
+  <div class="page-layout">
+    <nav class="sections" aria-label="Documentation">
+      <details open id="navigation">
+        <summary>Documentation sections</summary>
+        <ul>
+          {% for item in nav %}
+          {% if item.is_section %}
+          <li>
+            <a href="{{ item.children[0].url|url }}"{% if page == item.children[0] %} aria-current="page"{% endif %}>{{ item.title|e }}</a>
+            {% if item.active %}
+            <ul class="topics">
+              {% for child in item.children[1:] %}
+              <li><a href="{{ child.url|url }}"{% if page == child %} aria-current="page"{% endif %}>{{ child.title|e }}</a></li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </li>
+          {% else %}
+          <li><a href="{{ item.url|url }}"{% if page == item %} aria-current="page"{% endif %}>{{ item.title|e }}</a></li>
+          {% endif %}
+          {% endfor %}
+        </ul>
+      </details>
+    </nav>
+    <main id="content" tabindex="-1">
+      {% block content %}
+      {% if page %}
+      {% if not page.is_homepage %}
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="{{ nav.homepage.url|url }}">Docs</a>
+        {% if page.parent and page != page.parent.children[0] %} / <a href="{{ page.parent.children[0].url|url }}">{{ page.parent.title|e }}</a>{% endif %}
+        / {{ page.title|e }}
+      </nav>
+      {% endif %}
+      {% set contents %}
+      {% if page.toc and (page.toc|first).children %}
+      <nav class="contents" aria-label="On this page">
+        <strong>On this page</strong>
+        <ul>
+          {% for item in (page.toc|first).children recursive %}
+          <li><a href="{{ item.url }}">{{ item.title }}</a>{% if item.children %}<ul>{{ loop(item.children) }}</ul>{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </nav>
+      {% endif %}
+      {% endset %}
+      {% set content = page.content|replace('</h1>', '</h1>' ~ contents, 1) %}
+      {% set content = content|replace('<table>', '<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table>')|replace('</table>', '</table></div>') %}
+      <article>{{ content }}</article>
+      <footer>
+        {% if page.previous_page %}<a href="{{ page.previous_page.url|url }}">Previous: {{ page.previous_page.title|e }}</a>{% endif %}
+        {% if page.next_page %}<a href="{{ page.next_page.url|url }}">Next: {{ page.next_page.title|e }}</a>{% endif %}
+        {% if page.edit_url %}<a href="{{ page.edit_url|e }}">View source</a>{% endif %}
+      </footer>
+      {% endif %}
+      {% endblock %}
+    </main>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

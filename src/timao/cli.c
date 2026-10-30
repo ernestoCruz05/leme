@@ -19,7 +19,7 @@ static const char help[] =
     "terminals.\n"
     "Simple commands preserve argv boundaries and use Leme's command adapter:\n"
     "  focus_next_tag [occupied]; focus_previous_tag [occupied]\n"
-    "  focus_last_tag; focus_previous_view\n"
+    "  focus_last_tag; focus_previous_view; focus_urgent\n"
     "  focus_tag TAG; focus DIRECTION; move DIRECTION [AMOUNT]\n"
     "  move_view_to_tag TAG|next|previous [follow]\n"
     "  focus_output NAME|DIRECTION; move_view_to_output NAME|DIRECTION "

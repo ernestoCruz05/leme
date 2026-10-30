@@ -199,8 +199,6 @@ static bool leme_config_parse_layout_kind(const char *text,
     *kind = LEME_LAYOUT_DWINDLE;
   } else if (strcmp(text, "master_stack") == 0) {
     *kind = LEME_LAYOUT_MASTER_STACK;
-  } else if (strcmp(text, "accordion") == 0) {
-    *kind = LEME_LAYOUT_ACCORDION;
   } else if (strcmp(text, "desktop") == 0) {
     *kind = LEME_LAYOUT_DESKTOP;
   } else {
@@ -368,13 +366,11 @@ static bool leme_config_parse_tags(struct leme_config *config,
           !leme_config_parse_layout_kind(entry->params[0],
                                          &config->tag_defaults.layout)) {
         const struct leme_reject_extra extra = {
-            .help =
-                "valid values are `dwindle`, `master_stack`, and `accordion`",
+            .help = "valid values are `dwindle` and `master_stack`",
         };
-        if (!leme_config_reject_detailed(
-                config, entry, 0, &extra,
-                "layout must be dwindle, master_stack, "
-                "or accordion")) {
+        if (!leme_config_reject_detailed(config, entry, 0, &extra,
+                                         "layout must be dwindle or "
+                                         "master_stack")) {
           return false;
         }
         continue;
@@ -490,20 +486,19 @@ leme_config_parse_scratchpad(struct leme_config *config,
                              const struct leme_scfg_directive *directive,
                              const char *path, char **error) {
   static const char *const scratchpad_keys[] = {
-      "identity",
-      "spawn",
-      "width",
-      "height",
+      "identity", "spawn", "width", "height", "spawn_timeout",
   };
   struct leme_scratchpad_config scratchpad = {
       .width = 0.6,
       .height = 0.6,
+      .spawn_timeout_ms = 10000,
       .line = directive->lineno,
   };
   const struct leme_scfg_directive *dir_identity = NULL;
   const struct leme_scfg_directive *dir_spawn = NULL;
   const struct leme_scfg_directive *dir_width = NULL;
   const struct leme_scfg_directive *dir_height = NULL;
+  const struct leme_scfg_directive *dir_spawn_timeout = NULL;
   bool complete = true;
   size_t index;
 
@@ -632,6 +627,38 @@ leme_config_parse_scratchpad(struct leme_config *config,
         scratchpad.height = dimension;
         dir_height = entry;
       }
+    } else if (strcmp(entry->name, "spawn_timeout") == 0) {
+      int timeout;
+
+      if (dir_spawn_timeout != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_spawn_timeout,
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(
+                config, entry, -1, &extra,
+                "duplicate scratchpad property spawn_timeout")) {
+          leme_config_finish_scratchpad(&scratchpad);
+          return false;
+        }
+        complete = false;
+        continue;
+      }
+      if (entry->params_len != 1 || entry->children.directives_len != 0 ||
+          !leme_config_parse_nonnegative(entry->params[0], &timeout) ||
+          timeout < 1000 || timeout > 600000) {
+        if (!leme_config_reject(
+                config, entry, 0,
+                "spawn_timeout requires milliseconds from 1000 through "
+                "600000")) {
+          leme_config_finish_scratchpad(&scratchpad);
+          return false;
+        }
+        complete = false;
+        continue;
+      }
+      scratchpad.spawn_timeout_ms = timeout;
+      dir_spawn_timeout = entry;
     } else {
       const char *nearest = leme_config_nearest_key(
           entry->name, scratchpad_keys,
@@ -2221,13 +2248,6 @@ leme_config_parse_tag_rule(struct leme_config *config,
       }
       rule->settings.gap = (int)small;
       rule->settings.has_gap = true;
-    } else if (strcmp(entry->name, "accordion_collapse_width") == 0) {
-      field = LEME_TAG_FIELD_COLLAPSE_WIDTH;
-      if (!leme_config_parse_u16(entry->params[0], &small) || small < 10 ||
-          small > 400) {
-        goto invalid;
-      }
-      rule->settings.collapse_width = (int)small;
     } else {
       if (!leme_config_reject(config, entry, -1, "unknown tag property %s",
                               entry->name)) {
@@ -2406,8 +2426,8 @@ static bool leme_config_parse_workspace_switch_gesture(
     struct leme_config *config, const struct leme_scfg_directive *directive,
     struct leme_workspace_switch_gesture_settings *settings) {
   static const char *const gesture_keys[] = {
-      "fingers",      "distance",        "threshold",
-      "deceleration", "velocity_window", "mode",
+      "fingers",         "distance", "threshold", "deceleration",
+      "velocity_window", "mode",     "occupied",
   };
   const struct leme_scfg_directive *seen[LEME_ARRAY_LENGTH(gesture_keys)] = {0};
   size_t index;
@@ -2551,6 +2571,12 @@ static bool leme_config_parse_workspace_switch_gesture(
         settings->mode = LEME_WORKSPACE_GESTURE_FREE;
       } else if (!leme_config_reject(config, entry, 0,
                                      "mode expects single, scrub, or free")) {
+        return false;
+      }
+    } else if (key == 6) {
+      if (!leme_config_parse_boolean(entry->params[0], &settings->occupied) &&
+          !leme_config_reject(config, entry, 0,
+                              "occupied requires true or false")) {
         return false;
       }
     }
@@ -3176,7 +3202,8 @@ leme_config_parse_pointer(struct leme_config *config,
                           const struct leme_scfg_directive *directive,
                           const char *path, char **error, bool *have_global) {
   static const char *const pointer_keys[] = {
-      "accel_profile", "accel_speed", "natural_scroll", "left_handed", "tap",
+      "accel_profile", "accel_speed", "natural_scroll",
+      "left_handed",   "tap",         "focus_follows_mouse",
   };
   struct leme_pointer_settings local = {0};
   struct leme_pointer_settings *settings;
@@ -3185,6 +3212,7 @@ leme_config_parse_pointer(struct leme_config *config,
   const struct leme_scfg_directive *dir_natural_scroll = NULL;
   const struct leme_scfg_directive *dir_left_handed = NULL;
   const struct leme_scfg_directive *dir_tap = NULL;
+  const struct leme_scfg_directive *dir_focus_follows_mouse = NULL;
   const char *name = NULL;
   size_t index;
 
@@ -3337,6 +3365,32 @@ leme_config_parse_pointer(struct leme_config *config,
       }
       dir_tap = entry;
       settings->fields |= LEME_POINTER_TAP;
+    } else if (strcmp(entry->name, "focus_follows_mouse") == 0) {
+      if (name != NULL) {
+        if (!leme_config_reject(config, entry, -1,
+                                "focus_follows_mouse is only valid in the "
+                                "unnamed pointer block")) {
+          return false;
+        }
+        continue;
+      }
+      if (dir_focus_follows_mouse != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_focus_follows_mouse,
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(
+                config, entry, -1, &extra,
+                "duplicate pointer property focus_follows_mouse")) {
+          return false;
+        }
+        continue;
+      }
+      if (!leme_config_parse_boolean(entry->params[0],
+                                     &config->focus_follows_mouse)) {
+        goto invalid_boolean;
+      }
+      dir_focus_follows_mouse = entry;
     } else {
       const char *nearest = leme_config_nearest_key(
           entry->name, pointer_keys,
@@ -3822,14 +3876,19 @@ static bool leme_config_parse_key(const char *text, uint32_t *modifiers,
   return valid;
 }
 
-static bool leme_config_parse_command(struct leme_command *command,
+static bool leme_config_parse_command(struct leme_binding *binding,
                                       const struct leme_scfg_directive *entry,
                                       char **error) {
-  if (entry->params_len == 0) {
+  const size_t skip =
+      entry->params_len > 0 && strcmp(entry->params[0], "repeat") == 0 ? 1 : 0;
+
+  if (entry->params_len == skip) {
     leme_config_set_error(error, "%s", "binding requires a command");
     return false;
   }
-  return leme_command_parse(command, entry->params, entry->params_len, error);
+  binding->repeat = skip == 1;
+  return leme_command_parse(&binding->command, entry->params + skip,
+                            entry->params_len - skip, error);
 }
 
 static struct leme_bind_group *
@@ -4020,7 +4079,7 @@ leme_config_parse_bind_block(struct leme_config *config,
       }
       continue;
     }
-    if (!leme_config_parse_command(&binding->command, entry, error)) {
+    if (!leme_config_parse_command(binding, entry, error)) {
       const bool kept = leme_config_reject(
           config, entry, 0, "invalid command for %s: %s", entry->name,
           *error != NULL ? *error : "invalid command");
@@ -4183,6 +4242,7 @@ static bool leme_config_materialize_mode(struct leme_config *config,
     mode->bindings[index].modifiers = source->modifiers;
     mode->bindings[index].keysym = source->keysym;
     mode->bindings[index].lineno = source->lineno;
+    mode->bindings[index].repeat = source->repeat;
     if (!leme_config_copy_command(&mode->bindings[index].command,
                                   &source->command)) {
       leme_config_set_error(error, "%s:%d: out of memory", path, group->lineno);

@@ -1,4 +1,4 @@
-## Nixos Installation Instructions
+# NixOS installation
 
 In `flake.nix`, add the GitHub Repository to your inputs and outputs:
 ```nix

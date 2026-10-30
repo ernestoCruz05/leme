@@ -23,5 +23,5 @@ Start with [installation](getting-started/installation.md), then [run a nested s
 
 [Troubleshooting](troubleshooting/README.md) starts with logs and then groups fixes by symptom.
 
-Return to the [project overview](../README.md) or read the
-[roadmap](../ROADMAP.md) for current and planned features.
+Return to the [project overview](https://github.com/ernestoCruz05/leme/blob/main/README.md) or read the
+[roadmap](https://github.com/ernestoCruz05/leme/blob/main/ROADMAP.md) for current and planned features.

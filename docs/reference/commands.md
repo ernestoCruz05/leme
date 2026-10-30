@@ -11,13 +11,14 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `focus_tag ID` | Select a pinned, occupied, or empty candidate tag up to `maximum`. |
 | `focus_last_tag` | Swap the current and previous tag states, including a candidate. |
 | `focus_previous_view` | Focus the most recently focused alternative on the current tag. |
+| `focus_urgent` | Focus the window that most recently became urgent, switching to its output and tag. Nothing happens when no window is urgent. |
 | `focus DIR` | Focus the nearest visible view in a direction. |
 | `move DIR [PIXELS]` | Swap a tiled view or container member with its directional neighbor, or move a floating view. The default is 40 pixels. With no neighbor in that direction, nothing moves and IPC reports `noop`. |
 | `move_view_to_tag next\|previous\|ID [follow]` | Move the focused view to an adjacent or numbered tag. `follow` selects the destination. |
 | `focus_output DIR\|NAME` | Focus an adjacent output or named connector. |
 | `move_view_to_output DIR\|NAME [follow]` | Move the focused view to the target output's current tag. `follow` also moves focus and the pointer. |
-| `set_layout dwindle\|master_stack\|accordion\|desktop` | Set the focused tag's layout. |
-| `switch_layout` | Cycle dwindle, master-stack, accordion, and desktop. |
+| `set_layout dwindle\|master_stack\|desktop` | Set the focused tag's layout. |
+| `switch_layout` | Cycle dwindle, master-stack and desktop. |
 | `remove_empty_tag ID` | Remove an empty non-initial materialized tag. |
 | `toggle_floating` | Toggle the focused managed view's floating preference. On desktop tags, the window stays freely placed until the layout changes. Sticky views refuse this command. |
 | `toggle_sticky` | Keep the focused managed window visible across tags on its current output, or attach its complete sticky group to that output's current tag. Takes no arguments. |
@@ -25,8 +26,8 @@ Directions are `left`, `right`, `up`, and `down`. Tag ids, counts, and pixel amo
 | `scratchpad_send` | Put the focused managed view in the global scratchpad pool. A normal tagged view becomes unnamed. |
 | `scratchpad_toggle [NAME]` | Without a name, show or hide the newest unnamed pool member. With a configured name, show, hide, move, adopt, or start that named scratchpad. |
 | `scratchpad_retrieve` | Return the shown scratchpad to the focused tag, or return the newest unnamed member when none is shown. |
-| `resize DIR PIXELS` | Resize the focused view along one edge, or adjust its container's inner layout. The amount must be greater than zero. |
-| `container_layout dwindle\|master_stack\|accordion` | Set the focused member's container layout. Does not change the tag layout. |
+| `resize DIR PIXELS` | Move one edge of the focused view, or adjust its container's inner layout. A positive amount moves the edge outward and grows the view; a negative amount moves it back in and shrinks it, down to the client's minimum size. Zero is rejected. A tiled view can only move an edge that has a neighbour. |
+| `container_layout dwindle\|master_stack` | Set the focused member's container layout. Does not change the tag layout. |
 | `container_detach` | Detach the focused member at its current content location. |
 | `container_dissolve` | Release every member of the focused member's container as a normal desktop window. |
 | `container_join left\|right\|up\|down` | Group the focused standalone desktop window with the nearest window or container member in that direction. |

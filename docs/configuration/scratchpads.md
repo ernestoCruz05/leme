@@ -33,8 +33,12 @@ argument vector, not a shell command, so shell expansion is not performed.
 default to `0.6` and accept values from `0.1` through `1.0`, inclusive. Named
 scratchpads use these dimensions and are centered whenever they are shown.
 
+`spawn_timeout` is how long, in milliseconds, Leme waits for a started app to
+open its window. It defaults to `10000` and accepts `1000` through `600000`.
+Raise it for apps that start slowly, so they still open as the scratchpad.
+
 Malformed scratchpad blocks, duplicate names or identities, and invalid
-dimensions are skipped with configuration diagnostics. A binding for a name
+dimensions or timeouts are skipped with configuration diagnostics. A binding for a name
 that has no valid scratchpad definition is also skipped with a diagnostic. See
 [configuration errors](config-errors.md) for diagnostics and reload failures.
 
@@ -110,7 +114,8 @@ the next time a named scratchpad is shown. Retrieving a named member also
 clears its claim.
 
 If no matching view exists, a named toggle starts its configured process and
-waits up to 10 seconds for a matching managed view. A spawn failure or timeout
+waits up to `spawn_timeout` (10 seconds by default) for a matching managed
+view. A window that opens after that is an ordinary window. A spawn failure or timeout
 clears the pending request and records a diagnostic. An unknown named command
 fails without starting a process. Configuration diagnostics are available in
 the session log and through `timao eval '(query (get (config) "diagnostics"))'`.

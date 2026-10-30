@@ -85,7 +85,8 @@ static bool leme_config_validate_scratchpads(const struct leme_config *config,
         scratchpad->spawn[0][0] == '\0' || !isfinite(scratchpad->width) ||
         !isfinite(scratchpad->height) || scratchpad->width < 0.1 ||
         scratchpad->width > 1.0 || scratchpad->height < 0.1 ||
-        scratchpad->height > 1.0) {
+        scratchpad->height > 1.0 || scratchpad->spawn_timeout_ms < 1000 ||
+        scratchpad->spawn_timeout_ms > 600000) {
       leme_config_set_error(error, "config: invalid scratchpad configuration");
       return false;
     }
@@ -176,7 +177,7 @@ bool leme_config_validate_command(const struct leme_config *config,
     return leme_command_placement_name(command->placement) != NULL;
   case LEME_COMMAND_CONTAINER_LAYOUT:
     return command->layout >= LEME_LAYOUT_DWINDLE &&
-           command->layout <= LEME_LAYOUT_ACCORDION;
+           command->layout <= LEME_LAYOUT_MASTER_STACK;
   case LEME_COMMAND_SET_LAYOUT:
     return command->layout >= LEME_LAYOUT_DWINDLE &&
            command->layout <= LEME_LAYOUT_DESKTOP;
@@ -205,6 +206,7 @@ bool leme_config_validate_command(const struct leme_config *config,
   case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
   case LEME_COMMAND_FOCUS_LAST_TAG:
   case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
+  case LEME_COMMAND_FOCUS_URGENT:
   case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
   case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
   case LEME_COMMAND_TOGGLE_FLOATING:

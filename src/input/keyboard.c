@@ -15,6 +15,7 @@
 #include "protocols/input.h"
 #include "protocols/session.h"
 
+#include <assert.h>
 #include <libinput.h>
 #include <linux/input-event-codes.h>
 #include <wlr/backend/libinput.h>
@@ -305,12 +306,20 @@ bool leme_input_cycle_keyboard_layout(struct leme_server *server) {
   return true;
 }
 
+static void leme_input_binding_repeat_stop(struct leme_server *server) {
+  server->binding_repeat = NULL;
+  if (server->binding_repeat_timer != NULL) {
+    wl_event_source_timer_update(server->binding_repeat_timer, 0);
+  }
+}
+
 bool leme_input_set_mode(struct leme_server *server, const char *name) {
   size_t index;
 
   if (name == NULL) {
     return false;
   }
+  leme_input_binding_repeat_stop(server);
   for (index = 0; index < server->mode_count; index++) {
     if (strcmp(server->modes[index].name, name) == 0) {
       server->active_mode = &server->modes[index];
@@ -414,6 +423,27 @@ static bool leme_input_binding_reserved(const struct leme_binding *binding) {
          binding->command.type == LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
 }
 
+static int leme_input_handle_binding_repeat(void *data) {
+  struct leme_server *server = data;
+  const struct leme_binding *binding = server->binding_repeat;
+
+  if (binding == NULL) {
+    return 0;
+  }
+  if ((leme_input_protocols_shortcuts_inhibited(server) &&
+       !leme_input_binding_reserved(binding)) ||
+      !leme_session_command_allowed(server, &binding->command)) {
+    leme_input_binding_repeat_stop(server);
+    return 0;
+  }
+  leme_command_execute(server, &binding->command);
+  if (server->binding_repeat == binding) {
+    wl_event_source_timer_update(server->binding_repeat_timer,
+                                 server->binding_repeat_interval);
+  }
+  return 0;
+}
+
 static struct leme_binding *leme_input_find_binding_other_layouts(
     struct leme_keyboard *keyboard, xkb_keycode_t keycode,
     xkb_layout_index_t active, uint32_t modifiers) {
@@ -455,6 +485,7 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
   bool inhibited;
 
   leme_session_notify_activity(keyboard->server);
+  leme_input_binding_repeat_stop(keyboard->server);
   if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
       event->keycode < LEME_ARRAY_LENGTH(keyboard->desktop_handled) &&
       keyboard->desktop_handled[event->keycode]) {
@@ -477,6 +508,15 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
       keyboard->handled[event->keycode] = true;
       keyboard->desktop_handled[event->keycode] = true;
       return;
+    }
+    for (index = 0; index < count; index++) {
+      if (syms[index] == XKB_KEY_Escape &&
+          leme_input_pointer_grab_abort(keyboard->server)) {
+        if (event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
+          keyboard->handled[event->keycode] = true;
+        }
+        return;
+      }
     }
     if (leme_desk_owner_modal(keyboard->server)) {
       binding =
@@ -533,8 +573,6 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
       const bool locks = leme_input_keysym_locks(binding->keysym);
 
       handled = true;
-      leme_input_protocols_cancel_constraint(keyboard->server);
-      leme_command_execute(keyboard->server, &binding->command);
       if (event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
         keyboard->handled[event->keycode] = true;
         keyboard->state_skipped[event->keycode] = locks;
@@ -542,6 +580,25 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
           event->update_state = false;
         }
       }
+      leme_input_protocols_cancel_constraint(keyboard->server);
+      if (binding->repeat && keyboard->keyboard->repeat_info.rate > 0) {
+        struct leme_server *server = keyboard->server;
+        const int32_t rate = keyboard->keyboard->repeat_info.rate;
+        const int32_t delay = keyboard->keyboard->repeat_info.delay;
+
+        if (server->binding_repeat_timer == NULL) {
+          server->binding_repeat_timer = wl_event_loop_add_timer(
+              wl_display_get_event_loop(server->display),
+              leme_input_handle_binding_repeat, server);
+        }
+        if (server->binding_repeat_timer != NULL) {
+          server->binding_repeat = binding;
+          server->binding_repeat_interval = rate > 1000 ? 1 : 1000 / rate;
+          wl_event_source_timer_update(server->binding_repeat_timer,
+                                       delay > 0 ? delay : 1);
+        }
+      }
+      leme_command_execute(keyboard->server, &binding->command);
     }
     if (!handled && !inhibited &&
         event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
@@ -594,6 +651,7 @@ static void leme_input_handle_keyboard_destroy(struct wl_listener *listener,
   struct leme_server *server = keyboard->server;
 
   (void)data;
+  leme_input_binding_repeat_stop(server);
   wl_list_remove(&keyboard->keymap.link);
   wl_list_remove(&keyboard->key.link);
   wl_list_remove(&keyboard->modifiers.link);
@@ -686,36 +744,32 @@ void leme_input_apply_keyboard_repeat(struct leme_server *server) {
 void leme_input_keyboard_enter(struct leme_server *server,
                                struct wlr_surface *surface) {
   leme_desk_unfocus(server);
-  struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
+  struct wlr_keyboard *wlr_keyboard = wlr_seat_get_keyboard(server->seat);
+  const struct leme_keyboard *source = NULL;
+  const struct leme_keyboard *keyboard;
+  uint32_t keycodes[WLR_KEYBOARD_KEYS_CAP];
+  size_t count = 0;
 
-  if (keyboard == NULL) {
+  if (wlr_keyboard == NULL) {
     wlr_seat_keyboard_notify_enter(server->seat, surface, NULL, 0, NULL);
     return;
   }
-  struct leme_keyboard *owner = NULL;
-  struct leme_keyboard *candidate;
-  if (server->keyboards.next != NULL) {
-    wl_list_for_each(candidate, &server->keyboards, link) {
-      if (candidate->keyboard == keyboard) {
-        owner = candidate;
-        break;
-      }
+  wl_list_for_each(keyboard, &server->keyboards, link) {
+    if (keyboard->keyboard == wlr_keyboard) {
+      source = keyboard;
     }
   }
-  uint32_t keycodes[WLR_KEYBOARD_KEYS_CAP] = {0};
-  size_t count = 0;
-  for (size_t i = 0;
-       i < keyboard->num_keycodes && i < LEME_ARRAY_LENGTH(keyboard->keycodes);
-       i++) {
-    const uint32_t keycode = keyboard->keycodes[i];
-    if (owner != NULL && keycode < LEME_ARRAY_LENGTH(owner->desktop_handled) &&
-        owner->desktop_handled[keycode]) {
-      continue;
+  assert(source != NULL);
+  for (size_t index = 0; index < wlr_keyboard->num_keycodes; index++) {
+    const uint32_t keycode = wlr_keyboard->keycodes[index];
+
+    if (keycode >= LEME_ARRAY_LENGTH(source->handled) ||
+        !source->handled[keycode]) {
+      keycodes[count++] = keycode;
     }
-    keycodes[count++] = keycode;
   }
   wlr_seat_keyboard_notify_enter(server->seat, surface, keycodes, count,
-                                 &keyboard->modifiers);
+                                 &wlr_keyboard->modifiers);
 }
 
 void leme_input_keyboard_add(struct leme_server *server,

@@ -9,13 +9,15 @@ binds "common" {
 }
 
 binds "resize" {
-    h resize left 32
-    j resize down 32
-    k resize up 32
-    l resize right 32
+    h repeat resize right -32
+    l repeat resize right 32
+    k repeat resize down -32
+    j repeat resize down 32
     Escape mode common
 }
 ```
+
+`repeat` before the command makes the binding fire again while the key is held, at the keyboard's `repeat_rate` and `repeat_delay` (see [keyboard](keyboard.md)). Without it, a binding fires once per press. Pressing or releasing any other key stops the repeat.
 
 The supported modifiers are `SUPER`, `ALT`, `CTRL` or `CONTROL`, and `SHIFT`. Their order does not matter, but each may appear only once. Matching uses the exact modifier combination, so an extra held modifier prevents the binding from firing.
 
@@ -87,4 +89,4 @@ Rules for inheritance are:
 - a name cannot be used for both a group and a mode;
 - unused and empty groups are allowed.
 
-The full group and mode example is in [`config/leme-full.scfg`](../../config/leme-full.scfg). The [timao scripting guide](../guides/writing-timao-scripts.md) shows how an external script can select a mode.
+The full group and mode example is in [`config/leme-full.scfg`](https://github.com/ernestoCruz05/leme/blob/main/config/leme-full.scfg). The [timao scripting guide](../guides/writing-timao-scripts.md) shows how an external script can select a mode.

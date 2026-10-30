@@ -38,7 +38,6 @@ enum leme_resize_edge {
 enum leme_layout_kind {
   LEME_LAYOUT_DWINDLE,
   LEME_LAYOUT_MASTER_STACK,
-  LEME_LAYOUT_ACCORDION,
   LEME_LAYOUT_DESKTOP,
 };
 
@@ -50,9 +49,9 @@ struct leme_layout {
   double split_ratio;
   double mfact;
   uint16_t nmaster;
-  int collapse_width;
   int gap;
   bool has_gap;
+  struct leme_box area;
 };
 
 struct leme_view;
@@ -76,6 +75,7 @@ struct leme_layout_node {
       enum leme_split split;
       double ratio;
       int axis_length;
+      int split_gap;
     } branch;
     struct leme_view *view;
   } data;
@@ -90,16 +90,30 @@ struct leme_layout_resize_drag {
   struct leme_layout_node *vertical;
   double horizontal_ratio;
   double vertical_ratio;
+  double horizontal_lowest;
+  double horizontal_highest;
+  double vertical_lowest;
+  double vertical_highest;
   int horizontal_length;
   int vertical_length;
 };
 
 typedef void (*leme_layout_apply_fn)(struct leme_view *view,
                                      struct leme_box box, void *data);
+typedef int (*leme_layout_min_fn)(const struct leme_view *view,
+                                  enum leme_split split);
+
+struct leme_layout_limits {
+  int min_width;
+  int min_height;
+  int max_width;
+  int max_height;
+};
 
 struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
                                             struct leme_view *focused,
-                                            struct leme_view *added);
+                                            struct leme_view *added,
+                                            double ratio, struct leme_box area);
 struct leme_layout_node *leme_layout_remove(struct leme_layout_node *root,
                                             struct leme_view *removed);
 void leme_layout_arrange(struct leme_layout_node *root, struct leme_box area,
@@ -129,6 +143,7 @@ bool leme_layout_drop_at(enum leme_drop_mode mode, struct leme_box content,
 bool leme_layout_resize_drag_begin(struct leme_layout_node *root,
                                    struct leme_view *view,
                                    enum leme_grab_edge edges,
+                                   leme_layout_min_fn min_length,
                                    struct leme_layout_resize_drag *drag);
 bool leme_layout_resize_drag_update(struct leme_layout_resize_drag *drag,
                                     int dx, int dy);
@@ -142,10 +157,12 @@ enum leme_grab_edge leme_layout_resize_edges(struct leme_box box,
                                              double cursor_x, double cursor_y);
 struct leme_box leme_layout_resize_box(struct leme_box box,
                                        enum leme_grab_edge edges, int dx,
-                                       int dy);
+                                       int dy,
+                                       struct leme_layout_limits limits);
 bool leme_layout_resize_focused(struct leme_layout_node *root,
                                 struct leme_view *focused,
-                                enum leme_resize_edge edge, int delta);
+                                enum leme_resize_edge edge, int delta,
+                                leme_layout_min_fn min_length);
 void leme_layout_destroy(struct leme_layout_node *root);
 
 void leme_layout_init(struct leme_layout *layout, enum leme_layout_kind kind);
@@ -165,12 +182,11 @@ void leme_layout_remove_view(struct leme_layout *layout,
                              struct leme_view *removed);
 void leme_layout_arrange_subject(struct leme_layout *layout,
                                  struct leme_view *const *views, size_t count,
-                                 const struct leme_view *focused,
                                  struct leme_box area, int gap,
                                  leme_layout_apply_fn apply, void *data);
 bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
                         enum leme_resize_edge edge, int delta,
-                        struct leme_box area);
+                        struct leme_box area, leme_layout_min_fn min_length);
 bool leme_layout_drag_supported(const struct leme_layout *layout);
 
 #endif

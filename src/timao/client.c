@@ -203,6 +203,27 @@ void timao_client_tick(struct timao_client *client) {
   timao_client_recovery_tick(client);
 }
 
+uint64_t timao_client_next_due(const struct timao_client *client) {
+  if (client == NULL)
+    return UINT64_MAX;
+  uint64_t due = UINT64_MAX;
+  if (client->state == TIMAO_CLIENT_CONNECTING ||
+      client->state == TIMAO_CLIENT_NEGOTIATING)
+    due = client->deadline;
+  if (client->state == TIMAO_CLIENT_READY) {
+    for (size_t i = 0; i < 16; ++i)
+      if (client->pending[i].completion != NULL &&
+          client->pending[i].deadline < due)
+        due = client->pending[i].deadline;
+    if (client->shutting_down && client->shutdown_due < due)
+      due = client->shutdown_due;
+  }
+  if (client->state == TIMAO_CLIENT_IDLE && client->retry_pending &&
+      client->retry_due < due)
+    due = client->retry_due;
+  return due;
+}
+
 struct delivery_selection {
   struct timao_client_ticket ticket;
   uint64_t watch;

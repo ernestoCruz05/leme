@@ -476,12 +476,14 @@ enum leme_live_setting_id {
   LEME_LIVE_POINTER_NATURAL_SCROLL,
   LEME_LIVE_POINTER_LEFT_HANDED,
   LEME_LIVE_POINTER_TAP,
+  LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE,
   LEME_LIVE_GESTURES_MODE,
   LEME_LIVE_GESTURES_FINGERS,
   LEME_LIVE_GESTURES_DISTANCE,
   LEME_LIVE_GESTURES_THRESHOLD,
   LEME_LIVE_GESTURES_DECELERATION,
   LEME_LIVE_GESTURES_VELOCITY_WINDOW,
+  LEME_LIVE_GESTURES_OCCUPIED,
   LEME_LIVE_PUBLICATION_ACTIVATION,
   LEME_LIVE_SETTING_COUNT
 };
@@ -580,6 +582,8 @@ static int find_live_setting(const char *const *path, size_t path_count) {
         return LEME_LIVE_POINTER_LEFT_HANDED;
       if (strcmp(path[1], "tap") == 0)
         return LEME_LIVE_POINTER_TAP;
+      if (strcmp(path[1], "focus_follows_mouse") == 0)
+        return LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE;
       return -1;
     }
     if (strcmp(path[0], "publication") == 0) {
@@ -613,6 +617,8 @@ static int find_live_setting(const char *const *path, size_t path_count) {
         return LEME_LIVE_GESTURES_DECELERATION;
       if (strcmp(path[2], "velocity_window") == 0)
         return LEME_LIVE_GESTURES_VELOCITY_WINDOW;
+      if (strcmp(path[2], "occupied") == 0)
+        return LEME_LIVE_GESTURES_OCCUPIED;
       return -1;
     }
   }
@@ -835,7 +841,9 @@ enum leme_control_code leme_config_live_prepare_set(
   case LEME_LIVE_OUTPUT_WARP_CURSOR:
   case LEME_LIVE_POINTER_NATURAL_SCROLL:
   case LEME_LIVE_POINTER_LEFT_HANDED:
-  case LEME_LIVE_POINTER_TAP: {
+  case LEME_LIVE_POINTER_TAP:
+  case LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE:
+  case LEME_LIVE_GESTURES_OCCUPIED: {
     if (leme_public_kind(value) != LEME_PUBLIC_BOOLEAN) {
       leme_control_free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected boolean value");
@@ -1050,6 +1058,9 @@ enum leme_control_code leme_config_live_prepare_set(
   case LEME_LIVE_POINTER_TAP:
     noop = (cur->pointer_defaults.tap == prep->parsed.bool_val);
     break;
+  case LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE:
+    noop = (cur->focus_follows_mouse == prep->parsed.bool_val);
+    break;
   case LEME_LIVE_GESTURES_MODE:
     noop = (cur->gestures.workspace_switch.mode ==
             (enum leme_workspace_gesture_mode)prep->parsed.int_val);
@@ -1071,6 +1082,9 @@ enum leme_control_code leme_config_live_prepare_set(
   case LEME_LIVE_GESTURES_VELOCITY_WINDOW:
     noop = (cur->gestures.workspace_switch.velocity_window_ms ==
             (uint32_t)prep->parsed.int_val);
+    break;
+  case LEME_LIVE_GESTURES_OCCUPIED:
+    noop = (cur->gestures.workspace_switch.occupied == prep->parsed.bool_val);
     break;
   case LEME_LIVE_PUBLICATION_ACTIVATION:
     noop = (cur->publication.activation ==
@@ -1337,6 +1351,9 @@ leme_config_live_execute_one(struct leme_server *server,
     cfg->pointer_defaults.tap = prep->parsed.bool_val;
     leme_input_apply_pointer_config(server, cfg);
     break;
+  case LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE:
+    cfg->focus_follows_mouse = prep->parsed.bool_val;
+    break;
   case LEME_LIVE_GESTURES_MODE:
     cfg->gestures.workspace_switch.mode =
         (enum leme_workspace_gesture_mode)prep->parsed.int_val;
@@ -1361,6 +1378,10 @@ leme_config_live_execute_one(struct leme_server *server,
   case LEME_LIVE_GESTURES_VELOCITY_WINDOW:
     cfg->gestures.workspace_switch.velocity_window_ms =
         (uint32_t)prep->parsed.int_val;
+    leme_input_workspace_gesture_reset(server);
+    break;
+  case LEME_LIVE_GESTURES_OCCUPIED:
+    cfg->gestures.workspace_switch.occupied = prep->parsed.bool_val;
     leme_input_workspace_gesture_reset(server);
     break;
   case LEME_LIVE_PUBLICATION_ACTIVATION:

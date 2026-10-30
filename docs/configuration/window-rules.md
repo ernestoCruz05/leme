@@ -33,10 +33,10 @@ window "*" {
 | --- | --- | --- |
 | block argument | one or more `fnmatch(3)` patterns for `app_id`, X11 `class`, or `*` | selects the application |
 | `title` | `fnmatch(3)` glob with `*`, `?`, and bracket expressions | selects the title |
-| `tag` | integer from `1` through the output maximum | once, when the window opens |
-| `floating` | `true` or `false` | once, when the window opens |
-| `fullscreen` | `true` or `false` | once, when the window opens |
-| `output` | connector name such as `DP-1` | once, when the window opens |
+| `tag` | integer from `1` through the output maximum | once |
+| `floating` | `true` or `false` | once |
+| `fullscreen` | `true` or `false` | once |
+| `output` | connector name such as `DP-1` | once |
 | `opacity` | decimal from `0.0` through `1.0` | continuously |
 
 A `window` block accepts one or more identity patterns as arguments. When multiple arguments are given, the rule matches if any pattern matches the window's `app_id` or X11 class (OR logic). Pattern matching uses `fnmatch(3)`, supporting `*` (any string), `?` (any single character), and bracket expressions like `[0-9]`.
@@ -51,12 +51,12 @@ Every matching rule is applied in file order. For each key, the last matching ru
 
 ## Placement behavior
 
-`tag`, `floating`, `fullscreen`, and `output` apply once when the window opens. Moving a window later does not cause a rule to move it back. `opacity` is reevaluated while the window lives, so a title match can follow a title change. A matching rule replaces the active or inactive style opacity; the values are not multiplied.
+`tag`, `floating`, `fullscreen`, and `output` apply once per window: when it opens, or the first time a later title, `app_id` or X11 class change makes a rule set that key. A key that already applied never applies again, so moving a window later does not cause a rule to move it back, and a title that keeps changing cannot keep moving it. A key that first applies after the window opened applies even if you already moved the window. A late `fullscreen false` does nothing, as it does at open. `opacity` is reevaluated while the window lives, so a title match can follow a title change. A matching rule replaces the active or inactive style opacity; the values are not multiplied.
 
 An output rule without a tag uses the named output's focused tag. If the output is disconnected or the tag is above its maximum, Leme drops that placement key and opens the window normally. A rule cannot prevent a window from opening.
 
 A child with a usable managed parent keeps the parent's output and tag. Matching `floating`, `fullscreen`, and `opacity` keys still apply, but placement keys do not override the parent relationship.
 
-A title is useful only if the application sets it before the window appears. Electron applications often map with a placeholder title. Use `app_id` for one-shot placement in that case; opacity continues to reevaluate.
+Applications that set their title or class after the window appears, such as Electron apps with a placeholder title or Spotify, get their placement when the matching name arrives. The window opens where it would without the rule first, then moves.
 
 Fullscreen views are always fully opaque. See [appearance](appearance.md) for the reason.

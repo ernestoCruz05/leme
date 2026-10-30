@@ -28,6 +28,7 @@ struct leme_scratchpad_config {
   char **spawn;
   double width;
   double height;
+  int spawn_timeout_ms;
   int line;
 };
 
@@ -93,7 +94,6 @@ enum leme_tag_field {
   LEME_TAG_FIELD_NMASTER = 1 << 3,
   LEME_TAG_FIELD_GAP = 1 << 4,
   LEME_TAG_FIELD_SPLIT_RATIO = 1 << 5,
-  LEME_TAG_FIELD_COLLAPSE_WIDTH = 1 << 6,
 };
 
 struct leme_tag_settings {
@@ -103,7 +103,6 @@ struct leme_tag_settings {
   uint16_t nmaster;
   int gap;
   double split_ratio;
-  int collapse_width;
   bool has_gap;
 };
 
@@ -184,6 +183,7 @@ struct leme_workspace_switch_gesture_settings {
   double threshold;
   double deceleration;
   uint32_t velocity_window_ms;
+  bool occupied;
 };
 
 struct leme_gesture_config {
@@ -315,6 +315,7 @@ struct leme_config {
   struct leme_pointer_settings pointer_defaults;
   struct leme_pointer_rule *pointer_rules;
   size_t pointer_rule_count;
+  bool focus_follows_mouse;
   struct leme_environment *environment;
   size_t environment_count;
   struct leme_startup *startup;

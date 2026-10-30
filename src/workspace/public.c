@@ -15,8 +15,6 @@ const char *leme_layout_public_name(enum leme_layout_kind kind) {
     return "dwindle";
   case LEME_LAYOUT_MASTER_STACK:
     return "master_stack";
-  case LEME_LAYOUT_ACCORDION:
-    return "accordion";
   case LEME_LAYOUT_DESKTOP:
     return "desktop";
   }
@@ -29,11 +27,8 @@ static enum leme_public_status tag_value(struct leme_public_builder *b,
                                          struct leme_public_value **out) {
   const struct leme_server *server = output->server;
   const struct leme_tag *tag = output->tags.table[number];
-  struct leme_tag_settings settings = {.layout = LEME_LAYOUT_DWINDLE};
-  if (server->config != NULL)
-    leme_config_tag_settings(server->config, number, &settings);
   const char *layout =
-      leme_layout_public_name(tag == NULL ? settings.layout : tag->layout.kind);
+      leme_layout_public_name(leme_tags_id_layout(&output->tags, number));
   if (layout == NULL)
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
   int64_t view_count = 0;

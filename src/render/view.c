@@ -7,6 +7,7 @@
 #include "config/config.h"
 #include "config/style.h"
 #include "core/server.h"
+#include "input/input.h"
 #include "output/output.h"
 #include "protocols/capture.h"
 #include "protocols/session.h"
@@ -44,10 +45,25 @@ leme_render_view_parent(const struct leme_view *view) {
   if (leme_ownership_kind(view) == LEME_VIEW_OWNER_DURABLE) {
     return view->server->scene_durable;
   }
-  if (view->fullscreen && (view->server->config == NULL ||
-                           view->server->config->fullscreen_covers !=
-                               LEME_FULLSCREEN_COVERS_NONE)) {
-    return view->server->scene_fullscreen;
+  if (view->unmanaged) {
+    return view->server->scene_unmanaged;
+  }
+  if (view->server->config == NULL ||
+      view->server->config->fullscreen_covers != LEME_FULLSCREEN_COVERS_NONE) {
+    const struct leme_tag *tag = leme_ownership_tag(view);
+    const struct leme_view *other;
+
+    if (view->fullscreen) {
+      return view->server->scene_fullscreen;
+    }
+    if (tag != NULL) {
+      wl_list_for_each(other, &tag->views, tag_link) {
+        if (other->mapped && other->fullscreen &&
+            leme_view_is_transient_of(view, other)) {
+          return view->server->scene_fullscreen;
+        }
+      }
+    }
   }
   return leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
                  view->detached || view->fullscreen
@@ -62,15 +78,20 @@ leme_render_view_parent(const struct leme_view *view) {
  */
 static void leme_render_sync_durable(struct leme_server *server) {
   if (server == NULL || server->scene_durable == NULL ||
-      server->scene_fullscreen == NULL || server->scene_top == NULL) {
+      server->scene_fullscreen == NULL || server->scene_top == NULL ||
+      server->scene_unmanaged == NULL) {
     return;
   }
   if (wl_list_empty(&server->scene_fullscreen->children)) {
     wlr_scene_node_place_below(&server->scene_durable->node,
                                &server->scene_top->node);
+    wlr_scene_node_place_above(&server->scene_unmanaged->node,
+                               &server->scene_top->node);
   } else {
     wlr_scene_node_place_above(&server->scene_durable->node,
                                &server->scene_fullscreen->node);
+    wlr_scene_node_place_above(&server->scene_unmanaged->node,
+                               &server->scene_durable->node);
   }
 }
 
@@ -1524,6 +1545,7 @@ static void leme_render_view_animation_done(void *data) {
                                  !leme_view_is_minimized(state->view));
     }
     state->view->animation_state = NULL;
+    leme_input_pointer_rebase(state->view->server);
   }
   free(state);
 }
@@ -1927,6 +1949,7 @@ static void leme_render_view_move_done(void *data) {
         view, leme_render_view_corner_radius(view, view->box),
         content.x - view->box.x, leme_render_view_blur(view), content,
         leme_desk_decoration_height(view, view->box));
+    leme_input_pointer_rebase(view->server);
   }
   free(state);
 }
@@ -2371,25 +2394,64 @@ static struct wlr_box leme_render_view_slot_clip(const struct leme_view *view,
  * recorte os efeitos passam para fora da moldura, e até para a saída ao lado.
  */
 void leme_render_view_clip_to_geometry(struct leme_view *view) {
-  const struct wlr_surface *surface;
-  struct wlr_box geometry;
+  struct wlr_box geometry = {0};
+  bool needs_clip = false;
 
-  if (view == NULL || view->scene_tree == NULL || view->kind != LEME_VIEW_XDG ||
-      view->xdg_toplevel == NULL || view->xdg_toplevel->base == NULL ||
-      view->xdg_toplevel->base->surface == NULL) {
+  if (view == NULL || view->scene_tree == NULL) {
     return;
   }
-  surface = view->xdg_toplevel->base->surface;
-  geometry = view->xdg_toplevel->base->geometry;
-  const bool needs_clip = geometry.width > 0 && geometry.height > 0 &&
-                          !(geometry.x <= 0 && geometry.y <= 0 &&
-                            geometry.width >= surface->current.width &&
-                            geometry.height >= surface->current.height);
+  const bool tiled =
+      leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING &&
+      !view->fullscreen && !view->unmanaged;
+  const struct leme_box content = leme_render_view_content_box(view, view->box);
+  struct leme_render_view_state *state = view->render_state;
+
+  if (view->kind == LEME_VIEW_XDG) {
+    if (view->xdg_toplevel == NULL || view->xdg_toplevel->base == NULL ||
+        view->xdg_toplevel->base->surface == NULL) {
+      return;
+    }
+    const struct wlr_surface *surface = view->xdg_toplevel->base->surface;
+    const struct wlr_xdg_toplevel_state *limits = &view->xdg_toplevel->current;
+
+    geometry = view->xdg_toplevel->base->geometry;
+    if (tiled) {
+      const int border = content.x - view->box.x;
+      const int dx = limits->max_width > 0 &&
+                             limits->max_width < content.width &&
+                             geometry.width < content.width
+                         ? (content.width - geometry.width) / 2
+                         : 0;
+      const int dy = limits->max_height > 0 &&
+                             limits->max_height < content.height &&
+                             geometry.height < content.height
+                         ? (content.height - geometry.height) / 2
+                         : 0;
+
+      wlr_scene_node_set_position(&view->scene_tree->node, border + dx,
+                                  border + dy);
+    }
+    if (tiled && geometry.width > content.width) {
+      geometry.width = content.width;
+    }
+    if (tiled && geometry.height > content.height) {
+      geometry.height = content.height;
+    }
+    needs_clip = geometry.width > 0 && geometry.height > 0 &&
+                 !(geometry.x <= 0 && geometry.y <= 0 &&
+                   geometry.width >= surface->current.width &&
+                   geometry.height >= surface->current.height);
+  } else if (tiled) {
+    geometry.width = content.width;
+    geometry.height = content.height;
+    needs_clip = geometry.width > 0 && geometry.height > 0;
+  } else if (state == NULL || !state->clip_applied) {
+    return;
+  }
 
   const struct wlr_box clip = needs_clip ? geometry : (struct wlr_box){0};
   const struct wlr_box surface_clip =
       leme_render_view_slot_clip(view, clip, geometry);
-  struct leme_render_view_state *state = view->render_state;
 
   if (state != NULL && state->clip_applied &&
       wlr_box_equal(&state->clip, &clip) &&
@@ -2434,7 +2496,6 @@ void leme_render_view_set_box(struct leme_view *view, struct leme_box box) {
   }
   content = leme_render_view_content_box(view, box);
   border_width = content.x - box.x;
-  leme_render_view_clip_to_geometry(view);
   wlr_scene_node_set_position(&view->render_tree->node, box.x, box.y);
   for (index = 0; index < LEME_ARRAY_LENGTH(view->border); index++) {
     nodes.border[index] = view->border[index];
@@ -2448,6 +2509,7 @@ void leme_render_view_set_box(struct leme_view *view, struct leme_box box) {
   leme_render_view_layout_frame(
       &nodes, box, border_width, leme_render_view_corner_radius(view, box),
       leme_render_view_titlebar(view, &titlebar_style));
+  leme_render_view_clip_to_geometry(view);
   leme_render_view_sync_presentation(view);
   leme_render_view_apply_surface_effects(
       view, leme_render_view_corner_radius(view, box), border_width,

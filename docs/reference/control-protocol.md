@@ -34,8 +34,8 @@ null. Membership changes and output transfers publish committed records; view
 IDs do not change. Containers add no entity kind, root or typed reference, and
 these values cannot be traversed or passed to `by-id`.
 
-`container-layout` takes one view target and one of `dwindle`, `master_stack` or
-`accordion`. `container-detach` and `container-dissolve` each take one view target.
+`container-layout` takes one view target and either `dwindle` or
+`master_stack`. `container-detach` and `container-dissolve` each take one view target.
 The view must currently be an eligible member. `container-join` takes one view
 target and one of `left`, `right`, `up` or `down`; the view must be an eligible
 standalone desktop window. The ordinary command adapter also accepts

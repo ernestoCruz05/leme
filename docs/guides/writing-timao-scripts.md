@@ -2,10 +2,10 @@
 
 `timao` uses a prefix language. It parses and checks the forms in the whole source before execution, so a syntax error at the end of a file prevents earlier actions from running. Errors found during execution can follow successful actions. Those earlier effects are not rolled back.
 
-[`scripts/dev-session.timao`](../../scripts/dev-session.timao) sets up a workspace
+[`scripts/dev-session.timao`](https://github.com/ernestoCruz05/leme/blob/main/scripts/dev-session.timao) sets up a workspace
 by reusing or launching applications, waiting for their windows, and moving them
 to a selected output and tag. It defaults to a read-only plan. See the
-[script documentation](../../scripts/README.md) for options and limitations.
+[script documentation](https://github.com/ernestoCruz05/leme/blob/main/scripts/README.md) for options and limitations.
 
 ## Read state
 

@@ -46,8 +46,7 @@ static enum leme_public_status tag_assignments(struct leme_public_builder *b,
                                                struct leme_public_value **out) {
   const uint32_t known = LEME_TAG_FIELD_LAYOUT | LEME_TAG_FIELD_DROP_MODE |
                          LEME_TAG_FIELD_MFACT | LEME_TAG_FIELD_NMASTER |
-                         LEME_TAG_FIELD_GAP | LEME_TAG_FIELD_SPLIT_RATIO |
-                         LEME_TAG_FIELD_COLLAPSE_WIDTH;
+                         LEME_TAG_FIELD_GAP | LEME_TAG_FIELD_SPLIT_RATIO;
   if ((rule->fields & ~known) != 0)
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
   const struct leme_tag_settings *settings = &rule->settings;
@@ -72,10 +71,7 @@ static enum leme_public_status tag_assignments(struct leme_public_builder *b,
            LEME_PUBLIC_OK) ||
       ((rule->fields & LEME_TAG_FIELD_SPLIT_RATIO) != 0 &&
        leme_public_put_number(b, record, LEME_PUBLIC_TEXT("split_ratio"),
-                              settings->split_ratio) != LEME_PUBLIC_OK) ||
-      ((rule->fields & LEME_TAG_FIELD_COLLAPSE_WIDTH) != 0 &&
-       leme_public_put_int(b, record, LEME_PUBLIC_TEXT("collapse_width"),
-                           settings->collapse_width) != LEME_PUBLIC_OK))
+                              settings->split_ratio) != LEME_PUBLIC_OK))
     return leme_public_builder_status(b);
   *out = record;
   return LEME_PUBLIC_OK;
@@ -399,7 +395,7 @@ scratchpads_value(struct leme_public_builder *b,
   for (size_t i = 0; i < config->scratchpad_count; ++i) {
     const struct leme_scratchpad_config *scratchpad = &config->scratchpads[i];
     struct leme_public_value *record = NULL, *redacted = NULL;
-    if (leme_public_object(b, 5, &record) != LEME_PUBLIC_OK ||
+    if (leme_public_object(b, 6, &record) != LEME_PUBLIC_OK ||
         leme_config_public_redacted(b, &redacted) != LEME_PUBLIC_OK ||
         leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("name"),
                              scratchpad->name) != LEME_PUBLIC_OK ||
@@ -409,6 +405,9 @@ scratchpads_value(struct leme_public_builder *b,
                                scratchpad->width) != LEME_PUBLIC_OK ||
         leme_public_put_number(b, record, LEME_PUBLIC_TEXT("height"),
                                scratchpad->height) != LEME_PUBLIC_OK ||
+        leme_public_put_number(b, record, LEME_PUBLIC_TEXT("spawn_timeout"),
+                               scratchpad->spawn_timeout_ms) !=
+            LEME_PUBLIC_OK ||
         leme_public_object_set(b, record, LEME_PUBLIC_TEXT("spawn"),
                                redacted) != LEME_PUBLIC_OK ||
         leme_public_array_set(b, array, i, record) != LEME_PUBLIC_OK)

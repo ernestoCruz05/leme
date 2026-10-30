@@ -59,13 +59,7 @@ void leme_container_focus_view(struct leme_view *view) {
     view = leme_view_parent(view);
   }
   if (view != NULL) {
-    const bool changed = container->focused != view;
     container->focused = view;
-    if (changed && container->layout.kind == LEME_LAYOUT_ACCORDION) {
-      container->generation++;
-      leme_container_arrange(container, true);
-      leme_render_container_restack(container, false);
-    }
     leme_render_container_set_box(container, container->box);
   }
 }
@@ -220,7 +214,7 @@ static void leme_container_geometry_changed(struct leme_container *container,
 bool leme_container_set_layout(struct leme_container *container,
                                enum leme_layout_kind kind) {
   if (container == NULL || !leme_container_action_allowed(container->focused) ||
-      kind < LEME_LAYOUT_DWINDLE || kind > LEME_LAYOUT_ACCORDION) {
+      kind < LEME_LAYOUT_DWINDLE || kind > LEME_LAYOUT_MASTER_STACK) {
     return false;
   }
   if (kind == container->layout.kind) {
@@ -508,9 +502,9 @@ void leme_container_arrange(struct leme_container *container, bool animate) {
   container->arranged_content =
       leme_container_content_box(container, container->box);
   leme_layout_arrange_subject(&container->layout, container->views,
-                              container->count, container->focused,
-                              container->arranged_content, LEME_CONTAINER_GAP,
-                              leme_container_apply, &animate);
+                              container->count, container->arranged_content,
+                              LEME_CONTAINER_GAP, leme_container_apply,
+                              &animate);
 }
 
 void leme_container_reconcile_geometry(struct leme_server *server) {
@@ -1042,7 +1036,7 @@ bool leme_container_prepare_drop(struct leme_view *target,
       return false;
     }
     leme_layout_arrange_subject(
-        &prepared.layout, prepared.views, prepared.count, added,
+        &prepared.layout, prepared.views, prepared.count,
         leme_container_content_box(container, frame), LEME_CONTAINER_GAP,
         leme_container_collect_preview, &preview);
     leme_layout_finish(&prepared.layout);
@@ -1065,7 +1059,7 @@ bool leme_container_prepare_drop(struct leme_view *target,
                         .ratio = LEME_CONTAINER_SPLIT_RATIO}};
     struct leme_layout layout = {.kind = LEME_LAYOUT_DWINDLE, .root = &root};
     leme_layout_arrange_subject(
-        &layout, views, 2, added, leme_container_content_box(&candidate, frame),
+        &layout, views, 2, leme_container_content_box(&candidate, frame),
         LEME_CONTAINER_GAP, leme_container_collect_preview, &preview);
   }
   if (preview.box.width <= 0 || preview.box.height <= 0) {

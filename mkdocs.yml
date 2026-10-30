@@ -1,0 +1,82 @@
+site_name: Leme
+site_description: Documentation for the Leme Wayland compositor
+site_url: https://ernestoCruz05.github.io/leme/
+repo_url: https://github.com/ernestoCruz05/leme
+edit_uri: blob/main/docs/
+
+theme:
+  name: null
+  custom_dir: docs/.theme
+  static_templates:
+    - search.html
+    - 404.html
+
+plugins:
+  - search:
+      lang: en
+      min_search_length: 2
+
+validation:
+  nav:
+    omitted_files: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+nav:
+  - Overview: README.md
+  - Getting started:
+      - Getting started: getting-started/README.md
+      - Installation: getting-started/installation.md
+      - Nested session: getting-started/nested-session.md
+      - Minimal configuration: getting-started/minimal-config.md
+      - First session: getting-started/first-session.md
+      - NixOS: getting-started/nixos.md
+  - Concepts:
+      - Concepts: concepts/README.md
+      - Tags and outputs: concepts/tags-and-outputs.md
+      - Layouts: concepts/layouts.md
+      - Focus and movement: concepts/focus-and-movement.md
+      - Floating and fullscreen: concepts/floating-and-fullscreen.md
+  - Configuration:
+      - Configuration: configuration/README.md
+      - Syntax and variables: configuration/syntax-and-variables.md
+      - Tags: configuration/tags.md
+      - Appearance: configuration/appearance.md
+      - Animation: configuration/animation.md
+      - Window rules: configuration/window-rules.md
+      - Scratchpads: configuration/scratchpads.md
+      - Outputs: configuration/outputs.md
+      - Keyboard: configuration/keyboard.md
+      - Pointer: configuration/pointer.md
+      - Gestures: configuration/gestures.md
+      - Cursor: configuration/cursor.md
+      - Keybindings: configuration/keybindings.md
+      - Startup and environment: configuration/startup-and-environment.md
+      - Configuration errors: configuration/config-errors.md
+  - Guides:
+      - Guides: guides/README.md
+      - Multi-monitor: guides/multi-monitor.md
+      - Bars, launchers, and notifications: guides/bars-launchers-and-notifications.md
+      - Locking and idle: guides/locking-and-idle.md
+      - Screen sharing: guides/screen-sharing.md
+      - XWayland: guides/xwayland.md
+      - Gentoo/OpenRC: guides/gentoo-openrc.md
+      - Writing timao scripts: guides/writing-timao-scripts.md
+  - Reference:
+      - Reference: reference/README.md
+      - Commands: reference/commands.md
+      - timao: reference/timao.md
+      - Control protocol: reference/control-protocol.md
+      - Wayland protocols: reference/wayland-protocols.md
+      - Limitations: reference/limitations.md
+  - Troubleshooting:
+      - Troubleshooting: troubleshooting/README.md
+      - Startup: troubleshooting/startup.md
+      - Outputs: troubleshooting/outputs.md
+      - Input: troubleshooting/input.md
+      - Portals and capture: troubleshooting/portals-and-capture.md
+      - XWayland: troubleshooting/xwayland.md
+      - Crashes: troubleshooting/crashes.md
+      - Performance: troubleshooting/performance.md

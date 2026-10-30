@@ -32,8 +32,7 @@ A pointer drag can carry a view to another output when `cross_output_drag` is en
 
 Clicking a container member, its dialog or its frame raises the whole group.
 Hover focus does not raise it. Clicking an inner gap focuses the remembered
-member; the frame itself never takes client keyboard focus. Accordion containers
-also use hover focus, unlike accordion tags.
+member; the frame itself never takes client keyboard focus.
 
 Hold Shift (the `container_modifier` setting) while dragging a window to group
 it with the window or group under the cursor. `container_join DIR` groups the

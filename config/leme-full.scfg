@@ -9,11 +9,9 @@ tags {
         nmaster 1
     }
     tag 4-6 {
-        layout accordion
         drop_mode edges
         gap 4
         split_ratio 0.5
-        accordion_collapse_width 46
     }
 }
 
@@ -94,6 +92,7 @@ scratchpad "drop" {
     spawn foot --app-id foot-drop
     width 0.6
     height 0.6
+    # spawn_timeout 10000 # ms to wait for the window before giving up
 }
 
 # A list of scratchpads generated with a loop. Uncomment to use:
@@ -175,6 +174,7 @@ pointer "Razer Razer DeathAdder V2" {
 #         threshold 0.5
 #         deceleration 0.997
 #         velocity_window 150
+#         occupied false # true skips tags without windows
 #     }
 # }
 
@@ -211,7 +211,6 @@ bind_group "outputs" {
 bind_group "layouts" {
     $mod+t set_layout dwindle
     $mod+m set_layout master_stack
-    $mod+a set_layout accordion
     $mod+w switch_layout
 }
 

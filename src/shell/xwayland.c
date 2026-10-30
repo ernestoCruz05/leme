@@ -164,6 +164,9 @@ static void leme_xwayland_surface_map(struct leme_xwayland_view *wrapper) {
 
   leme_view_policy_apply_rules(view->server, &rules, &destination, &floating,
                                parent != NULL);
+  view->rule_fields =
+      rules.fields |
+      (parent != NULL ? LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT : 0);
 
   const bool sticky_parent = parent != NULL && leme_view_is_sticky(parent) &&
                              !wrapper->xsurface->override_redirect;
@@ -293,7 +296,7 @@ static void leme_xwayland_handle_request_configure(struct wl_listener *listener,
     view->box = leme_xwayland_requested_box(wrapper, requested);
     leme_view_configure(view, view->box);
   } else if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
-             !leme_view_is_placed(view)) {
+             !leme_view_is_placed(view) && !view->fullscreen) {
     view->box = leme_xwayland_requested_box(
         wrapper, leme_render_view_frame_box(view, requested));
     leme_render_view_set_box(view, view->box);
@@ -499,6 +502,7 @@ static void leme_xwayland_handle_set_title(struct wl_listener *listener,
       wl_container_of(listener, wrapper, set_title);
 
   (void)data;
+  leme_view_apply_late_rules(wrapper->view);
   leme_public_server_invalidate(wrapper->view->server);
   leme_desk_decoration_refresh(wrapper->view);
   leme_render_view_set_activated(
@@ -512,6 +516,7 @@ static void leme_xwayland_handle_set_class(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(wrapper->view);
+  leme_view_apply_late_rules(wrapper->view);
   if (wrapper->view->mapped) {
     leme_view_arrange_instant(wrapper->view->server);
   }

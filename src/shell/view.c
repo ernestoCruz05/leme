@@ -11,6 +11,8 @@
 #include "protocols/toplevel.h"
 #include "shell/layer.h"
 #include "shell/policy.h"
+#include "shell/rules.h"
+#include "shell/xwayland.h"
 #include "output/output.h"
 #include "render/render.h"
 #include "render/workspace_transition.h"
@@ -21,6 +23,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/edges.h>
 #include <wlr/util/log.h>
@@ -73,6 +76,63 @@ const char *leme_view_identity(const struct leme_view *view) {
     return view->xdg_toplevel == NULL ? NULL : view->xdg_toplevel->app_id;
   }
   return view->xwayland_surface == NULL ? NULL : view->xwayland_surface->class;
+}
+
+static int leme_view_frame_length(const struct leme_view *view,
+                                  enum leme_split split, int32_t length) {
+  const bool horizontal = split == LEME_SPLIT_HORIZONTAL;
+  const struct leme_box border =
+      leme_render_view_frame_box(view, (struct leme_box){0});
+
+  if (length <= 0) {
+    return 0;
+  }
+  const int64_t frame =
+      (int64_t)length + (horizontal ? border.width : border.height);
+
+  return frame > INT_MAX ? INT_MAX : (int)frame;
+}
+
+int leme_view_min_length(const struct leme_view *view, enum leme_split split) {
+  const bool horizontal = split == LEME_SPLIT_HORIZONTAL;
+
+  if (view->kind == LEME_VIEW_XDG) {
+    return view->xdg_toplevel == NULL
+               ? 0
+               : leme_view_frame_length(
+                     view, split,
+                     horizontal ? view->xdg_toplevel->current.min_width
+                                : view->xdg_toplevel->current.min_height);
+  }
+  if (view->xwayland_surface == NULL ||
+      view->xwayland_surface->size_hints == NULL) {
+    return 0;
+  }
+  return leme_view_frame_length(
+      view, split,
+      horizontal ? view->xwayland_surface->size_hints->min_width
+                 : view->xwayland_surface->size_hints->min_height);
+}
+
+int leme_view_max_length(const struct leme_view *view, enum leme_split split) {
+  const bool horizontal = split == LEME_SPLIT_HORIZONTAL;
+
+  if (view->kind == LEME_VIEW_XDG) {
+    return view->xdg_toplevel == NULL
+               ? 0
+               : leme_view_frame_length(
+                     view, split,
+                     horizontal ? view->xdg_toplevel->current.max_width
+                                : view->xdg_toplevel->current.max_height);
+  }
+  if (view->xwayland_surface == NULL ||
+      view->xwayland_surface->size_hints == NULL) {
+    return 0;
+  }
+  return leme_view_frame_length(
+      view, split,
+      horizontal ? view->xwayland_surface->size_hints->max_width
+                 : view->xwayland_surface->size_hints->max_height);
 }
 
 const char *leme_view_title(const struct leme_view *view) {
@@ -510,6 +570,7 @@ void leme_view_arrange(struct leme_server *server) {
                               leme_output_usable_box(output), gap);
   }
   leme_view_refresh_desktop(server);
+  leme_input_pointer_rebase(server);
   leme_view_refresh_end(server);
 }
 
@@ -533,6 +594,20 @@ void leme_view_refresh_tag_focus(struct leme_server *server) {
   }
 }
 
+/*
+ * Com cobertura activa a janela toma o ecrã todo; sem ela fica na área útil,
+ * porque uma caixa inteira debaixo de uma barra só seria recortada.
+ */
+static struct leme_box leme_view_fullscreen_area(const struct leme_view *view) {
+  const struct leme_output *output = leme_view_output(view);
+
+  return view->server->config != NULL &&
+                 view->server->config->fullscreen_covers ==
+                     LEME_FULLSCREEN_COVERS_NONE
+             ? leme_output_usable_box(output)
+             : leme_output_full_box(output);
+}
+
 static bool leme_view_adopt_to_output(struct leme_view *view,
                                       struct leme_output *output, bool follow,
                                       bool warp) {
@@ -551,7 +626,8 @@ static bool leme_view_adopt_to_output(struct leme_view *view,
     leme_render_view_set_box(view, view->box);
   }
   if (view->fullscreen) {
-    leme_view_apply_layout_box(view, leme_output_full_box(output), false);
+    view->box = leme_view_fullscreen_area(view);
+    leme_render_view_set_box(view, view->box);
   }
   leme_view_refresh_begin(server);
   leme_view_arrange(server);
@@ -583,13 +659,18 @@ bool leme_view_move_to_output(struct leme_view *view,
   const bool placed = leme_view_is_placed(view);
   const struct leme_box saved_restore = view->placement.restore_box;
   if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
-      !view->fullscreen && source != NULL) {
+      source != NULL) {
     const struct leme_box from = leme_output_full_box(source);
     const struct leme_box to = leme_output_full_box(output);
-    struct leme_box box = placed ? saved_restore : view->box;
+    struct leme_box box = view->fullscreen ? view->saved_box
+                          : placed         ? saved_restore
+                                           : view->box;
     box.x = leme_view_desktop_offset(box.x, from.x, to.x);
     box.y = leme_view_desktop_offset(box.y, from.y, to.y);
-    if (placed) {
+    if (view->fullscreen) {
+      view->saved_box =
+          leme_view_policy_clamp_box(box, leme_output_usable_box(output));
+    } else if (placed) {
       view->placement.restore_box = box;
     } else {
       view->box =
@@ -603,6 +684,49 @@ bool leme_view_move_to_output(struct leme_view *view,
     view->placement.restore_box = saved_restore;
   }
   return moved;
+}
+
+void leme_view_apply_late_rules(struct leme_view *view) {
+  if (!view->mapped || view->unmanaged || leme_view_is_scratchpad(view) ||
+      leme_view_is_sticky(view)) {
+    return;
+  }
+  const struct leme_view_rules rules = leme_view_rules_match(
+      view->server->config, leme_view_identity(view), leme_view_title(view));
+  const uint32_t late =
+      rules.fields & ~view->rule_fields &
+      (LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT |
+       LEME_WINDOW_RULE_FLOATING | LEME_WINDOW_RULE_FULLSCREEN);
+
+  if (late == 0) {
+    return;
+  }
+  view->rule_fields |= late;
+  if ((late & (LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT)) != 0) {
+    leme_input_pointer_grab_cancel_tiled(view->server);
+  }
+  if ((late & LEME_WINDOW_RULE_OUTPUT) != 0) {
+    struct leme_output *output =
+        leme_output_by_name(view->server, rules.output);
+
+    if (output != NULL && output != leme_view_output(view)) {
+      (void)leme_view_move_to_output(view, output, false);
+    }
+  }
+  if ((late & LEME_WINDOW_RULE_TAG) != 0 && leme_view_output(view) != NULL) {
+    struct leme_tags *tags = leme_output_tags(leme_view_output(view));
+
+    if (leme_tags_move_view(tags, view, rules.tag_id)) {
+      leme_tags_refresh_visibility(tags);
+    }
+  }
+  if ((late & LEME_WINDOW_RULE_FLOATING) != 0) {
+    (void)leme_view_set_floating(view, rules.floating);
+  }
+  if ((late & LEME_WINDOW_RULE_FULLSCREEN) != 0 && rules.fullscreen) {
+    (void)leme_view_set_fullscreen(view, true);
+  }
+  leme_view_refresh_tag_focus(view->server);
 }
 
 bool leme_view_drop_to_output(struct leme_view *view,
@@ -675,7 +799,11 @@ static void leme_view_set_initial_floating_box(struct leme_view *view,
     frame.height = area.height / 2;
   }
   if (view->kind == LEME_VIEW_XWAYLAND && geometry.width > 0 &&
-      geometry.height > 0) {
+      geometry.height > 0 &&
+      (view->unmanaged || view->xwayland_surface->size_hints == NULL ||
+       (view->xwayland_surface->size_hints->flags &
+        (XCB_ICCCM_SIZE_HINT_US_POSITION | XCB_ICCCM_SIZE_HINT_P_POSITION)) !=
+           0)) {
     view->box = leme_view_policy_requested_box(frame, area, view->unmanaged);
   } else {
     view->box = leme_view_policy_center_box(frame, anchor, area);
@@ -692,7 +820,8 @@ bool leme_view_map(struct leme_view *view,
     return false;
   }
   if (!options->durable_direct && !options->floating && !options->unmanaged) {
-    leme_input_pointer_grab_cancel_tiled(view->server);
+    leme_input_pointer_grab_cancel_tiled_on(view->server, options->tags,
+                                            options->tag_id);
   }
   view->mapped = true;
   view->floating =
@@ -792,6 +921,9 @@ void leme_view_unmap(struct leme_view *view) {
   if (server->focused_view == view) {
     leme_view_clear_focus(server);
   }
+  if (server->hovered_view == view) {
+    server->hovered_view = NULL;
+  }
   leme_tags_remove_view(view);
   leme_render_view_destroy(view);
   leme_view_refresh_tag_focus(server);
@@ -886,7 +1018,6 @@ void leme_view_focus_unmanaged_xwayland(struct leme_view *view) {
 static bool leme_view_focus_across_outputs(struct leme_server *server,
                                            enum leme_direction direction) {
   struct leme_output *adjacent;
-  struct leme_tags *tags;
   struct leme_view *target;
   bool warp;
 
@@ -901,10 +1032,12 @@ static bool leme_view_focus_across_outputs(struct leme_server *server,
   }
   warp = server->config == NULL || server->config->output_policy.warp_cursor;
   leme_output_set_focused(server, adjacent, warp);
-  tags = leme_output_tags(adjacent);
-  target = leme_tags_directional_view(tags, NULL, direction, false);
-  if (target != NULL) {
-    leme_view_focus(target);
+  target = server->focused_view;
+  if (warp && server->cursor != NULL && target != NULL &&
+      leme_view_output(target) == adjacent) {
+    wlr_cursor_warp(server->cursor, NULL,
+                    target->box.x + target->box.width / 2.0,
+                    target->box.y + target->box.height / 2.0);
   }
   return true;
 }
@@ -1183,13 +1316,18 @@ bool leme_view_set_floating(struct leme_view *view, bool floating) {
   if (floating) {
     leme_layout_remove_view(&leme_ownership_tag(view)->layout, view);
     view->floating = true;
-    if (view->box.width <= 0 || view->box.height <= 0) {
+    if (view->float_box.width > 0 && view->float_box.height > 0) {
+      view->box = leme_view_policy_clamp_box(
+          view->float_box, leme_output_usable_box(leme_view_output(view)));
+    } else if (view->box.width <= 0 || view->box.height <= 0) {
       leme_view_set_initial_floating_box(view, NULL);
     }
   } else {
+    view->float_box = view->box;
     view->floating = false;
-    leme_layout_add_view(&leme_ownership_tag(view)->layout,
-                         leme_ownership_tag(view)->focused_view, view);
+    leme_layout_add_view(
+        &leme_ownership_tag(view)->layout,
+        leme_tags_insert_anchor(leme_ownership_tag(view), view), view);
   }
   leme_view_update_tiled(view);
   leme_render_view_update_layer(view);
@@ -1201,20 +1339,6 @@ bool leme_view_set_floating(struct leme_view *view, bool floating) {
   leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
   leme_view_refresh_end(view->server);
   return true;
-}
-
-/*
- * Com cobertura activa a janela toma o ecrã todo; sem ela fica na área útil,
- * porque uma caixa inteira debaixo de uma barra só seria recortada.
- */
-static struct leme_box leme_view_fullscreen_area(const struct leme_view *view) {
-  const struct leme_output *output = leme_view_output(view);
-
-  return view->server->config != NULL &&
-                 view->server->config->fullscreen_covers ==
-                     LEME_FULLSCREEN_COVERS_NONE
-             ? leme_output_usable_box(output)
-             : leme_output_full_box(output);
 }
 
 void leme_view_refresh_fullscreen(struct leme_server *server) {
@@ -1237,6 +1361,36 @@ void leme_view_refresh_fullscreen(struct leme_server *server) {
     view->box = area;
     leme_render_view_set_box(view, area);
   }
+}
+
+static const struct leme_view *
+leme_view_transient_parent(const struct leme_view *view) {
+  const struct leme_view *candidate;
+
+  if (view->kind == LEME_VIEW_XWAYLAND) {
+    return leme_xwayland_public_parent(view);
+  }
+  if (view->xdg_toplevel == NULL || view->xdg_toplevel->parent == NULL) {
+    return NULL;
+  }
+  wl_list_for_each(candidate, &view->server->views, link) {
+    if (candidate->kind == LEME_VIEW_XDG &&
+        candidate->xdg_toplevel == view->xdg_toplevel->parent) {
+      return candidate;
+    }
+  }
+  return NULL;
+}
+
+bool leme_view_is_transient_of(const struct leme_view *view,
+                               const struct leme_view *ancestor) {
+  for (const struct leme_view *parent = leme_view_transient_parent(view);
+       parent != NULL; parent = leme_view_transient_parent(parent)) {
+    if (parent == ancestor) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static struct leme_view *
@@ -1321,16 +1475,17 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
   int limit;
 
   if (view == NULL || view->fullscreen || leme_view_is_placed(view) ||
-      amount <= 0 ||
+      amount == 0 ||
       (!leme_view_is_shown_scratchpad(view) && !leme_view_is_sticky(view) &&
        leme_ownership_tag(view) == NULL)) {
     return false;
   }
   if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER) {
     if (!leme_container_action_allowed(view) ||
-        !leme_layout_resize(&view->container->layout, view, edge, amount,
-                            leme_container_content_box(view->container,
-                                                       view->container->box))) {
+        !leme_layout_resize(
+            &view->container->layout, view, edge, amount,
+            leme_container_content_box(view->container, view->container->box),
+            leme_view_min_length)) {
       return false;
     }
     view->container->generation++;
@@ -1339,11 +1494,12 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
   }
   if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_TAG_LAYOUT) {
     leme_input_pointer_grab_cancel_tiled(view->server);
-    if (!leme_layout_resize(
-            &leme_ownership_tag(view)->layout, view, edge, amount,
-            leme_tags_tiled_area(
-                leme_ownership_tag(view),
-                leme_output_usable_box(leme_view_output(view))))) {
+    if (!leme_layout_resize(&leme_ownership_tag(view)->layout, view, edge,
+                            amount,
+                            leme_tags_tiled_area(
+                                leme_ownership_tag(view),
+                                leme_output_usable_box(leme_view_output(view))),
+                            leme_view_min_length)) {
       return false;
     }
     leme_view_arrange(view->server);
@@ -1352,6 +1508,17 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
 
   area = leme_output_usable_box(leme_view_output(view));
   view->box = leme_view_policy_clamp_box(view->box, area);
+  const bool horizontal = edge == LEME_RESIZE_LEFT || edge == LEME_RESIZE_RIGHT;
+  const int length = horizontal ? view->box.width : view->box.height;
+  int min_length = leme_view_min_length(view, horizontal ? LEME_SPLIT_HORIZONTAL
+                                                         : LEME_SPLIT_VERTICAL);
+
+  if (min_length < 1) {
+    min_length = 1;
+  }
+  if (amount < 0 && length + amount < min_length) {
+    amount = length < min_length ? 0 : min_length - length;
+  }
   if (edge == LEME_RESIZE_LEFT) {
     limit = view->box.x - area.x;
     if (amount > limit) {

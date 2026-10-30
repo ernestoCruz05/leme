@@ -124,6 +124,7 @@ struct leme_view {
   bool desktop_box_valid;
   bool open_animation_pending;
   uint32_t open_animation_serial;
+  uint32_t rule_fields;
   struct wl_event_source *open_animation_timeout;
   float render_opacity;
   void *animation_state;
@@ -132,6 +133,7 @@ struct leme_view {
   struct leme_box box;
   struct leme_box saved_box;
   struct leme_box desktop_box;
+  struct leme_box float_box;
 };
 
 void leme_view_init(struct leme_server *server);
@@ -140,6 +142,8 @@ struct wlr_surface *leme_view_surface(const struct leme_view *view);
 struct leme_view *leme_view_parent(const struct leme_view *view);
 const char *leme_view_identity(const struct leme_view *view);
 const char *leme_view_title(const struct leme_view *view);
+int leme_view_min_length(const struct leme_view *view, enum leme_split split);
+int leme_view_max_length(const struct leme_view *view, enum leme_split split);
 struct leme_view *leme_view_from_surface(struct leme_server *server,
                                          struct wlr_surface *surface);
 void leme_view_set_activated(struct leme_view *view, bool activated);
@@ -212,6 +216,7 @@ void leme_view_arrange_instant(struct leme_server *server);
 void leme_view_refresh_tag_focus(struct leme_server *server);
 bool leme_view_move_to_output(struct leme_view *view,
                               struct leme_output *output, bool follow);
+void leme_view_apply_late_rules(struct leme_view *view);
 bool leme_view_drop_to_output(struct leme_view *view,
                               struct leme_layout_detach **detach,
                               struct leme_output *output,
@@ -227,6 +232,8 @@ void leme_view_refresh_layout(struct leme_view *view,
 void leme_view_update_tiled(struct leme_view *view);
 void leme_view_follow_committed_size(struct leme_view *view);
 bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen);
+bool leme_view_is_transient_of(const struct leme_view *view,
+                               const struct leme_view *ancestor);
 void leme_view_refresh_fullscreen(struct leme_server *server);
 bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
                       int amount);

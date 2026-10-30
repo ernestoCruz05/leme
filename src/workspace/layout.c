@@ -58,9 +58,44 @@ static unsigned int leme_layout_depth(const struct leme_layout_node *node) {
   return depth;
 }
 
+static struct leme_box leme_layout_shape(const struct leme_layout_node *node,
+                                         struct leme_box area) {
+  const struct leme_layout_node *parent = node->parent;
+  struct leme_box box;
+
+  if (node->arranged.width > 0 && node->arranged.height > 0) {
+    return node->arranged;
+  }
+  if (parent == NULL) {
+    return area;
+  }
+  box = leme_layout_shape(parent, area);
+  if (parent->data.branch.split == LEME_SPLIT_HORIZONTAL) {
+    const int first = (int)lround(box.width * parent->data.branch.ratio);
+
+    if (parent->data.branch.first == node) {
+      box.width = first;
+    } else {
+      box.x += first;
+      box.width -= first;
+    }
+  } else {
+    const int first = (int)lround(box.height * parent->data.branch.ratio);
+
+    if (parent->data.branch.first == node) {
+      box.height = first;
+    } else {
+      box.y += first;
+      box.height -= first;
+    }
+  }
+  return box;
+}
+
 static enum leme_split
-leme_layout_split_for(const struct leme_layout_node *leaf) {
-  const struct leme_box box = leaf->arranged;
+leme_layout_split_for(const struct leme_layout_node *leaf,
+                      struct leme_box area) {
+  const struct leme_box box = leme_layout_shape(leaf, area);
 
   if (box.width <= 0 || box.height <= 0) {
     return leme_layout_depth(leaf) % 2 == 0 ? LEME_SPLIT_HORIZONTAL
@@ -71,7 +106,9 @@ leme_layout_split_for(const struct leme_layout_node *leaf) {
 
 struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
                                             struct leme_view *focused,
-                                            struct leme_view *added) {
+                                            struct leme_view *added,
+                                            double ratio,
+                                            struct leme_box area) {
   struct leme_layout_node *old_leaf;
   struct leme_layout_node *retained_leaf;
   struct leme_layout_node *new_leaf;
@@ -86,7 +123,7 @@ struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
     old_leaf = leme_layout_first(root);
   }
   retained_view = old_leaf->data.view;
-  split = leme_layout_split_for(old_leaf);
+  split = leme_layout_split_for(old_leaf, area);
   retained_leaf = leme_layout_leaf(retained_view);
   new_leaf = leme_layout_leaf(added);
   if (retained_leaf == NULL || new_leaf == NULL) {
@@ -98,7 +135,7 @@ struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
   old_leaf->data.branch.first = retained_leaf;
   old_leaf->data.branch.second = new_leaf;
   old_leaf->data.branch.split = split;
-  old_leaf->data.branch.ratio = 0.5;
+  old_leaf->data.branch.ratio = ratio;
   retained_leaf->parent = old_leaf;
   new_leaf->parent = old_leaf;
   return root;
@@ -160,6 +197,7 @@ static void leme_layout_arrange_node(struct leme_layout_node *node,
     split_gap = gap <= box.width - 2 ? gap : 0;
     available = box.width - split_gap;
     node->data.branch.axis_length = available;
+    node->data.branch.split_gap = split_gap;
     first_size = (int)(available * node->data.branch.ratio);
     if (available < 2) {
       first_size = 1;
@@ -175,6 +213,7 @@ static void leme_layout_arrange_node(struct leme_layout_node *node,
     split_gap = gap <= box.height - 2 ? gap : 0;
     available = box.height - split_gap;
     node->data.branch.axis_length = available;
+    node->data.branch.split_gap = split_gap;
     first_size = (int)(available * node->data.branch.ratio);
     if (available < 2) {
       first_size = 1;
@@ -196,15 +235,50 @@ void leme_layout_arrange(struct leme_layout_node *root, struct leme_box area,
   leme_layout_arrange_node(root, area, gap, apply, data);
 }
 
+static double leme_layout_min_length(const struct leme_layout_node *node,
+                                     enum leme_split split,
+                                     leme_layout_min_fn min_length) {
+  if (node->is_leaf) {
+    return min_length(node->data.view, split);
+  }
+  const double first =
+      leme_layout_min_length(node->data.branch.first, split, min_length);
+  const double second =
+      leme_layout_min_length(node->data.branch.second, split, min_length);
+
+  if (node->data.branch.split != split) {
+    return fmax(first, second);
+  }
+  const double ratio = node->data.branch.ratio;
+
+  return node->data.branch.split_gap +
+         ceil(fmax(first / ratio, second / (1.0 - ratio)));
+}
+
+static void leme_layout_ratio_bounds(const struct leme_layout_node *branch,
+                                     leme_layout_min_fn min_length,
+                                     double *lowest, double *highest) {
+  const double length = branch->data.branch.axis_length;
+  const double ratio = branch->data.branch.ratio;
+  const double first = leme_layout_min_length(
+      branch->data.branch.first, branch->data.branch.split, min_length);
+  const double second = leme_layout_min_length(
+      branch->data.branch.second, branch->data.branch.split, min_length);
+
+  *lowest = fmin(fmax(0.10, (first + 0.5) / length), ratio);
+  *highest = fmax(fmin(0.90, (length - second + 0.5) / length), ratio);
+}
+
 bool leme_layout_resize_focused(struct leme_layout_node *root,
                                 struct leme_view *focused,
-                                enum leme_resize_edge edge, int delta) {
+                                enum leme_resize_edge edge, int delta,
+                                leme_layout_min_fn min_length) {
   struct leme_layout_node *node = leme_layout_find(root, focused);
   enum leme_split split;
   bool needs_first;
   double direction;
 
-  if (node == NULL || delta <= 0) {
+  if (node == NULL || delta == 0) {
     return false;
   }
   split = edge == LEME_RESIZE_LEFT || edge == LEME_RESIZE_RIGHT
@@ -218,13 +292,15 @@ bool leme_layout_resize_focused(struct leme_layout_node *root,
 
     if (parent->data.branch.split == split && is_first == needs_first &&
         parent->data.branch.axis_length > 0) {
-      parent->data.branch.ratio +=
-          direction * (double)delta / parent->data.branch.axis_length;
-      if (parent->data.branch.ratio < 0.1) {
-        parent->data.branch.ratio = 0.1;
-      } else if (parent->data.branch.ratio > 0.9) {
-        parent->data.branch.ratio = 0.9;
-      }
+      double lowest;
+      double highest;
+
+      leme_layout_ratio_bounds(parent, min_length, &lowest, &highest);
+      parent->data.branch.ratio = fmin(
+          fmax(parent->data.branch.ratio +
+                   direction * (double)delta / parent->data.branch.axis_length,
+               lowest),
+          highest);
       return true;
     }
     node = parent;
@@ -550,6 +626,7 @@ bool leme_layout_drop_at(enum leme_drop_mode mode, struct leme_box content,
 bool leme_layout_resize_drag_begin(struct leme_layout_node *root,
                                    struct leme_view *view,
                                    enum leme_grab_edge edges,
+                                   leme_layout_min_fn min_length,
                                    struct leme_layout_resize_drag *drag) {
   const enum leme_grab_edge allowed =
       LEME_GRAB_EDGE_TOP | LEME_GRAB_EDGE_BOTTOM | LEME_GRAB_EDGE_LEFT |
@@ -586,12 +663,16 @@ bool leme_layout_resize_drag_begin(struct leme_layout_node *root,
       drag->horizontal = parent;
       drag->horizontal_ratio = parent->data.branch.ratio;
       drag->horizontal_length = parent->data.branch.axis_length;
+      leme_layout_ratio_bounds(parent, min_length, &drag->horizontal_lowest,
+                               &drag->horizontal_highest);
     } else if (parent->data.branch.axis_length > 0 && vertical_match &&
                parent->data.branch.split == LEME_SPLIT_VERTICAL &&
                drag->vertical == NULL) {
       drag->vertical = parent;
       drag->vertical_ratio = parent->data.branch.ratio;
       drag->vertical_length = parent->data.branch.axis_length;
+      leme_layout_ratio_bounds(parent, min_length, &drag->vertical_lowest,
+                               &drag->vertical_highest);
     }
     node = parent;
   }
@@ -616,15 +697,19 @@ bool leme_layout_resize_drag_update(struct leme_layout_resize_drag *drag,
     return false;
   }
   if (drag->horizontal != NULL && drag->horizontal_length > 0) {
-    double ratio = leme_layout_clamp_ratio(
-        drag->horizontal_ratio + (double)dx / drag->horizontal_length);
+    double ratio =
+        fmin(fmax(drag->horizontal_ratio + (double)dx / drag->horizontal_length,
+                  drag->horizontal_lowest),
+             drag->horizontal_highest);
 
     changed |= drag->horizontal->data.branch.ratio != ratio;
     drag->horizontal->data.branch.ratio = ratio;
   }
   if (drag->vertical != NULL && drag->vertical_length > 0) {
-    double ratio = leme_layout_clamp_ratio(drag->vertical_ratio +
-                                           (double)dy / drag->vertical_length);
+    double ratio =
+        fmin(fmax(drag->vertical_ratio + (double)dy / drag->vertical_length,
+                  drag->vertical_lowest),
+             drag->vertical_highest);
 
     changed |= drag->vertical->data.branch.ratio != ratio;
     drag->vertical->data.branch.ratio = ratio;
@@ -724,16 +809,6 @@ bool leme_layout_swap_views(struct leme_layout_node *root,
   return true;
 }
 
-static int leme_layout_saturate_int(int64_t value) {
-  if (value < INT_MIN) {
-    return INT_MIN;
-  }
-  if (value > INT_MAX) {
-    return INT_MAX;
-  }
-  return (int)value;
-}
-
 static int leme_layout_saturate_origin(int64_t value, int extent) {
   const int64_t limit = (int64_t)INT_MAX - (extent > 0 ? extent : 0);
 
@@ -822,9 +897,20 @@ enum leme_grab_edge leme_layout_resize_edges(struct leme_box box,
   return edges;
 }
 
+static int64_t leme_layout_clamp_length(int64_t length, int minimum,
+                                        int maximum) {
+  const int64_t lowest = minimum > 1 ? minimum : 1;
+
+  if (maximum > 0 && length > maximum) {
+    length = maximum;
+  }
+  return length < lowest ? lowest : length;
+}
+
 struct leme_box leme_layout_resize_box(struct leme_box box,
                                        enum leme_grab_edge edges, int dx,
-                                       int dy) {
+                                       int dy,
+                                       struct leme_layout_limits limits) {
   const unsigned int allowed = LEME_GRAB_EDGE_TOP | LEME_GRAB_EDGE_BOTTOM |
                                LEME_GRAB_EDGE_LEFT | LEME_GRAB_EDGE_RIGHT;
   int64_t x = box.x;
@@ -840,32 +926,22 @@ struct leme_box leme_layout_resize_box(struct leme_box box,
   if (edges & LEME_GRAB_EDGE_LEFT) {
     int64_t right = x + width;
 
-    x += dx;
-    width = right - x;
-    if (width < 1) {
-      width = 1;
-      x = right - 1;
-    }
+    width = leme_layout_clamp_length(right - (x + dx), limits.min_width,
+                                     limits.max_width);
+    x = right - width;
   } else if (edges & LEME_GRAB_EDGE_RIGHT) {
-    width += dx;
-    if (width < 1) {
-      width = 1;
-    }
+    width = leme_layout_clamp_length(width + dx, limits.min_width,
+                                     limits.max_width);
   }
   if (edges & LEME_GRAB_EDGE_TOP) {
     int64_t bottom = y + height;
 
-    y += dy;
-    height = bottom - y;
-    if (height < 1) {
-      height = 1;
-      y = bottom - 1;
-    }
+    height = leme_layout_clamp_length(bottom - (y + dy), limits.min_height,
+                                      limits.max_height);
+    y = bottom - height;
   } else if (edges & LEME_GRAB_EDGE_BOTTOM) {
-    height += dy;
-    if (height < 1) {
-      height = 1;
-    }
+    height = leme_layout_clamp_length(height + dy, limits.min_height,
+                                      limits.max_height);
   }
   box.width = leme_layout_saturate_dimension(width);
   box.height = leme_layout_saturate_dimension(height);
@@ -889,7 +965,6 @@ void leme_layout_init(struct leme_layout *layout, enum leme_layout_kind kind) {
       .split_ratio = 0.5,
       .mfact = 0.5,
       .nmaster = 1,
-      .collapse_width = 46,
       .gap = 0,
       .has_gap = false,
   };
@@ -938,7 +1013,7 @@ bool leme_layout_prepare_insert(const struct leme_layout *current,
   if (current == NULL || out == NULL || target == NULL || added == NULL ||
       target == added || direction < LEME_DIRECTION_LEFT ||
       direction > LEME_DIRECTION_DOWN || current->kind < LEME_LAYOUT_DWINDLE ||
-      current->kind > LEME_LAYOUT_ACCORDION) {
+      current->kind > LEME_LAYOUT_MASTER_STACK) {
     return false;
   }
   struct leme_layout prepared = *current;
@@ -988,8 +1063,9 @@ bool leme_layout_prepare(const struct leme_layout *current,
   prepared.kind = kind;
   if (kind == LEME_LAYOUT_DWINDLE) {
     for (size_t i = 0; i < count; i++) {
-      prepared.root = leme_layout_insert(
-          prepared.root, i == 0 ? NULL : views[i - 1], views[i]);
+      prepared.root =
+          leme_layout_insert(prepared.root, i == 0 ? NULL : views[i - 1],
+                             views[i], prepared.split_ratio, prepared.area);
       if (leme_layout_find(prepared.root, views[i]) == NULL) {
         leme_layout_finish(&prepared);
         return false;
@@ -1003,7 +1079,8 @@ bool leme_layout_prepare(const struct leme_layout *current,
 void leme_layout_add_view(struct leme_layout *layout, struct leme_view *focused,
                           struct leme_view *added) {
   if (layout->kind == LEME_LAYOUT_DWINDLE) {
-    layout->root = leme_layout_insert(layout->root, focused, added);
+    layout->root = leme_layout_insert(layout->root, focused, added,
+                                      layout->split_ratio, layout->area);
   }
 }
 
@@ -1091,73 +1168,15 @@ static void leme_layout_arrange_master_stack(
                              apply, data);
 }
 
-static void leme_layout_arrange_accordion(
-    struct leme_layout *layout, struct leme_view *const *views, size_t count,
-    const struct leme_view *focused, struct leme_box area, int gap,
-    leme_layout_apply_fn apply, void *data) {
-  size_t expanded = 0;
-  size_t index;
-  int collapse = layout->collapse_width;
-  int total_gap;
-  int expanded_width;
-  int offset = 0;
-
-  if (count == 0) {
-    return;
-  }
-  for (index = 0; index < count; index++) {
-    if (views[index] == focused) {
-      expanded = index;
-      break;
-    }
-  }
-  if (count > (size_t)area.width) {
-    for (index = 0; index < count; index++) {
-      const int column =
-          index < (size_t)area.width ? (int)index : area.width - 1;
-      const struct leme_box box = {area.x + column, area.y, 1, area.height};
-      apply(views[index], box, data);
-    }
-    return;
-  }
-  const int slots = (int)count;
-  if (slots > 1 && gap > (area.width - slots) / (slots - 1)) {
-    gap = 0;
-  }
-  if (collapse < 1) {
-    collapse = 1;
-  }
-  total_gap = (slots - 1) * gap;
-  if (slots > 1) {
-    const int maximum = (area.width - total_gap - 1) / (slots - 1);
-    if (collapse > maximum) {
-      collapse = maximum;
-    }
-  }
-  expanded_width = area.width - (slots - 1) * collapse - total_gap;
-  for (index = 0; index < count; index++) {
-    int width = index == expanded ? expanded_width : collapse;
-    struct leme_box box = {
-        .x = area.x + offset + (int)index * gap,
-        .y = area.y,
-        .width = width,
-        .height = area.height < 1 ? 1 : area.height,
-    };
-
-    apply(views[index], box, data);
-    offset += width;
-  }
-}
-
 void leme_layout_arrange_subject(struct leme_layout *layout,
                                  struct leme_view *const *views, size_t count,
-                                 const struct leme_view *focused,
                                  struct leme_box area, int gap,
                                  leme_layout_apply_fn apply, void *data) {
   if (count == 0 || area.width <= 0 || area.height <= 0) {
     return;
   }
   area = leme_layout_saturate_box(area);
+  layout->area = area;
   if (layout->has_gap) {
     gap = layout->gap;
   }
@@ -1171,23 +1190,20 @@ void leme_layout_arrange_subject(struct leme_layout *layout,
     leme_layout_arrange_master_stack(layout, views, count, area, gap, apply,
                                      data);
     return;
-  case LEME_LAYOUT_ACCORDION:
-    leme_layout_arrange_accordion(layout, views, count, focused, area, gap,
-                                  apply, data);
-    return;
   }
 }
 
 bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
                         enum leme_resize_edge edge, int delta,
-                        struct leme_box area) {
+                        struct leme_box area, leme_layout_min_fn min_length) {
   double step;
 
   switch (layout->kind) {
   case LEME_LAYOUT_DESKTOP:
     return false;
   case LEME_LAYOUT_DWINDLE:
-    return leme_layout_resize_focused(layout->root, focused, edge, delta);
+    return leme_layout_resize_focused(layout->root, focused, edge, delta,
+                                      min_length);
   case LEME_LAYOUT_MASTER_STACK:
     if (edge != LEME_RESIZE_LEFT && edge != LEME_RESIZE_RIGHT) {
       return false;
@@ -1199,23 +1215,6 @@ bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
     layout->mfact = leme_layout_clamp_ratio(edge == LEME_RESIZE_RIGHT
                                                 ? layout->mfact + step
                                                 : layout->mfact - step);
-    return true;
-  case LEME_LAYOUT_ACCORDION:
-    if (edge != LEME_RESIZE_LEFT && edge != LEME_RESIZE_RIGHT) {
-      return false;
-    }
-    {
-      int width = leme_layout_saturate_int(
-          (int64_t)layout->collapse_width +
-          (edge == LEME_RESIZE_RIGHT ? (int64_t)delta : -(int64_t)delta));
-
-      if (width < 10) {
-        width = 10;
-      } else if (width > 400) {
-        width = 400;
-      }
-      layout->collapse_width = width;
-    }
     return true;
   }
   return false;
