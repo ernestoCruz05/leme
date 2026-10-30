@@ -5,7 +5,14 @@
 
 #include "config/config.h"
 #include "config/live.h"
+#include "config/style.h"
 #include "core/server.h"
+#include "desktop/desktop.h"
+#include "desktop/drag.h"
+#include "desktop/strip.h"
+#include "desktop/buttons.h"
+#include "desktop/owner.h"
+#include "desktop/decoration.h"
 #include "output/output.h"
 #include "protocols/data.h"
 #include "protocols/desktop.h"
@@ -17,6 +24,7 @@
 #include "shell/layer.h"
 #include "shell/policy.h"
 #include "shell/view.h"
+#include "shell/container.h"
 #include "workspace/tag.h"
 
 #include <libinput.h>
@@ -46,6 +54,10 @@ enum leme_pointer_grab_mode {
   LEME_POINTER_GRAB_NONE,
   LEME_POINTER_GRAB_FLOAT_MOVE,
   LEME_POINTER_GRAB_FLOAT_RESIZE,
+  LEME_POINTER_GRAB_CONTAINER_MOVE,
+  LEME_POINTER_GRAB_CONTAINER_RESIZE,
+  LEME_POINTER_GRAB_CONTAINER_DETACH,
+  LEME_POINTER_GRAB_CONTAINER_SPLIT,
   LEME_POINTER_GRAB_TILED_MOVE,
   LEME_POINTER_GRAB_TILED_RESIZE,
   LEME_POINTER_GRAB_SINK,
@@ -56,11 +68,17 @@ struct leme_pointer_grab {
   struct wlr_seat_pointer_grab seat_grab;
   enum leme_pointer_grab_mode mode;
   struct leme_view *view;
+  struct leme_public_id container;
+  struct leme_public_id source_container;
+  struct leme_public_id source_survivor;
+  uint64_t source_generation;
+  struct leme_box source_content;
   uint32_t button;
   double cursor_x;
   double cursor_y;
   struct leme_box saved_box;
   enum leme_grab_edge edges;
+  enum leme_grab_edge hover_edges;
   struct leme_layout_detach *detach;
   struct leme_layout_resize_drag resize_drag;
   struct leme_view *drop_target;
@@ -69,12 +87,33 @@ struct leme_pointer_grab {
   bool preview_failed;
   struct leme_output *destination;
   bool drop_empty;
+  bool restore_pending;
+  bool titlebar_pending;
+  bool released;
+  bool snap_enabled;
+  enum leme_view_placement snap_placement;
+  struct leme_render_preview snap_preview;
+  struct leme_container_drop container_drop;
 };
 
 static void leme_input_process_motion(struct leme_server *server,
                                       uint32_t time_msec,
                                       struct leme_render_hit *result,
                                       bool allow_view_focus);
+
+bool leme_input_pointer_grab_moves_container(
+    const struct leme_container *container) {
+  if (container == NULL || container->tag == NULL ||
+      container->tag->owner == NULL || container->tag->owner->server == NULL) {
+    return false;
+  }
+  const struct leme_pointer_grab *grab =
+      container->tag->owner->server->pointer_grab;
+  return grab != NULL && grab->mode == LEME_POINTER_GRAB_CONTAINER_MOVE &&
+         grab->container.serial == container->id.serial;
+}
+
+static uint32_t leme_input_pointer_wlr_edges(enum leme_grab_edge edges);
 
 static bool leme_input_pointer_button_held(const struct wlr_seat *seat,
                                            uint32_t button) {
@@ -181,9 +220,26 @@ leme_input_pointer_grab_mode_tiled(enum leme_pointer_grab_mode mode) {
 
 static void
 leme_input_pointer_grab_hide_preview(struct leme_pointer_grab *grab) {
+  leme_render_preview_hide(grab->server, &grab->snap_preview);
+  grab->container_drop = (struct leme_container_drop){0};
+  grab->snap_placement = LEME_VIEW_PLACEMENT_NORMAL;
   if (grab->drop_target != NULL) {
     leme_render_view_hide_drop_preview(grab->drop_target);
     grab->drop_target = NULL;
+  }
+}
+
+static void leme_input_pointer_container_defer(struct leme_pointer_grab *grab,
+                                               bool deferred) {
+  struct leme_container *container =
+      leme_container_by_public_id(grab->server, grab->container);
+  if (container != NULL) {
+    for (size_t i = 0; i < container->count; i++) {
+      struct leme_view *view = container->views[i];
+      leme_view_set_configure_deferred(
+          view, deferred && (grab->mode != LEME_POINTER_GRAB_CONTAINER_RESIZE ||
+                             view->kind == LEME_VIEW_XWAYLAND));
+    }
   }
 }
 
@@ -201,9 +257,21 @@ static void leme_input_pointer_grab_cleanup(struct leme_pointer_grab *grab) {
   struct leme_view *view = grab->view;
 
   grab->mode = LEME_POINTER_GRAB_NONE;
+  struct leme_container *container =
+      leme_container_by_public_id(server, grab->container);
+  if (container != NULL) {
+    leme_container_arrange(container, false);
+  }
+  leme_input_pointer_container_defer(grab, false);
+  grab->container = (struct leme_public_id){0};
+  grab->source_container = (struct leme_public_id){0};
+  grab->source_survivor = (struct leme_public_id){0};
+  grab->source_generation = 0;
+  grab->source_content = (struct leme_box){0};
   leme_view_set_configure_deferred(grab->view, false);
   grab->view = NULL;
   leme_view_follow_committed_size(view);
+  leme_desk_decoration_refresh(view);
   grab->button = 0;
   grab->edges = LEME_GRAB_EDGE_NONE;
   grab->resize_drag = (struct leme_layout_resize_drag){0};
@@ -211,6 +279,10 @@ static void leme_input_pointer_grab_cleanup(struct leme_pointer_grab *grab) {
   grab->preview_failed = false;
   grab->destination = NULL;
   grab->drop_empty = false;
+  grab->restore_pending = false;
+  grab->titlebar_pending = false;
+  grab->released = false;
+  grab->snap_enabled = false;
   leme_desktop_cursor_restore(server);
   if (server->desktop != NULL && server->seat != NULL &&
       server->cursor != NULL && !leme_session_locked(server)) {
@@ -240,20 +312,229 @@ leme_input_pointer_grab_cross_allowed(const struct leme_server *server) {
          server->config->output_policy.cross_output_drag;
 }
 
+static bool
+leme_input_pointer_container_destination(const struct leme_output *output) {
+  return leme_desk_output_active(output) &&
+         leme_tag_fullscreen_view(
+             output->tags.table[output->tags.focused_id]) == NULL;
+}
+
 static void
 leme_input_pointer_grab_update_destination(struct leme_pointer_grab *grab) {
   struct leme_server *server = grab->server;
   struct leme_output *resolved;
-
+  const struct leme_container *container =
+      leme_container_by_public_id(server, grab->container);
+  struct leme_output *source = container == NULL
+                                   ? leme_view_output(grab->view)
+                                   : container->tag->owner->output;
   if (!leme_input_pointer_grab_cross_allowed(server)) {
-    grab->destination = leme_view_output(grab->view);
+    grab->destination = source;
     return;
   }
   resolved = leme_output_at(server, server->cursor->x, server->cursor->y);
   if (resolved == NULL || !resolved->wlr_output->enabled) {
     return;
   }
-  grab->destination = resolved;
+  grab->destination =
+      container != NULL && !leme_input_pointer_container_destination(resolved)
+          ? source
+          : resolved;
+}
+
+static bool leme_input_pointer_snap_neighbour(double x, double y, void *data) {
+  return leme_output_at(data, x, y) != NULL;
+}
+
+static struct leme_view *
+leme_input_pointer_container_target(const struct leme_pointer_grab *grab,
+                                    const struct leme_render_hit *hit) {
+  struct leme_view *view = hit->view != NULL        ? hit->view
+                           : hit->container == NULL ? NULL
+                                                    : hit->container->focused;
+  if (view == NULL ||
+      view->public_meta.id.serial == grab->source_survivor.serial ||
+      (view->container != NULL &&
+       view->container->id.serial == grab->source_container.serial)) {
+    return NULL;
+  }
+  return view;
+}
+
+static void
+leme_input_pointer_grab_container_drop(struct leme_pointer_grab *grab) {
+  struct leme_server *server = grab->server;
+  struct leme_render_hit hit = {0};
+  leme_render_drop_at(
+      server, grab->view,
+      grab->snap_preview.rect == NULL ? NULL : &grab->snap_preview.rect->node,
+      server->cursor->x, server->cursor->y, &hit);
+  struct leme_container_drop drop = {0};
+  struct leme_view *target = leme_input_pointer_container_target(grab, &hit);
+  if (leme_view_output(target) != grab->destination ||
+      !leme_container_prepare_drop(target, grab->view, server->cursor->x,
+                                   server->cursor->y, &drop) ||
+      !leme_render_preview_show(server, &grab->snap_preview, drop.preview,
+                                server->cursor->x, server->cursor->y)) {
+    leme_input_pointer_grab_hide_preview(grab);
+    return;
+  }
+  grab->container_drop = drop;
+  grab->snap_placement = LEME_VIEW_PLACEMENT_NORMAL;
+}
+
+static bool leme_input_pointer_group_held(const struct leme_server *server) {
+  return server->config != NULL &&
+         (leme_input_modifiers(server) &
+          server->config->desktop_container_modifier) != 0;
+}
+
+static void leme_input_pointer_grab_snap(struct leme_pointer_grab *grab) {
+  const struct leme_output *output = grab->destination;
+  if (!grab->snap_enabled || output == NULL) {
+    leme_input_pointer_grab_hide_preview(grab);
+    return;
+  }
+  struct leme_server *server = grab->server;
+  struct leme_container *container =
+      leme_container_by_public_id(server, grab->container);
+  if (container == NULL && leme_input_pointer_group_held(server)) {
+    leme_input_pointer_grab_container_drop(grab);
+    return;
+  }
+  const enum leme_view_placement placement = leme_placement_at(
+      leme_output_full_box(output), server->cursor->x, server->cursor->y,
+      leme_input_pointer_snap_neighbour, server);
+  struct leme_box box = {0};
+  if (container != NULL) {
+    if (!leme_container_can_place(container, placement)) {
+      leme_input_pointer_grab_hide_preview(grab);
+      return;
+    }
+    box = leme_placement_box(leme_placement_area(container->tag, output),
+                             placement);
+  } else if (!leme_view_placement_box(grab->view, output, placement, &box)) {
+    leme_input_pointer_grab_hide_preview(grab);
+    return;
+  }
+  grab->container_drop = (struct leme_container_drop){0};
+  if (!leme_render_preview_show(server, &grab->snap_preview, box,
+                                server->cursor->x, server->cursor->y)) {
+    leme_input_pointer_grab_hide_preview(grab);
+    if (!grab->preview_failed) {
+      wlr_log(WLR_ERROR, "%s", "leme: failed to render snap preview");
+      grab->preview_failed = true;
+    }
+    return;
+  }
+  grab->snap_placement = placement;
+}
+
+static void leme_input_pointer_grab_restore(struct leme_pointer_grab *grab) {
+  struct leme_view *view = grab->view;
+  struct leme_server *server = grab->server;
+  const int border = server->config == NULL ? 0 : server->config->border_width;
+  const int height = leme_desk_style_titlebar_height(server->config);
+  const int button = leme_desk_style_button_width(server->config);
+  struct leme_container *container =
+      leme_container_by_public_id(server, grab->container);
+  struct leme_desk_decoration_boxes before = {0};
+  const bool titlebar =
+      (container != NULL ||
+       leme_desk_decoration_height(view, grab->saved_box) > 0) &&
+      leme_desk_decoration_geometry(grab->saved_box, border, height, button,
+                                    &before) &&
+      grab->cursor_y >= before.titlebar.y &&
+      grab->cursor_y < (double)before.titlebar.y + before.titlebar.height;
+  if (container != NULL) {
+    leme_container_restore_placement(container);
+  } else {
+    leme_view_restore_placement(view);
+  }
+  const struct leme_box box = container != NULL ? container->box : view->box;
+  struct leme_desk_decoration_boxes after = {0};
+  const struct leme_box restored_anchor =
+      titlebar &&
+              leme_desk_decoration_geometry(box, border, height, button, &after)
+          ? after.titlebar
+          : box;
+  const struct leme_placement_anchor anchor = {
+      .original = titlebar ? before.titlebar : grab->saved_box,
+      .restored = restored_anchor,
+      .frame = box,
+      .start_x = grab->cursor_x,
+      .start_y = grab->cursor_y,
+      .cursor_x = server->cursor->x,
+      .cursor_y = server->cursor->y};
+  grab->saved_box = leme_placement_anchored_box(&anchor);
+  grab->cursor_x = server->cursor->x;
+  grab->cursor_y = server->cursor->y;
+  grab->restore_pending = false;
+}
+
+static bool leme_input_pointer_detach_motion(struct leme_pointer_grab *grab) {
+  struct leme_server *server = grab->server;
+  struct leme_view *view = grab->view;
+  struct leme_container *container =
+      leme_container_by_public_id(server, grab->source_container);
+  if (container == NULL || view == NULL || view->container != container ||
+      container->generation != grab->source_generation ||
+      !leme_container_member_eligible(view)) {
+    leme_input_pointer_grab_cancel(server);
+    return false;
+  }
+  if (hypot(server->cursor->x - grab->cursor_x,
+            server->cursor->y - grab->cursor_y) <= 4.0 ||
+      leme_box_contains(container->box, server->cursor->x, server->cursor->y)) {
+    return false;
+  }
+  if (container->count == 2) {
+    grab->source_survivor = container->views[0] == view
+                                ? container->views[1]->public_meta.id
+                                : container->views[0]->public_meta.id;
+  }
+  const struct leme_public_id id = view->public_meta.id;
+  grab->view = NULL;
+  leme_container_remove_view(view);
+  view = leme_view_by_public_id(server, id);
+  if (view == NULL) {
+    leme_input_pointer_grab_cancel(server);
+    return false;
+  }
+  const struct leme_placement_anchor anchor = {
+      .original = grab->source_content,
+      .restored = leme_render_view_content_box(view, view->box),
+      .frame = view->box,
+      .start_x = grab->cursor_x,
+      .start_y = grab->cursor_y,
+      .cursor_x = server->cursor->x,
+      .cursor_y = server->cursor->y};
+  grab->view = view;
+  grab->mode = LEME_POINTER_GRAB_FLOAT_MOVE;
+  grab->saved_box = leme_placement_anchored_box(&anchor);
+  grab->cursor_x = server->cursor->x;
+  grab->cursor_y = server->cursor->y;
+  grab->snap_enabled = true;
+  leme_view_set_configure_deferred(view, true);
+  leme_render_view_focus(view);
+  return true;
+}
+
+static void leme_input_pointer_split_motion(struct leme_pointer_grab *grab) {
+  struct leme_server *server = grab->server;
+  struct leme_container *container =
+      leme_container_by_public_id(server, grab->source_container);
+  if (container == NULL || container->generation != grab->source_generation) {
+    leme_input_pointer_grab_cancel(server);
+    return;
+  }
+  const int dx =
+      leme_input_pointer_round_delta(server->cursor->x - grab->cursor_x);
+  const int dy =
+      leme_input_pointer_round_delta(server->cursor->y - grab->cursor_y);
+  if (leme_layout_resize_drag_update(&grab->resize_drag, dx, dy)) {
+    leme_container_arrange(container, false);
+  }
 }
 
 static void leme_input_pointer_grab_motion(
@@ -268,9 +549,35 @@ static void leme_input_pointer_grab_motion(
   (void)time_msec;
   (void)sx;
   (void)sy;
-  if (grab->view == NULL || grab->mode == LEME_POINTER_GRAB_SINK ||
+  if (grab->mode == LEME_POINTER_GRAB_CONTAINER_DETACH &&
+      !leme_input_pointer_detach_motion(grab)) {
+    return;
+  }
+  if (grab->mode == LEME_POINTER_GRAB_CONTAINER_SPLIT) {
+    leme_input_pointer_split_motion(grab);
+    return;
+  }
+  struct leme_container *container =
+      leme_container_by_public_id(grab->server, grab->container);
+  if (grab->container.serial != 0 && container == NULL) {
+    leme_input_pointer_grab_cancel(grab->server);
+    return;
+  }
+  if ((grab->view == NULL && container == NULL) ||
+      grab->mode == LEME_POINTER_GRAB_SINK ||
       grab->mode == LEME_POINTER_GRAB_NONE) {
     return;
+  }
+  if (grab->restore_pending || grab->titlebar_pending) {
+    if (hypot(grab->server->cursor->x - grab->cursor_x,
+              grab->server->cursor->y - grab->cursor_y) <= 4.0) {
+      return;
+    }
+    leme_desk_buttons_cancel(grab->server);
+    grab->titlebar_pending = false;
+    if (grab->restore_pending) {
+      leme_input_pointer_grab_restore(grab);
+    }
   }
   dx = leme_input_pointer_round_delta(grab->server->cursor->x - grab->cursor_x);
   dy = leme_input_pointer_round_delta(grab->server->cursor->y - grab->cursor_y);
@@ -281,11 +588,18 @@ static void leme_input_pointer_grab_motion(
     return;
   }
   if (grab->mode == LEME_POINTER_GRAB_FLOAT_MOVE ||
-      grab->mode == LEME_POINTER_GRAB_TILED_MOVE) {
+      grab->mode == LEME_POINTER_GRAB_TILED_MOVE ||
+      grab->mode == LEME_POINTER_GRAB_CONTAINER_MOVE) {
     leme_input_pointer_grab_update_destination(grab);
     box = grab->saved_box;
     box.x = leme_input_pointer_add_saturated(box.x, dx);
     box.y = leme_input_pointer_add_saturated(box.y, dy);
+    if (container != NULL &&
+        !leme_input_pointer_grab_cross_allowed(grab->server) &&
+        grab->destination == container->tag->owner->output) {
+      box = leme_view_policy_clamp_box(
+          box, leme_placement_area(container->tag, grab->destination));
+    }
     if (grab->mode == LEME_POINTER_GRAB_FLOAT_MOVE &&
         !leme_input_pointer_grab_cross_allowed(grab->server) &&
         grab->destination != NULL) {
@@ -295,10 +609,22 @@ static void leme_input_pointer_grab_motion(
   } else {
     box = leme_layout_resize_box(grab->saved_box, grab->edges, dx, dy);
   }
-  if (!leme_view_apply_interactive_box(
-          grab->view, box, grab->mode == LEME_POINTER_GRAB_FLOAT_RESIZE)) {
+  if (container != NULL && grab->mode == LEME_POINTER_GRAB_CONTAINER_RESIZE &&
+      leme_container_content_box(container, box).width <= 0) {
+    return;
+  }
+  const bool applied =
+      container != NULL
+          ? leme_container_apply_interactive_box(container, box)
+          : leme_view_apply_interactive_box(
+                grab->view, box, grab->mode == LEME_POINTER_GRAB_FLOAT_RESIZE);
+  if (!applied) {
     leme_input_pointer_grab_cancel(grab->server);
     return;
+  }
+  if (grab->mode == LEME_POINTER_GRAB_FLOAT_MOVE ||
+      grab->mode == LEME_POINTER_GRAB_CONTAINER_MOVE) {
+    leme_input_pointer_grab_snap(grab);
   }
   if (grab->mode == LEME_POINTER_GRAB_TILED_MOVE) {
     struct leme_tags *tags = leme_output_tags(grab->destination);
@@ -337,9 +663,22 @@ static uint32_t leme_input_pointer_grab_button(
   (void)time_msec;
   if (button == grab->button && state == WL_POINTER_BUTTON_STATE_RELEASED &&
       !leme_input_pointer_button_held(grab->server->seat, button)) {
+    grab->released = true;
+    struct leme_server *server = grab->server;
+    const struct leme_public_id id = grab->view == NULL
+                                         ? (struct leme_public_id){0}
+                                         : grab->view->public_meta.id;
+    const enum leme_view_placement placement = grab->snap_placement;
+    const struct leme_public_id container_id = grab->container;
+    const struct leme_container_drop drop = grab->container_drop;
     struct leme_output *destination = grab->destination;
-    bool crossing = destination != NULL && grab->view != NULL &&
-                    destination != leme_view_output(grab->view);
+    struct leme_container *moving_container =
+        leme_container_by_public_id(server, container_id);
+    struct leme_output *source = moving_container == NULL
+                                     ? leme_view_output(grab->view)
+                                     : moving_container->tag->owner->output;
+    bool crossing =
+        destination != NULL && source != NULL && destination != source;
 
     if (grab->mode == LEME_POINTER_GRAB_TILED_MOVE && grab->view != NULL &&
         grab->detach != NULL) {
@@ -359,7 +698,19 @@ static uint32_t leme_input_pointer_grab_button(
       }
     } else {
       leme_input_pointer_grab_hide_preview(grab);
-      if (crossing && grab->mode == LEME_POINTER_GRAB_FLOAT_MOVE) {
+      if (crossing && grab->mode == LEME_POINTER_GRAB_CONTAINER_MOVE &&
+          moving_container != NULL) {
+        (void)leme_container_move_to_output(moving_container, destination,
+                                            true);
+      } else if (grab->mode == LEME_POINTER_GRAB_CONTAINER_MOVE &&
+                 moving_container != NULL && source != NULL) {
+        (void)leme_container_apply_interactive_box(
+            moving_container,
+            leme_view_policy_clamp_box(
+                moving_container->box,
+                leme_placement_area(moving_container->tag, source)));
+      } else if (crossing && grab->mode == LEME_POINTER_GRAB_FLOAT_MOVE &&
+                 drop.target.serial == 0) {
         if (leme_view_is_shown_scratchpad(grab->view)) {
           (void)leme_scratchpad_move_shown(grab->view, destination);
         } else if (leme_view_is_sticky(grab->view)) {
@@ -370,7 +721,34 @@ static uint32_t leme_input_pointer_grab_button(
         }
       }
     }
-    wlr_seat_pointer_end_grab(grab->server->seat);
+    wlr_seat_pointer_end_grab(server->seat);
+    struct leme_container *container =
+        leme_container_by_public_id(server, container_id);
+    if (container != NULL && container->tag->owner->output == destination &&
+        placement != LEME_VIEW_PLACEMENT_NORMAL) {
+      (void)leme_container_set_placement(container, placement);
+      leme_input_process_motion(server, 0, NULL, false);
+    }
+    struct leme_view *view = leme_view_by_public_id(server, id);
+    if (view != NULL && placement != LEME_VIEW_PLACEMENT_NORMAL &&
+        leme_view_output(view) == destination &&
+        leme_view_set_placement(view, placement)) {
+      leme_input_process_motion(server, 0, NULL, false);
+    } else if (view != NULL && placement == LEME_VIEW_PLACEMENT_NORMAL &&
+               drop.target.serial != 0) {
+      if (leme_container_commit_drop(server, &drop)) {
+        if (crossing) {
+          leme_output_set_focused(server, destination, false);
+          leme_view_focus(view);
+        }
+        leme_input_process_motion(server, 0, NULL, false);
+      } else if (crossing && view->container == NULL &&
+                 leme_view_output(view) != destination) {
+        (void)leme_view_drop_to_output(view, NULL, destination, NULL,
+                                       LEME_DIRECTION_LEFT);
+        leme_input_process_motion(server, 0, NULL, false);
+      }
+    }
   }
   return 0;
 }
@@ -399,6 +777,9 @@ static void
 leme_input_pointer_grab_cancelled(struct wlr_seat_pointer_grab *seat_grab) {
   struct leme_pointer_grab *grab = seat_grab->data;
 
+  if (!grab->released) {
+    leme_desk_buttons_cancel(grab->server);
+  }
   leme_input_pointer_grab_cleanup(grab);
 }
 
@@ -412,10 +793,148 @@ static const struct wlr_pointer_grab_interface leme_pointer_grab_interface = {
     .cancel = leme_input_pointer_grab_cancelled,
 };
 
+static bool leme_input_pointer_container_start(struct leme_container *container,
+                                               enum leme_grab_edge edges,
+                                               uint32_t button) {
+  if (container == NULL || !leme_container_action_allowed(container->focused)) {
+    return false;
+  }
+  struct leme_server *server = container->tag->owner->server;
+  struct leme_pointer_grab *grab = server->pointer_grab;
+  const bool resize = edges != LEME_GRAB_EDGE_NONE;
+  enum leme_grab_edge checked = LEME_GRAB_EDGE_NONE;
+  if (grab == NULL || server->seat == NULL || server->cursor == NULL ||
+      (resize && (!leme_input_pointer_edges(leme_input_pointer_wlr_edges(edges),
+                                            &checked) ||
+                  checked != edges ||
+                  leme_render_container_resize_edges(
+                      container, server->cursor->x, server->cursor->y) !=
+                      leme_input_pointer_wlr_edges(edges))) ||
+      !leme_desktop_cursor_override(server,
+                                    leme_input_pointer_grab_cursor(edges))) {
+    return false;
+  }
+  if (resize && !leme_container_unplace_for_resize(container)) {
+    leme_desktop_cursor_restore(server);
+    return false;
+  }
+  leme_render_output_animations_finish(container->tag->owner->output);
+  *grab = (struct leme_pointer_grab){
+      .server = server,
+      .container = container->id,
+      .mode = resize ? LEME_POINTER_GRAB_CONTAINER_RESIZE
+                     : LEME_POINTER_GRAB_CONTAINER_MOVE,
+      .button = button,
+      .cursor_x = server->cursor->x,
+      .cursor_y = server->cursor->y,
+      .saved_box = container->box,
+      .edges = edges,
+      .titlebar_pending = !resize,
+      .restore_pending =
+          container->placement.kind != LEME_VIEW_PLACEMENT_NORMAL,
+      .snap_enabled = !resize,
+      .destination = container->tag->owner->output,
+      .seat_grab = {.interface = &leme_pointer_grab_interface, .data = grab}};
+  leme_input_pointer_container_defer(grab, true);
+  wlr_seat_pointer_start_grab(server->seat, &grab->seat_grab);
+  leme_input_protocols_update_pointer_focus(server);
+  return true;
+}
+
+static bool leme_input_pointer_start_split(struct leme_view *view,
+                                           enum leme_grab_edge edges,
+                                           uint32_t button) {
+  if (!leme_container_action_allowed(view) ||
+      !leme_layout_drag_supported(&view->container->layout)) {
+    return false;
+  }
+  struct leme_server *server = view->server;
+  struct leme_pointer_grab *grab = server->pointer_grab;
+  struct leme_layout_resize_drag drag = {0};
+  if (grab == NULL || server->seat == NULL || server->cursor == NULL ||
+      !leme_layout_resize_drag_begin(view->container->layout.root, view, edges,
+                                     &drag)) {
+    return false;
+  }
+  if (drag.horizontal == NULL) {
+    edges = (enum leme_grab_edge)(edges &
+                                  (LEME_GRAB_EDGE_TOP | LEME_GRAB_EDGE_BOTTOM));
+  }
+  if (drag.vertical == NULL) {
+    edges = (enum leme_grab_edge)(edges &
+                                  (LEME_GRAB_EDGE_LEFT | LEME_GRAB_EDGE_RIGHT));
+  }
+  if (!leme_desktop_cursor_override(server,
+                                    leme_input_pointer_grab_cursor(edges))) {
+    return false;
+  }
+  leme_render_output_animations_finish(leme_view_output(view));
+  *grab = (struct leme_pointer_grab){
+      .server = server,
+      .view = view,
+      .mode = LEME_POINTER_GRAB_CONTAINER_SPLIT,
+      .source_container = view->container->id,
+      .source_generation = view->container->generation,
+      .button = button,
+      .cursor_x = server->cursor->x,
+      .cursor_y = server->cursor->y,
+      .saved_box = view->box,
+      .edges = edges,
+      .resize_drag = drag,
+      .destination = leme_view_output(view),
+      .seat_grab = {.interface = &leme_pointer_grab_interface, .data = grab}};
+  wlr_seat_pointer_start_grab(server->seat, &grab->seat_grab);
+  leme_input_protocols_update_pointer_focus(server);
+  return true;
+}
+
+static bool leme_input_pointer_start_detach(struct leme_view *view,
+                                            uint32_t button) {
+  if (!leme_container_action_allowed(view)) {
+    return false;
+  }
+  struct leme_server *server = view->server;
+  struct leme_pointer_grab *grab = server->pointer_grab;
+  if (grab == NULL || server->seat == NULL || server->cursor == NULL ||
+      !leme_desktop_cursor_override(server, "grabbing")) {
+    return false;
+  }
+  leme_render_output_animations_finish(leme_view_output(view));
+  *grab = (struct leme_pointer_grab){
+      .server = server,
+      .view = view,
+      .mode = LEME_POINTER_GRAB_CONTAINER_DETACH,
+      .source_container = view->container->id,
+      .source_generation = view->container->generation,
+      .source_content = leme_render_view_content_box(view, view->box),
+      .button = button,
+      .cursor_x = server->cursor->x,
+      .cursor_y = server->cursor->y,
+      .saved_box = view->box,
+      .destination = leme_view_output(view),
+      .seat_grab = {.interface = &leme_pointer_grab_interface, .data = grab}};
+  wlr_seat_pointer_start_grab(server->seat, &grab->seat_grab);
+  leme_input_protocols_update_pointer_focus(server);
+  return true;
+}
+
+bool leme_input_pointer_grab_start_container(struct leme_container *container,
+                                             uint32_t button) {
+  return leme_input_pointer_container_start(container, LEME_GRAB_EDGE_NONE,
+                                            button);
+}
+
+bool leme_input_pointer_grab_start_container_resize(
+    struct leme_container *container, enum leme_grab_edge edges,
+    uint32_t button) {
+  return edges != LEME_GRAB_EDGE_NONE &&
+         leme_input_pointer_container_start(container, edges, button);
+}
+
 static bool leme_input_pointer_grab_start(
     struct leme_view *view, bool resize,
     uint32_t button, // NOLINT(bugprone-easily-swappable-parameters)
-    uint32_t wlr_edges, bool compositor_owned) {
+    uint32_t wlr_edges, bool compositor_owned, bool edge_resize) {
   struct leme_server *server;
   struct leme_pointer_grab *grab;
   enum leme_grab_edge edges = LEME_GRAB_EDGE_NONE;
@@ -426,12 +945,22 @@ static bool leme_input_pointer_grab_start(
     return false;
   }
   server = view->server;
+  if (resize && !edge_resize && compositor_owned && view->container != NULL) {
+    return leme_input_pointer_edges(wlr_edges, &edges) &&
+           leme_input_pointer_start_split(view, edges, button);
+  }
   grab = server->pointer_grab;
-  tiled = !view->floating;
+  tiled = leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_TAG_LAYOUT;
   if (grab == NULL || server->seat == NULL || server->cursor == NULL ||
       wlr_seat_pointer_has_grab(server->seat) || leme_session_locked(server) ||
       server->seat->drag != NULL || !view->mapped || view->unmanaged ||
       view->detached || view->fullscreen ||
+      leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER ||
+      (leme_view_is_placed(view) && resize && !edge_resize) ||
+      (edge_resize &&
+       (!resize || tiled || !compositor_owned || leme_view_is_maximized(view) ||
+        leme_render_view_resize_edges(view, server->cursor->x,
+                                      server->cursor->y) != wlr_edges)) ||
       (leme_view_is_scratchpad(view) && !leme_view_is_shown_scratchpad(view)) ||
       (tiled && leme_ownership_tag(view) == NULL) ||
       (!compositor_owned && tiled) ||
@@ -460,7 +989,9 @@ static bool leme_input_pointer_grab_start(
     grab->resize_drag = (struct leme_layout_resize_drag){0};
     return false;
   }
-  if (tiled && !resize && !leme_view_begin_tiled_drag(view, &grab->detach)) {
+  grab->hover_edges = LEME_GRAB_EDGE_NONE;
+  if ((tiled && !resize && !leme_view_begin_tiled_drag(view, &grab->detach)) ||
+      (edge_resize && !leme_view_unplace_for_resize(view))) {
     leme_desktop_cursor_restore(server);
     return false;
   }
@@ -471,8 +1002,17 @@ static bool leme_input_pointer_grab_start(
     grab->mode =
         resize ? LEME_POINTER_GRAB_FLOAT_RESIZE : LEME_POINTER_GRAB_FLOAT_MOVE;
   }
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  if (!resize && tag != NULL && tag->layout.kind == LEME_LAYOUT_DESKTOP) {
+    leme_render_view_finish_animation(view);
+  }
   grab->view = view;
   grab->button = button;
+  grab->restore_pending = leme_view_is_placed(view);
+  grab->titlebar_pending = false;
+  grab->released = false;
+  grab->snap_enabled = !resize && !tiled;
+  grab->snap_placement = LEME_VIEW_PLACEMENT_NORMAL;
   grab->cursor_x = server->cursor->x;
   grab->cursor_y = server->cursor->y;
   grab->saved_box = view->box;
@@ -494,10 +1034,60 @@ static bool leme_input_pointer_grab_start(
   return true;
 }
 
+bool leme_input_pointer_grab_start_decoration(struct leme_view *view,
+                                              uint32_t button) {
+  if (!leme_desk_decoration_eligible(view) || leme_view_is_minimized(view) ||
+      view->server->seat == NULL || !leme_input_idle(view->server) ||
+      leme_input_protocols_shortcuts_inhibited(view->server)) {
+    return false;
+  }
+  if (!leme_input_pointer_grab_start(view, false, button, WLR_EDGE_NONE, true,
+                                     false)) {
+    return false;
+  }
+  view->server->pointer_grab->titlebar_pending = true;
+  return true;
+}
+
+bool leme_input_interacting(const struct leme_server *server) {
+  return leme_input_pointer_grab_active(server) ||
+         (server->seat != NULL && server->seat->drag != NULL);
+}
+
+bool leme_input_idle(const struct leme_server *server) {
+  return !leme_session_locked(server) &&
+         !leme_layer_keyboard_is_exclusive(server) &&
+         !leme_input_protocols_pointer_locked(server) &&
+         (server->seat == NULL || (server->seat->drag == NULL &&
+                                   !wlr_seat_pointer_has_grab(server->seat) &&
+                                   !wlr_seat_keyboard_has_grab(server->seat)));
+}
+
+uint32_t leme_input_modifiers(const struct leme_server *server) {
+  struct wlr_keyboard *keyboard =
+      server->seat == NULL ? NULL : wlr_seat_get_keyboard(server->seat);
+  return keyboard == NULL ? 0
+                          : wlr_keyboard_get_modifiers(keyboard) &
+                                (WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL |
+                                 WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO);
+}
+
 bool leme_input_pointer_grab_active(const struct leme_server *server) {
   return server != NULL && server->pointer_grab != NULL &&
          server->seat != NULL &&
          server->seat->pointer_state.grab == &server->pointer_grab->seat_grab;
+}
+
+void leme_input_pointer_grab_modifiers_changed(struct leme_server *server) {
+  if (!leme_input_pointer_grab_active(server)) {
+    return;
+  }
+  struct leme_pointer_grab *grab = server->pointer_grab;
+  if (grab->mode != LEME_POINTER_GRAB_FLOAT_MOVE || grab->view == NULL ||
+      grab->restore_pending || grab->titlebar_pending) {
+    return;
+  }
+  leme_input_pointer_grab_snap(grab);
 }
 
 bool leme_input_pointer_grabbing(const struct leme_server *server,
@@ -526,7 +1116,8 @@ bool leme_input_pointer_grab_start_xdg(
       !wlr_seat_validate_pointer_grab_serial(server->seat, NULL, serial)) {
     return false;
   }
-  return leme_input_pointer_grab_start(view, resize, button, wlr_edges, false);
+  return leme_input_pointer_grab_start(view, resize, button, wlr_edges, false,
+                                       false);
 }
 
 bool leme_input_pointer_grab_start_xwayland(struct leme_view *view, bool resize,
@@ -545,16 +1136,25 @@ bool leme_input_pointer_grab_start_xwayland(struct leme_view *view, bool resize,
     return false;
   }
   button = server->seat->pointer_state.buttons[0].button;
-  return leme_input_pointer_grab_start(view, resize, button, wlr_edges, false);
+  return leme_input_pointer_grab_start(view, resize, button, wlr_edges, false,
+                                       false);
 }
 
 static void leme_input_pointer_grab_sink(struct leme_pointer_grab *grab) {
   struct leme_view *view = grab->view;
 
+  leme_input_pointer_grab_hide_preview(grab);
+  leme_desk_buttons_cancel(grab->server);
+  grab->titlebar_pending = false;
+  grab->restore_pending = false;
+  grab->snap_enabled = false;
   grab->mode = LEME_POINTER_GRAB_SINK;
+  leme_input_pointer_container_defer(grab, false);
+  grab->container = (struct leme_public_id){0};
   leme_view_set_configure_deferred(grab->view, false);
   grab->view = NULL;
   leme_view_follow_committed_size(view);
+  leme_desk_decoration_refresh(view);
   grab->resize_drag = (struct leme_layout_resize_drag){0};
   leme_desktop_cursor_restore(grab->server);
   if (!leme_input_pointer_button_held(grab->server->seat, grab->button)) {
@@ -591,6 +1191,16 @@ void leme_input_pointer_grab_cancel_view(struct leme_view *view) {
     return;
   }
   grab = view->server->pointer_grab;
+  if (view->container != NULL &&
+      (grab->container.serial == view->container->id.serial ||
+       (grab->mode == LEME_POINTER_GRAB_CONTAINER_SPLIT &&
+        grab->source_container.serial == view->container->id.serial))) {
+    leme_input_pointer_grab_cancel(view->server);
+    return;
+  }
+  if (grab->container_drop.target.serial == view->public_meta.id.serial) {
+    leme_input_pointer_grab_hide_preview(grab);
+  }
   if (grab->mode == LEME_POINTER_GRAB_TILED_MOVE && grab->view == view) {
     leme_input_pointer_grab_hide_preview(grab);
     leme_view_discard_tiled_drag(view, &grab->detach);
@@ -601,7 +1211,8 @@ void leme_input_pointer_grab_cancel_view(struct leme_view *view) {
     if (grab->view == view ||
         (grab->view != NULL && leme_ownership_tag(view) != NULL &&
          leme_ownership_tag(view) == leme_ownership_tag(grab->view) &&
-         !view->floating && !view->unmanaged)) {
+         leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING &&
+         !view->unmanaged)) {
       leme_input_pointer_grab_cancel(view->server);
     }
     return;
@@ -887,6 +1498,15 @@ static void leme_input_follow_pointer_output(struct leme_server *server) {
   leme_output_set_focused(server, output, false);
 }
 
+static enum leme_layout_kind
+leme_input_pointer_view_layout(const struct leme_server *server,
+                               const struct leme_view *view) {
+  const struct leme_tag *tag = leme_ownership_tag(view);
+
+  return tag != NULL ? tag->layout.kind
+                     : leme_tags_layout_kind(leme_focused_tags(server));
+}
+
 static struct wlr_seat_client *
 leme_input_surface_client(struct leme_server *server,
                           struct wlr_surface *surface) {
@@ -896,6 +1516,38 @@ leme_input_surface_client(struct leme_server *server,
                    server->seat, wl_resource_get_client(surface->resource));
 }
 
+static bool leme_input_pointer_resize_allowed(struct leme_server *server) {
+  return server->seat != NULL && server->cursor != NULL &&
+         leme_input_idle(server) &&
+         !leme_input_protocols_shortcuts_inhibited(server) &&
+         server->seat->pointer_state.button_count == 0 &&
+         server->desk_owner.owner == NULL;
+}
+
+static void leme_input_pointer_resize_hover(struct leme_server *server,
+                                            const struct leme_render_hit *hit) {
+  struct leme_pointer_grab *grab = server->pointer_grab;
+  if (grab == NULL || leme_input_pointer_grab_active(server)) {
+    return;
+  }
+  enum leme_grab_edge edges = LEME_GRAB_EDGE_NONE;
+  if ((hit->view != NULL || hit->container != NULL) &&
+      hit->resize_edges != WLR_EDGE_NONE &&
+      leme_input_pointer_resize_allowed(server)) {
+    (void)leme_input_pointer_edges(hit->resize_edges, &edges);
+  }
+  if (edges == grab->hover_edges) {
+    return;
+  }
+  leme_desktop_cursor_default(server);
+  grab->hover_edges = LEME_GRAB_EDGE_NONE;
+  if (edges != LEME_GRAB_EDGE_NONE &&
+      leme_desktop_cursor_override(server,
+                                   leme_input_pointer_grab_cursor(edges))) {
+    grab->hover_edges = edges;
+  }
+}
+
 static void leme_input_process_motion(struct leme_server *server,
                                       uint32_t time_msec,
                                       struct leme_render_hit *result,
@@ -903,6 +1555,11 @@ static void leme_input_process_motion(struct leme_server *server,
   struct leme_render_hit local;
   struct leme_render_hit *hit = result == NULL ? &local : result;
 
+  if (leme_desk_owner_handle_motion(server)) {
+    *hit = (struct leme_render_hit){0};
+    leme_input_pointer_resize_hover(server, hit);
+    return;
+  }
   leme_render_at(server, server->cursor->x, server->cursor->y, hit);
   if (!leme_session_surface_allowed(server, hit->surface)) {
     *hit = (struct leme_render_hit){0};
@@ -910,18 +1567,26 @@ static void leme_input_process_motion(struct leme_server *server,
   if (allow_view_focus && !leme_session_locked(server)) {
     leme_input_follow_pointer_output(server);
   }
+  struct leme_view *focus = hit->view != NULL        ? hit->view
+                            : hit->container == NULL ? NULL
+                                                     : hit->container->focused;
+  const enum leme_layout_kind layout =
+      leme_input_pointer_view_layout(server, focus);
   if (allow_view_focus && !leme_session_locked(server) &&
-      leme_view_policy_hover_focus(hit->view) &&
-      leme_tags_layout_kind(leme_focused_tags(server)) !=
-          LEME_LAYOUT_ACCORDION) {
-    leme_view_focus(hit->view);
+      leme_view_policy_hover_focus(focus) && layout != LEME_LAYOUT_ACCORDION) {
+    leme_view_focus_ex(focus, layout != LEME_LAYOUT_DESKTOP);
   }
+  leme_desk_buttons_handle_motion(server, hit);
   if (hit->surface != server->seat->pointer_state.focused_surface &&
       server->seat->drag == NULL && !leme_input_pointer_grab_active(server) &&
       !leme_desktop_cursor_owned_by(
           server, leme_input_surface_client(server, hit->surface))) {
     leme_desktop_cursor_default(server);
+    if (server->pointer_grab != NULL) {
+      server->pointer_grab->hover_edges = LEME_GRAB_EDGE_NONE;
+    }
   }
+  leme_input_pointer_resize_hover(server, hit);
   if (hit->surface == NULL) {
     wlr_seat_pointer_notify_clear_focus(server->seat);
     leme_input_protocols_update_pointer_focus(server);
@@ -961,6 +1626,7 @@ static void leme_input_handle_motion(struct wl_listener *listener, void *data) {
   }
   wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
   leme_data_update_drag_icon(server);
+  leme_desk_drag_motion(server);
   leme_input_process_motion(server, event->time_msec, NULL, true);
 }
 
@@ -991,6 +1657,7 @@ static void leme_input_handle_motion_absolute(struct wl_listener *listener,
   }
   wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
   leme_data_update_drag_icon(server);
+  leme_desk_drag_motion(server);
   leme_input_process_motion(server, event->time_msec, NULL, true);
 }
 
@@ -1015,21 +1682,26 @@ static uint32_t leme_input_pointer_wlr_edges(enum leme_grab_edge edges) {
 static bool leme_input_pointer_try_compositor_grab(
     struct leme_server *server, const struct leme_render_hit *hit,
     const struct wlr_pointer_button_event *event, bool inhibited) {
-  struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
-  uint32_t modifiers;
+  uint32_t modifiers = leme_input_modifiers(server);
   uint32_t edges = WLR_EDGE_NONE;
 
-  if (event->state != WL_POINTER_BUTTON_STATE_PRESSED || keyboard == NULL ||
+  if (event->state != WL_POINTER_BUTTON_STATE_PRESSED || modifiers == 0 ||
       inhibited || leme_session_locked(server) || server->seat->drag != NULL ||
       hit->view == NULL ||
       (event->button != BTN_LEFT && event->button != BTN_RIGHT)) {
     return false;
   }
-  modifiers = wlr_keyboard_get_modifiers(keyboard) &
-              (WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT |
-               WLR_MODIFIER_LOGO);
-  if (modifiers != WLR_MODIFIER_LOGO) {
+  const struct leme_tag *tag = leme_ownership_tag(hit->view);
+  const uint32_t group =
+      server->config == NULL ? 0 : server->config->desktop_container_modifier;
+  if (modifiers != WLR_MODIFIER_LOGO &&
+      (event->button != BTN_LEFT || tag == NULL ||
+       tag->layout.kind != LEME_LAYOUT_DESKTOP ||
+       modifiers != (WLR_MODIFIER_LOGO | group))) {
     return false;
+  }
+  if (event->button == BTN_LEFT && hit->view->container != NULL) {
+    return leme_input_pointer_start_detach(hit->view, event->button);
   }
   if (event->button == BTN_RIGHT) {
     int surface_x =
@@ -1041,7 +1713,28 @@ static bool leme_input_pointer_try_compositor_grab(
         leme_layout_resize_edges(hit->view->box, surface_x, surface_y));
   }
   return leme_input_pointer_grab_start(hit->view, event->button == BTN_RIGHT,
-                                       event->button, edges, true);
+                                       event->button, edges, true, false);
+}
+
+static bool leme_input_pointer_try_edge_resize(
+    struct leme_server *server, const struct leme_render_hit *hit,
+    const struct wlr_pointer_button_event *event) {
+  if (event->state != WL_POINTER_BUTTON_STATE_PRESSED ||
+      event->button != BTN_LEFT ||
+      (hit->view == NULL && hit->container == NULL) ||
+      hit->resize_edges == WLR_EDGE_NONE ||
+      !leme_input_pointer_resize_allowed(server) ||
+      leme_input_modifiers(server) != 0) {
+    return false;
+  }
+  if (hit->container != NULL) {
+    enum leme_grab_edge edges = LEME_GRAB_EDGE_NONE;
+    return leme_input_pointer_edges(hit->resize_edges, &edges) &&
+           leme_input_pointer_grab_start_container_resize(hit->container, edges,
+                                                          event->button);
+  }
+  return leme_input_pointer_grab_start(hit->view, true, event->button,
+                                       hit->resize_edges, true, true);
 }
 
 static void leme_input_handle_button(struct wl_listener *listener, void *data) {
@@ -1051,6 +1744,9 @@ static void leme_input_handle_button(struct wl_listener *listener, void *data) {
   bool inhibited;
 
   leme_session_notify_activity(server);
+  if (leme_desk_owner_handle_button(server, event)) {
+    return;
+  }
   if (leme_input_pointer_grab_active(server)) {
     wlr_seat_pointer_notify_button(server->seat, event->time_msec,
                                    event->button, event->state);
@@ -1058,12 +1754,27 @@ static void leme_input_handle_button(struct wl_listener *listener, void *data) {
   }
   inhibited = leme_input_protocols_shortcuts_inhibited(server);
   leme_input_process_motion(server, event->time_msec, &hit, true);
-  if (leme_input_pointer_try_compositor_grab(server, &hit, event, inhibited)) {
+  if (event->state == WL_POINTER_BUTTON_STATE_PRESSED &&
+      !leme_session_locked(server) && hit.container != NULL) {
+    leme_view_focus(hit.container->focused);
+  }
+  if (event->state == WL_POINTER_BUTTON_STATE_PRESSED &&
+      !leme_session_locked(server) && leme_view_policy_hover_focus(hit.view) &&
+      leme_input_pointer_view_layout(server, hit.view) == LEME_LAYOUT_DESKTOP) {
+    leme_view_focus(hit.view);
+  }
+  if (leme_input_pointer_try_compositor_grab(server, &hit, event, inhibited) ||
+      leme_input_pointer_try_edge_resize(server, &hit, event)) {
     wlr_seat_pointer_notify_button(server->seat, event->time_msec,
                                    event->button, event->state);
     return;
   }
   if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
+    if (leme_desk_buttons_handle_button(server, &hit, event) ||
+        leme_desk_handle_button(server, &hit, event) ||
+        leme_desk_strip_handle_button(server, &hit, event)) {
+      return;
+    }
     leme_layer_focus_on_button(hit.layer);
   }
   wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button,
@@ -1075,6 +1786,9 @@ static void leme_input_handle_axis(struct wl_listener *listener, void *data) {
   struct wlr_pointer_axis_event *event = data;
 
   leme_session_notify_activity(server);
+  if (leme_desk_owner_handle_axis(server, event)) {
+    return;
+  }
   wlr_seat_pointer_notify_axis(
       server->seat, event->time_msec, event->orientation, event->delta,
       event->delta_discrete, event->source, event->relative_direction);

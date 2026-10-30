@@ -14,6 +14,10 @@
   libxcb-wm,
   libinput,
   pixman,
+  glib,
+  cairo,
+  pango,
+  librsvg,
 
   libdrm,
   libGL,
@@ -78,6 +82,10 @@ stdenv.mkDerivation {
       libxcb-wm
       libinput
       pixman
+      glib
+      cairo
+      pango
+      librsvg
 
       libdrm
       libGL

@@ -26,7 +26,7 @@ static const struct leme_command_usage leme_command_usages[] = {
     {"focus_output", "focus_output left|right|up|down|NAME"},
     {"move_view_to_output",
      "move_view_to_output left|right|up|down|NAME [follow]"},
-    {"set_layout", "set_layout dwindle|master_stack|accordion"},
+    {"set_layout", "set_layout dwindle|master_stack|accordion|desktop"},
     {"switch_layout", "switch_layout"},
     {"remove_empty_tag", "remove_empty_tag ID"},
     {"toggle_floating", "toggle_floating"},
@@ -36,7 +36,28 @@ static const struct leme_command_usage leme_command_usages[] = {
     {"scratchpad_toggle", "scratchpad_toggle [NAME]"},
     {"scratchpad_retrieve", "scratchpad_retrieve"},
     {"resize", "resize left|right|up|down PIXELS"},
+    {"container_layout", "container_layout dwindle|master_stack|accordion"},
+    {"container_detach", "container_detach"},
+    {"container_dissolve", "container_dissolve"},
+    {"container_join", "container_join left|right|up|down"},
+    {"snap", "snap left|right|up|down"},
+    {"place", "place normal|maximized|left|right|top_left|top_right|"
+              "bottom_left|bottom_right"},
+    {"window_menu", "window_menu"},
+    {"show_desktop", "show_desktop"},
+    {"focus_cycle", "focus_cycle next|previous"},
+    {"focus_desktop", "focus_desktop"},
+    {"desktop_menu", "desktop_menu"},
+    {"grid_open", "grid_open"},
+    {"grid_trash", "grid_trash"},
+    {"grid_rename", "grid_rename"},
+    {"grid_new_folder", "grid_new_folder"},
+    {"grid_select_all", "grid_select_all"},
+    {"grid_clear", "grid_clear"},
+    {"grid_select", "grid_select left|right|up|down [extend]"},
     {"close_view", "close_view"},
+    {"minimize_view", "minimize_view"},
+    {"restore_minimized", "restore_minimized"},
     {"spawn", "spawn PROGRAM [ARG ...]"},
     {"reload_config", "reload_config"},
     {"mode", "mode NAME"},
@@ -45,6 +66,35 @@ static const struct leme_command_usage leme_command_usages[] = {
     {"switch_vt", "switch_vt N"},
     {"quit", "quit"},
 };
+
+static const char *const leme_command_placements[] = {
+    [LEME_VIEW_PLACEMENT_NORMAL] = "normal",
+    [LEME_VIEW_PLACEMENT_MAXIMIZED] = "maximized",
+    [LEME_VIEW_PLACEMENT_LEFT_HALF] = "left",
+    [LEME_VIEW_PLACEMENT_RIGHT_HALF] = "right",
+    [LEME_VIEW_PLACEMENT_TOP_LEFT] = "top_left",
+    [LEME_VIEW_PLACEMENT_TOP_RIGHT] = "top_right",
+    [LEME_VIEW_PLACEMENT_BOTTOM_LEFT] = "bottom_left",
+    [LEME_VIEW_PLACEMENT_BOTTOM_RIGHT] = "bottom_right",
+};
+
+const char *leme_command_placement_name(enum leme_view_placement placement) {
+  return placement <= LEME_VIEW_PLACEMENT_BOTTOM_RIGHT
+             ? leme_command_placements[placement]
+             : NULL;
+}
+
+static bool leme_command_parse_placement(const char *text,
+                                         enum leme_view_placement *placement) {
+  for (size_t index = 0; index < LEME_ARRAY_LENGTH(leme_command_placements);
+       index++) {
+    if (strcmp(text, leme_command_placements[index]) == 0) {
+      *placement = (enum leme_view_placement)index;
+      return true;
+    }
+  }
+  return false;
+}
 
 static const char *leme_command_usage(const char *name) {
   for (size_t index = 0;
@@ -110,6 +160,8 @@ static bool leme_command_parse_layout_kind(const char *text,
     *kind = LEME_LAYOUT_MASTER_STACK;
   } else if (strcmp(text, "accordion") == 0) {
     *kind = LEME_LAYOUT_ACCORDION;
+  } else if (strcmp(text, "desktop") == 0) {
+    *kind = LEME_LAYOUT_DESKTOP;
   } else {
     return false;
   }
@@ -253,6 +305,12 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
     if (!leme_command_parse_layout_kind(params[1], &command->layout)) {
       goto invalid;
     }
+  } else if (strcmp(name, "container_layout") == 0 && arguments == 1) {
+    command->type = LEME_COMMAND_CONTAINER_LAYOUT;
+    if (!leme_command_parse_layout_kind(params[1], &command->layout) ||
+        command->layout == LEME_LAYOUT_DESKTOP) {
+      goto invalid;
+    }
   } else if (strcmp(name, "switch_layout") == 0 && arguments == 0) {
     command->type = LEME_COMMAND_SWITCH_LAYOUT;
   } else if (strcmp(name, "remove_empty_tag") == 0 && arguments == 1) {
@@ -281,6 +339,63 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
     }
     if (!leme_command_parse_nonnegative(params[2], &command->amount) ||
         command->amount == 0) {
+      goto invalid;
+    }
+  } else if (strcmp(name, "minimize_view") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_MINIMIZE_VIEW;
+  } else if (strcmp(name, "restore_minimized") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_RESTORE_MINIMIZED;
+  } else if (strcmp(name, "container_detach") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_CONTAINER_DETACH;
+  } else if (strcmp(name, "container_dissolve") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_CONTAINER_DISSOLVE;
+  } else if (strcmp(name, "container_join") == 0 && arguments == 1) {
+    command->type = LEME_COMMAND_CONTAINER_JOIN;
+    if (!leme_command_parse_direction(params[1], &command->direction)) {
+      goto invalid;
+    }
+  } else if (strcmp(name, "snap") == 0 && arguments == 1) {
+    command->type = LEME_COMMAND_SNAP;
+    if (!leme_command_parse_direction(params[1], &command->direction)) {
+      goto invalid;
+    }
+  } else if (strcmp(name, "place") == 0 && arguments == 1) {
+    command->type = LEME_COMMAND_PLACE;
+    if (!leme_command_parse_placement(params[1], &command->placement)) {
+      goto invalid;
+    }
+  } else if (strcmp(name, "window_menu") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_WINDOW_MENU;
+  } else if (strcmp(name, "show_desktop") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_SHOW_DESKTOP;
+  } else if (strcmp(name, "focus_cycle") == 0 && arguments == 1) {
+    command->type = LEME_COMMAND_FOCUS_CYCLE;
+    command->backward = strcmp(params[1], "previous") == 0;
+    if (!command->backward && strcmp(params[1], "next") != 0) {
+      goto invalid;
+    }
+  } else if (strcmp(name, "focus_desktop") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_FOCUS_DESKTOP;
+  } else if (strcmp(name, "desktop_menu") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_DESKTOP_MENU;
+  } else if (strcmp(name, "grid_open") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GRID_OPEN;
+  } else if (strcmp(name, "grid_trash") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GRID_TRASH;
+  } else if (strcmp(name, "grid_rename") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GRID_RENAME;
+  } else if (strcmp(name, "grid_new_folder") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GRID_NEW_FOLDER;
+  } else if (strcmp(name, "grid_select_all") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GRID_SELECT_ALL;
+  } else if (strcmp(name, "grid_clear") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GRID_CLEAR;
+  } else if (strcmp(name, "grid_select") == 0 &&
+             (arguments == 1 || arguments == 2)) {
+    command->type = LEME_COMMAND_GRID_SELECT;
+    command->extend = arguments == 2;
+    if (!leme_command_parse_direction(params[1], &command->direction) ||
+        (arguments == 2 && strcmp(params[2], "extend") != 0)) {
       goto invalid;
     }
   } else if (strcmp(name, "close_view") == 0 && arguments == 0) {
@@ -345,6 +460,21 @@ allocation:
   leme_command_finish(command);
   leme_command_set_error(error, "%s", "out of memory");
   return false;
+}
+
+bool leme_command_grid_only(const struct leme_command *command) {
+  switch (command->type) {
+  case LEME_COMMAND_GRID_OPEN:
+  case LEME_COMMAND_GRID_TRASH:
+  case LEME_COMMAND_GRID_RENAME:
+  case LEME_COMMAND_GRID_NEW_FOLDER:
+  case LEME_COMMAND_GRID_SELECT_ALL:
+  case LEME_COMMAND_GRID_CLEAR:
+  case LEME_COMMAND_GRID_SELECT:
+    return true;
+  default:
+    return false;
+  }
 }
 
 void leme_command_finish(struct leme_command *command) {

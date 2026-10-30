@@ -5,9 +5,12 @@
 #include "public/model.h"
 #include "public/value-internal.h"
 #include "shell/view.h"
+#include "shell/container.h"
 #include "shell/xwayland.h"
 
+#include <inttypes.h>
 #include <stdalign.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <wlr/xwayland/xwayland.h>
 
@@ -153,6 +156,23 @@ static enum leme_public_status put_order(struct leme_public_builder *b,
   return leme_public_put_int(b, record, key, (int64_t)order);
 }
 
+static enum leme_public_status put_container(struct leme_public_builder *b,
+                                             struct leme_public_value *record,
+                                             const struct leme_view *view) {
+  if (!view->mapped || view->container == NULL) {
+    return leme_public_put_null(b, record, LEME_PUBLIC_TEXT("container"));
+  }
+  char id[96] = {0};
+  const struct leme_public_text instance =
+      leme_public_model_instance(view->server->public_model);
+  const int length = snprintf(id, sizeof(id), "container:%s:%" PRIu64,
+                              instance.data, view->container->id.serial);
+  if (length < 0 || (size_t)length >= sizeof(id)) {
+    return leme_public_fail(b, LEME_PUBLIC_INVALID);
+  }
+  return leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("container"), id);
+}
+
 static enum leme_public_status view_value(struct leme_public_builder *b,
                                           const struct leme_view *view,
                                           struct leme_public_value **out) {
@@ -167,7 +187,7 @@ static enum leme_public_status view_value(struct leme_public_builder *b,
       view->kind == LEME_VIEW_XWAYLAND ? view->xwayland_surface : NULL;
   struct leme_public_value *record = NULL, *id = NULL, *owner = NULL,
                            *geometry = NULL;
-  if (leme_public_object(b, 21, &record) != LEME_PUBLIC_OK ||
+  if (leme_public_object(b, 24, &record) != LEME_PUBLIC_OK ||
       leme_public_id_value(b, model, LEME_PUBLIC_VIEW, view->public_meta.id, 0,
                            &id) != LEME_PUBLIC_OK ||
       owner_value(b, view, &owner) != LEME_PUBLIC_OK ||
@@ -201,6 +221,10 @@ static enum leme_public_status view_value(struct leme_public_builder *b,
                            view->mapped && view == view->server->focused_view &&
                                view->server->focused_layer == NULL) !=
           LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("minimized"),
+                           leme_view_is_minimized(view)) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("maximized"),
+                           leme_view_is_maximized(view)) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("floating"),
                            view->floating) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("fullscreen"),
@@ -220,6 +244,7 @@ static enum leme_public_status view_value(struct leme_public_builder *b,
                      tag == NULL ? 0 : tag->id) != LEME_PUBLIC_OK ||
       put_view_ref(b, record, LEME_PUBLIC_TEXT("parent"), model,
                    parent_view(view)) != LEME_PUBLIC_OK ||
+      put_container(b, record, view) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("owner"), owner) !=
           LEME_PUBLIC_OK)
     return leme_public_builder_status(b);

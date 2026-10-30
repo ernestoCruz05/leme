@@ -1,4 +1,9 @@
 #include "core/server.h"
+#include "desktop/desktop.h"
+#include "desktop/decoration.h"
+#include "desktop/drag.h"
+#include "desktop/buttons.h"
+#include "desktop/strip.h"
 
 #include "config/config.h"
 #include "config/live.h"
@@ -257,6 +262,13 @@ bool leme_server_init(struct leme_server *server) {
     wlr_log(WLR_ERROR, "%s", "leme: failed to initialize output management");
     return false;
   }
+  if (!leme_desk_strip_init(server)) {
+    wlr_log(WLR_ERROR, "%s", "leme: minimized recovery strip unavailable");
+  }
+  leme_desk_decoration_init(server);
+  if (!leme_desk_init(server)) {
+    wlr_log(WLR_ERROR, "%s", "leme: desktop UI is unavailable");
+  }
   if (!leme_output_power_init(server)) {
     wlr_log(WLR_ERROR, "%s",
             "leme: failed to initialize output power management");
@@ -317,6 +329,12 @@ void leme_server_finish(struct leme_server *server) {
     return;
   }
   leme_session_environment_withdraw(server);
+  leme_desk_buttons_finish(server);
+  leme_desk_drag_finish(server);
+  leme_desk_owner_finish(server);
+  leme_desk_decoration_finish(server);
+  leme_desk_strip_finish(server);
+  leme_desk_finish(server);
   leme_input_workspace_gesture_cancel(server);
   leme_xwayland_finish(server);
   if (server->display != NULL) {

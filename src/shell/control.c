@@ -8,19 +8,26 @@
 #include "control/memory.h"
 #include "core/command.h"
 #include "core/server.h"
+#include "desktop/target.h"
 #include "input/control.h"
+#include "input/input.h"
+#include "shell/layer.h"
 #include "output/control.h"
 #include "output/output.h"
 #include "protocols/session.h"
 #include "public/value.h"
 #include "shell/ownership.h"
+#include "shell/container.h"
+#include "shell/policy.h"
 #include "shell/scratchpad.h"
 #include "shell/sticky.h"
 #include "shell/view.h"
 #include "workspace/control.h"
 #include "workspace/layout.h"
+#include "workspace/public.h"
 #include "workspace/tag.h"
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -31,6 +38,9 @@
 
 struct shell_prepared_item {
   uint64_t serial;
+  uint64_t container_serial;
+  uint64_t container_generation;
+  uint64_t minimize_attempted_serial;
 };
 
 struct shell_prepared {
@@ -40,6 +50,8 @@ struct shell_prepared {
   struct shell_prepared_item *items;
   bool target_bool;
   enum leme_resize_edge resize_edge;
+  enum leme_layout_kind layout;
+  enum leme_direction direction;
   int resize_amount;
   uint64_t dest_output_serial;
   uint16_t dest_tag_slot;
@@ -77,7 +89,11 @@ enum leme_control_code leme_shell_control_prepare(
   }
 
   const enum leme_control_opcode opcode = intents[0].opcode;
-  if (opcode == LEME_CONTROL_OP_FOCUS || opcode == LEME_CONTROL_OP_RESIZE) {
+  if (opcode == LEME_CONTROL_OP_FOCUS || opcode == LEME_CONTROL_OP_RESIZE ||
+      opcode == LEME_CONTROL_OP_CONTAINER_LAYOUT ||
+      opcode == LEME_CONTROL_OP_CONTAINER_DETACH ||
+      opcode == LEME_CONTROL_OP_CONTAINER_DISSOLVE ||
+      opcode == LEME_CONTROL_OP_CONTAINER_JOIN) {
     if (count != 1) {
       return set_preflight_error(error, LEME_CONTROL_CARDINALITY,
                                  "single target required");
@@ -153,6 +169,56 @@ enum leme_control_code leme_shell_control_prepare(
   } else if (opcode == LEME_CONTROL_OP_MOVE_TO_OUTPUT) {
     prep->dest_output_serial = intents[0].destination.id.serial;
     prep->dest_tag_slot = intents[0].destination.tag_number;
+  } else if (opcode == LEME_CONTROL_OP_CONTAINER_LAYOUT) {
+    struct leme_public_text name = {0};
+    bool valid = false;
+    if (leme_public_as_text(intents[0].args, &name) == LEME_PUBLIC_OK) {
+      for (enum leme_layout_kind kind = LEME_LAYOUT_DWINDLE;
+           kind <= LEME_LAYOUT_ACCORDION; kind++) {
+        const char *candidate = leme_layout_public_name(kind);
+        if (name.length == strlen(candidate) &&
+            memcmp(name.data, candidate, name.length) == 0) {
+          prep->layout = kind;
+          valid = true;
+          break;
+        }
+      }
+    }
+    if (!valid) {
+      return shell_prepare_fail(server, prep, error,
+                                LEME_CONTROL_INVALID_ARGUMENT,
+                                "invalid container layout");
+    }
+  } else if (opcode == LEME_CONTROL_OP_CONTAINER_JOIN) {
+    static const char *const names[] = {"left", "right", "up", "down"};
+    static const enum leme_direction directions[] = {
+        LEME_DIRECTION_LEFT, LEME_DIRECTION_RIGHT, LEME_DIRECTION_UP,
+        LEME_DIRECTION_DOWN};
+    struct leme_public_text name = {0};
+    bool valid = false;
+    if (leme_public_as_text(intents[0].args, &name) == LEME_PUBLIC_OK) {
+      for (size_t i = 0; i < LEME_ARRAY_LENGTH(names); i++) {
+        if (name.length == strlen(names[i]) &&
+            memcmp(name.data, names[i], name.length) == 0) {
+          prep->direction = directions[i];
+          valid = true;
+          break;
+        }
+      }
+    }
+    if (!valid) {
+      return shell_prepare_fail(server, prep, error,
+                                LEME_CONTROL_INVALID_ARGUMENT,
+                                "invalid container join direction");
+    }
+  } else if (opcode == LEME_CONTROL_OP_SET_MINIMIZED) {
+    if (intents[0].args == NULL ||
+        leme_public_as_bool(intents[0].args, &prep->target_bool) !=
+            LEME_PUBLIC_OK) {
+      return shell_prepare_fail(server, prep, error,
+                                LEME_CONTROL_INVALID_ARGUMENT,
+                                "minimized state must be boolean");
+    }
   } else if (opcode == LEME_CONTROL_OP_SET_STICKY) {
     bool target_bool = false;
     if (intents[0].args != NULL) {
@@ -162,7 +228,8 @@ enum leme_control_code leme_shell_control_prepare(
   }
 
   for (size_t i = 0; i < count; ++i) {
-    prep->items[i].serial = intents[i].target.id.serial;
+    prep->items[i] =
+        (struct shell_prepared_item){.serial = intents[i].target.id.serial};
     struct leme_view *view =
         leme_view_by_public_id(server, intents[i].target.id);
     if (view == NULL || !view->mapped || view->unmanaged) {
@@ -170,20 +237,44 @@ enum leme_control_code leme_shell_control_prepare(
                                 "view not found or unmapped");
     }
 
-    if (opcode == LEME_CONTROL_OP_FOCUS) {
+    if (opcode == LEME_CONTROL_OP_CONTAINER_LAYOUT ||
+        opcode == LEME_CONTROL_OP_CONTAINER_DETACH ||
+        opcode == LEME_CONTROL_OP_CONTAINER_DISSOLVE) {
+      if (!leme_container_action_allowed(view)) {
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "container action unavailable");
+      }
+      prep->items[i].container_serial = view->container->id.serial;
+      prep->items[i].container_generation = view->container->generation;
+    } else if (opcode == LEME_CONTROL_OP_CONTAINER_JOIN) {
+      if (!leme_container_member_eligible(view) || view->container != NULL) {
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "container join unavailable");
+      }
+    } else if (opcode == LEME_CONTROL_OP_FOCUS) {
       if (leme_view_is_scratchpad(view) &&
           !leme_view_is_shown_scratchpad(view)) {
         return shell_prepare_fail(server, prep, error,
                                   LEME_CONTROL_ACTION_FAILED,
                                   "cannot focus hidden scratchpad");
       }
-      if (!leme_ownership_focus_eligible(view)) {
+      if (!leme_ownership_focus_eligible(view) &&
+          !leme_view_is_minimized(view)) {
         return shell_prepare_fail(server, prep, error,
                                   LEME_CONTROL_ACTION_FAILED,
                                   "view not eligible for focus");
       }
+    } else if (opcode == LEME_CONTROL_OP_SET_MINIMIZED) {
+      if (prep->target_bool && !leme_view_can_minimize(view)) {
+        return shell_prepare_fail(server, prep, error,
+                                  LEME_CONTROL_ACTION_FAILED,
+                                  "view incompatible with minimization");
+      }
     } else if (opcode == LEME_CONTROL_OP_SET_FLOATING) {
-      if (leme_view_is_scratchpad(view) || leme_view_is_sticky(view)) {
+      if (leme_view_is_scratchpad(view) || leme_view_is_sticky(view) ||
+          leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER) {
         return shell_prepare_fail(server, prep, error,
                                   LEME_CONTROL_ACTION_FAILED,
                                   "view incompatible with floating");
@@ -195,10 +286,11 @@ enum leme_control_code leme_shell_control_prepare(
                                   "scratchpad incompatible with fullscreen");
       }
     } else if (opcode == LEME_CONTROL_OP_RESIZE) {
-      if (view->fullscreen) {
-        return shell_prepare_fail(server, prep, error,
-                                  LEME_CONTROL_ACTION_FAILED,
-                                  "cannot resize fullscreen view");
+      if (view->fullscreen || leme_view_is_placed(view) ||
+          (view->container != NULL && !leme_container_action_allowed(view))) {
+        return shell_prepare_fail(
+            server, prep, error, LEME_CONTROL_ACTION_FAILED,
+            "cannot resize fullscreen, maximized, snapped or unavailable view");
       }
     } else if (opcode == LEME_CONTROL_OP_MOVE_TO_TAG) {
       if (leme_view_is_scratchpad(view)) {
@@ -333,6 +425,14 @@ leme_shell_control_execute_one(struct leme_server *server,
       *outcome = LEME_CONTROL_NOOP;
       return LEME_CONTROL_OK;
     }
+    if (leme_view_is_minimized(view) &&
+        (leme_session_locked(server) ||
+         leme_layer_keyboard_is_exclusive(server) ||
+         leme_input_interacting(server) ||
+         !leme_view_set_minimized(view, false))) {
+      *outcome = LEME_CONTROL_FAILED;
+      return LEME_CONTROL_ACTION_FAILED;
+    }
     struct leme_output *output = leme_view_output(view);
     if (output != NULL && leme_output_focused(server) != output) {
       bool warp =
@@ -351,6 +451,36 @@ leme_shell_control_execute_one(struct leme_server *server,
     } else {
       *outcome = LEME_CONTROL_FAILED;
     }
+    return LEME_CONTROL_OK;
+  }
+  case LEME_CONTROL_OP_SET_MINIMIZED: {
+    if (leme_view_is_minimized(view) == prep->target_bool) {
+      *outcome = LEME_CONTROL_NOOP;
+      return LEME_CONTROL_OK;
+    }
+    uint64_t container_serial = 0;
+    struct leme_desk_target unit = {0};
+    if (prep->target_bool && view->container != NULL) {
+      container_serial = view->container->id.serial;
+    } else if (!prep->target_bool && leme_view_minimized_unit(view, &unit) &&
+               unit.kind == LEME_DESK_TARGET_CONTAINER) {
+      container_serial = unit.id.serial;
+    }
+    if (container_serial != 0) {
+      for (size_t i = 0; i < prep->count; i++) {
+        if (prep->items[i].minimize_attempted_serial == container_serial) {
+          *outcome = LEME_CONTROL_FAILED;
+          return LEME_CONTROL_ACTION_FAILED;
+        }
+      }
+      prep->items[index].minimize_attempted_serial = container_serial;
+    }
+    if (!leme_view_set_minimized(view, prep->target_bool) ||
+        leme_view_is_minimized(view) != prep->target_bool) {
+      *outcome = LEME_CONTROL_FAILED;
+      return LEME_CONTROL_ACTION_FAILED;
+    }
+    *outcome = LEME_CONTROL_APPLIED;
     return LEME_CONTROL_OK;
   }
   case LEME_CONTROL_OP_SET_FLOATING: {
@@ -372,7 +502,7 @@ leme_shell_control_execute_one(struct leme_server *server,
     return LEME_CONTROL_OK;
   }
   case LEME_CONTROL_OP_RESIZE: {
-    if (view->fullscreen) {
+    if (view->fullscreen || leme_view_is_placed(view)) {
       *outcome = LEME_CONTROL_FAILED;
       return LEME_CONTROL_ACTION_FAILED;
     }
@@ -383,6 +513,35 @@ leme_shell_control_execute_one(struct leme_server *server,
       *outcome = LEME_CONTROL_FAILED;
     }
     return LEME_CONTROL_OK;
+  }
+  case LEME_CONTROL_OP_CONTAINER_LAYOUT:
+  case LEME_CONTROL_OP_CONTAINER_DETACH:
+  case LEME_CONTROL_OP_CONTAINER_DISSOLVE: {
+    if (!leme_container_action_allowed(view) ||
+        view->container->id.serial != prep->items[index].container_serial ||
+        view->container->generation !=
+            prep->items[index].container_generation) {
+      *outcome = LEME_CONTROL_FAILED;
+      return LEME_CONTROL_ACTION_FAILED;
+    }
+    if (prep->opcode == LEME_CONTROL_OP_CONTAINER_LAYOUT &&
+        view->container->layout.kind == prep->layout) {
+      *outcome = LEME_CONTROL_NOOP;
+      return LEME_CONTROL_OK;
+    }
+    const bool applied =
+        prep->opcode == LEME_CONTROL_OP_CONTAINER_LAYOUT
+            ? leme_container_set_layout(view->container, prep->layout)
+        : prep->opcode == LEME_CONTROL_OP_CONTAINER_DETACH
+            ? leme_container_detach_current(view)
+            : leme_container_dissolve(view->container);
+    *outcome = applied ? LEME_CONTROL_APPLIED : LEME_CONTROL_FAILED;
+    return applied ? LEME_CONTROL_OK : LEME_CONTROL_ACTION_FAILED;
+  }
+  case LEME_CONTROL_OP_CONTAINER_JOIN: {
+    const bool joined = leme_container_join(view, prep->direction);
+    *outcome = joined ? LEME_CONTROL_APPLIED : LEME_CONTROL_FAILED;
+    return joined ? LEME_CONTROL_OK : LEME_CONTROL_ACTION_FAILED;
   }
   case LEME_CONTROL_OP_CLOSE: {
     leme_view_protocol_close(view);
@@ -406,18 +565,49 @@ leme_shell_control_execute_one(struct leme_server *server,
       *outcome = LEME_CONTROL_NOOP;
       return LEME_CONTROL_OK;
     }
+    const bool reanchor =
+        cur_output != NULL && cur_output != dest_output &&
+        leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
+        !view->fullscreen && !leme_view_is_sticky(view);
+    const bool placed = leme_view_is_placed(view);
+    const struct leme_box previous_box =
+        placed ? view->placement.restore_box : view->box;
+    struct leme_box translated = previous_box;
+    if (reanchor) {
+      const int64_t x = (int64_t)translated.x - cur_output->full_box.x +
+                        dest_output->full_box.x;
+      const int64_t y = (int64_t)translated.y - cur_output->full_box.y +
+                        dest_output->full_box.y;
+      translated.x = x < INT_MIN ? INT_MIN : (x > INT_MAX ? INT_MAX : (int)x);
+      translated.y = y < INT_MIN ? INT_MIN : (y > INT_MAX ? INT_MAX : (int)y);
+      if (placed) {
+        view->placement.restore_box = translated;
+      }
+    }
     bool ok = false;
     if (leme_view_is_sticky(view)) {
       ok = leme_sticky_move_to_tag(view, prep->dest_tag_slot, false);
     } else {
       ok = leme_tags_adopt_view(&dest_output->tags, view, prep->dest_tag_slot);
     }
+    if (ok && reanchor && !placed &&
+        leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
+      const struct leme_box box =
+          leme_view_policy_clamp_box(translated, dest_output->usable_box);
+      ok = leme_view_apply_interactive_box(
+          view, box,
+          box.width != previous_box.width || box.height != previous_box.height);
+    } else if (!ok && placed) {
+      view->placement.restore_box = previous_box;
+    }
     if (ok) {
+      leme_view_refresh_begin(server);
+      leme_view_arrange(server);
       if (cur_output != NULL && cur_output != dest_output) {
         leme_tags_refresh_visibility(leme_output_tags(cur_output));
       }
       leme_tags_refresh_visibility(leme_output_tags(dest_output));
-      leme_view_arrange(server);
+      leme_view_refresh_end(server);
       *outcome = LEME_CONTROL_APPLIED;
     } else {
       *outcome = LEME_CONTROL_FAILED;
@@ -527,6 +717,20 @@ static bool command_control_lowered(enum leme_command_type type) {
   case LEME_COMMAND_SCRATCHPAD_SEND:
   case LEME_COMMAND_SCRATCHPAD_TOGGLE:
   case LEME_COMMAND_SCRATCHPAD_RETRIEVE:
+  case LEME_COMMAND_SNAP:
+  case LEME_COMMAND_PLACE:
+  case LEME_COMMAND_WINDOW_MENU:
+  case LEME_COMMAND_SHOW_DESKTOP:
+  case LEME_COMMAND_FOCUS_CYCLE:
+  case LEME_COMMAND_FOCUS_DESKTOP:
+  case LEME_COMMAND_DESKTOP_MENU:
+  case LEME_COMMAND_GRID_OPEN:
+  case LEME_COMMAND_GRID_TRASH:
+  case LEME_COMMAND_GRID_RENAME:
+  case LEME_COMMAND_GRID_NEW_FOLDER:
+  case LEME_COMMAND_GRID_SELECT_ALL:
+  case LEME_COMMAND_GRID_CLEAR:
+  case LEME_COMMAND_GRID_SELECT:
     return true;
   default:
     return false;
@@ -540,7 +744,10 @@ command_control_check(struct leme_server *server,
   const struct leme_view *view = server->focused_view;
   const bool needs_view = cmd->type == LEME_COMMAND_MOVE_DIRECTION ||
                           cmd->type == LEME_COMMAND_MOVE_VIEW_TO_OUTPUT ||
-                          cmd->type == LEME_COMMAND_SCRATCHPAD_SEND;
+                          cmd->type == LEME_COMMAND_SCRATCHPAD_SEND ||
+                          cmd->type == LEME_COMMAND_SNAP ||
+                          cmd->type == LEME_COMMAND_PLACE ||
+                          cmd->type == LEME_COMMAND_WINDOW_MENU;
 
   if (!command_control_lowered(cmd->type)) {
     return set_preflight_error(error, LEME_CONTROL_UNSUPPORTED,
@@ -679,7 +886,8 @@ command_control_execute_one(struct leme_server *server,
   }
 
   if (prep->cmd.type == LEME_COMMAND_FOCUS_DIRECTION ||
-      prep->cmd.type == LEME_COMMAND_FOCUS_PREVIOUS_VIEW) {
+      prep->cmd.type == LEME_COMMAND_FOCUS_PREVIOUS_VIEW ||
+      prep->cmd.type == LEME_COMMAND_FOCUS_CYCLE) {
     if (server->focused_view != old_view) {
       *outcome = LEME_CONTROL_APPLIED;
     } else {
@@ -790,6 +998,11 @@ server_control_prepare(void *context, const struct leme_control_intent *intents,
   case LEME_CONTROL_OP_MOVE_TO_TAG:
   case LEME_CONTROL_OP_MOVE_TO_OUTPUT:
   case LEME_CONTROL_OP_SET_STICKY:
+  case LEME_CONTROL_OP_SET_MINIMIZED:
+  case LEME_CONTROL_OP_CONTAINER_DETACH:
+  case LEME_CONTROL_OP_CONTAINER_DISSOLVE:
+  case LEME_CONTROL_OP_CONTAINER_LAYOUT:
+  case LEME_CONTROL_OP_CONTAINER_JOIN:
     return leme_shell_control_prepare(server, intents, count, account, out,
                                       error);
   case LEME_CONTROL_OP_FOCUS_TAG:
@@ -884,6 +1097,11 @@ static enum leme_control_code server_control_execute_one(
   case LEME_CONTROL_OP_MOVE_TO_TAG:
   case LEME_CONTROL_OP_MOVE_TO_OUTPUT:
   case LEME_CONTROL_OP_SET_STICKY:
+  case LEME_CONTROL_OP_SET_MINIMIZED:
+  case LEME_CONTROL_OP_CONTAINER_DETACH:
+  case LEME_CONTROL_OP_CONTAINER_DISSOLVE:
+  case LEME_CONTROL_OP_CONTAINER_LAYOUT:
+  case LEME_CONTROL_OP_CONTAINER_JOIN:
     return leme_shell_control_execute_one(server, prepared, index, outcome,
                                           error);
   case LEME_CONTROL_OP_FOCUS_TAG:
@@ -952,6 +1170,11 @@ static void server_control_discard(void *context,
   case LEME_CONTROL_OP_MOVE_TO_TAG:
   case LEME_CONTROL_OP_MOVE_TO_OUTPUT:
   case LEME_CONTROL_OP_SET_STICKY:
+  case LEME_CONTROL_OP_SET_MINIMIZED:
+  case LEME_CONTROL_OP_CONTAINER_DETACH:
+  case LEME_CONTROL_OP_CONTAINER_DISSOLVE:
+  case LEME_CONTROL_OP_CONTAINER_LAYOUT:
+  case LEME_CONTROL_OP_CONTAINER_JOIN:
     leme_shell_control_discard(server, prepared);
     break;
   case LEME_CONTROL_OP_FOCUS_TAG:

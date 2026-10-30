@@ -4,12 +4,16 @@
 #include "config/config.h"
 #include "config/prepare.h"
 #include "input/input.h"
+#include "desktop/desktop.h"
+#include "desktop/menu.h"
+#include "desktop/target.h"
 #include "core/server.h"
 #include "output/output.h"
 #include "workspace/tag.h"
 #include "shell/scratchpad.h"
 #include "shell/sticky.h"
 #include "shell/view.h"
+#include "shell/container.h"
 #include "shell/xwayland.h"
 #include "protocols/input.h"
 #include "protocols/session.h"
@@ -93,10 +97,36 @@ static bool leme_command_uses_tags(enum leme_command_type type) {
   case LEME_COMMAND_SET_LAYOUT:
   case LEME_COMMAND_SWITCH_LAYOUT:
   case LEME_COMMAND_REMOVE_EMPTY_TAG:
+  case LEME_COMMAND_RESTORE_MINIMIZED:
     return true;
   default:
     return false;
   }
+}
+
+static bool leme_command_place(struct leme_view *view,
+                               const struct leme_command *command) {
+  struct leme_container *container = view->container;
+  const enum leme_view_placement current =
+      container != NULL ? container->placement.kind : view->placement.kind;
+  const enum leme_view_placement next =
+      command->type == LEME_COMMAND_SNAP
+          ? leme_placement_snap(current, command->direction)
+          : command->placement;
+  return container != NULL ? leme_container_set_placement(container, next)
+                           : leme_view_set_placement(view, next);
+}
+
+static bool leme_command_window_menu(struct leme_server *server,
+                                     const struct leme_view *view) {
+  const struct leme_container *container = view->container;
+  const struct leme_desk_target target =
+      container != NULL
+          ? (struct leme_desk_target){LEME_DESK_TARGET_CONTAINER, container->id}
+          : (struct leme_desk_target){LEME_DESK_TARGET_VIEW,
+                                      view->public_meta.id};
+  const struct leme_box box = container != NULL ? container->box : view->box;
+  return !view->fullscreen && leme_desk_menu_open(server, target, box.x, box.y);
 }
 
 bool leme_command_execute(struct leme_server *server,
@@ -289,8 +319,10 @@ bool leme_command_execute(struct leme_server *server,
       wlr_log(WLR_ERROR, "%s", "leme: cannot set the layout");
       return false;
     }
+    leme_view_refresh_begin(server);
     leme_view_arrange(server);
     leme_tags_refresh_visibility(tags);
+    leme_view_refresh_end(server);
     return true;
   case LEME_COMMAND_SWITCH_LAYOUT:
     leme_input_pointer_grab_cancel_tiled(server);
@@ -298,8 +330,10 @@ bool leme_command_execute(struct leme_server *server,
       wlr_log(WLR_ERROR, "%s", "leme: cannot switch the layout");
       return false;
     }
+    leme_view_refresh_begin(server);
     leme_view_arrange(server);
     leme_tags_refresh_visibility(tags);
+    leme_view_refresh_end(server);
     return true;
   case LEME_COMMAND_REMOVE_EMPTY_TAG:
     leme_input_pointer_grab_cancel_tiled(server);
@@ -333,6 +367,110 @@ bool leme_command_execute(struct leme_server *server,
                           command->amount)) {
       wlr_log(WLR_ERROR, "%s", "leme: resize has no matching edge");
       return false;
+    }
+    return true;
+  case LEME_COMMAND_MINIMIZE_VIEW:
+    return leme_command_require_view(server, "minimize_view") &&
+           leme_view_set_minimized(view, true);
+  case LEME_COMMAND_RESTORE_MINIMIZED: {
+    if (leme_session_locked(server)) {
+      return false;
+    }
+    tag = tags->focused_is_candidate ? NULL : tags->table[tags->focused_id];
+    if (tag == NULL || tag->layout.kind != LEME_LAYOUT_DESKTOP) {
+      return true;
+    }
+    size_t capacity = 0;
+    if (tag->containers.next != NULL) {
+      const struct leme_container *container = NULL;
+      wl_list_for_each(container, &tag->containers, link) {
+        if (capacity == SIZE_MAX / sizeof(struct leme_public_id)) {
+          return false;
+        }
+        capacity++;
+      }
+    }
+    struct leme_public_id *seen =
+        capacity == 0 ? NULL : calloc(capacity, sizeof(*seen));
+    if (capacity > 0 && seen == NULL) {
+      return false;
+    }
+    size_t count = 0;
+    bool restored = true;
+    wl_list_for_each(view, &tag->views, tag_link) {
+      struct leme_desk_target unit = {0};
+      if (!leme_view_minimized_unit(view, &unit)) {
+        continue;
+      }
+      if (unit.kind == LEME_DESK_TARGET_CONTAINER) {
+        bool duplicate = false;
+        for (size_t i = 0; i < count; i++) {
+          if (seen[i].serial == unit.id.serial) {
+            duplicate = true;
+            break;
+          }
+        }
+        if (duplicate) {
+          continue;
+        }
+        if (count >= capacity) {
+          restored = false;
+          break;
+        }
+        seen[count++] = unit.id;
+      }
+      if (!leme_view_set_minimized(view, false)) {
+        restored = false;
+      }
+    }
+    free(seen);
+    return restored;
+  }
+  case LEME_COMMAND_CONTAINER_LAYOUT:
+    return leme_container_action_allowed(view) &&
+           leme_container_set_layout(view->container, command->layout);
+  case LEME_COMMAND_CONTAINER_JOIN:
+    return leme_container_join(view, command->direction);
+  case LEME_COMMAND_CONTAINER_DETACH:
+  case LEME_COMMAND_CONTAINER_DISSOLVE:
+    if (!leme_container_action_allowed(view)) {
+      return false;
+    }
+    return command->type == LEME_COMMAND_CONTAINER_DETACH
+               ? leme_container_detach_current(view)
+               : leme_container_dissolve(view->container);
+  case LEME_COMMAND_SNAP:
+  case LEME_COMMAND_PLACE:
+    return leme_command_require_view(
+               server, command->type == LEME_COMMAND_SNAP ? "snap" : "place") &&
+           leme_command_place(view, command);
+  case LEME_COMMAND_WINDOW_MENU:
+    return leme_command_require_view(server, "window_menu") &&
+           leme_command_window_menu(server, view);
+  case LEME_COMMAND_SHOW_DESKTOP:
+    return leme_view_show_desktop(server);
+  case LEME_COMMAND_FOCUS_DESKTOP:
+    return leme_desk_focus(server);
+  case LEME_COMMAND_DESKTOP_MENU:
+    return leme_desk_open_menu(server);
+  case LEME_COMMAND_GRID_OPEN:
+    return leme_desk_grid_act(server, LEME_DESK_GRID_OPEN);
+  case LEME_COMMAND_GRID_TRASH:
+    return leme_desk_grid_act(server, LEME_DESK_GRID_TRASH);
+  case LEME_COMMAND_GRID_RENAME:
+    return leme_desk_grid_act(server, LEME_DESK_GRID_RENAME);
+  case LEME_COMMAND_GRID_NEW_FOLDER:
+    return leme_desk_grid_act(server, LEME_DESK_GRID_NEW_FOLDER);
+  case LEME_COMMAND_GRID_SELECT_ALL:
+    return leme_desk_grid_act(server, LEME_DESK_GRID_SELECT_ALL);
+  case LEME_COMMAND_GRID_CLEAR:
+    return leme_desk_grid_act(server, LEME_DESK_GRID_CLEAR);
+  case LEME_COMMAND_GRID_SELECT:
+    return leme_desk_grid_select(server, command->direction, command->extend);
+  case LEME_COMMAND_FOCUS_CYCLE:
+    leme_input_pointer_grab_cancel_tiled(server);
+    if (!leme_view_focus_cycle(server, command->backward)) {
+      wlr_log(WLR_DEBUG, "%s", "leme: no window to cycle to");
     }
     return true;
   case LEME_COMMAND_CLOSE_VIEW:

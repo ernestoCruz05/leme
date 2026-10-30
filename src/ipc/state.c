@@ -22,6 +22,8 @@ const char *leme_ipc_layout_name(enum leme_layout_kind kind) {
     return "master_stack";
   case LEME_LAYOUT_ACCORDION:
     return "accordion";
+  case LEME_LAYOUT_DESKTOP:
+    return "desktop";
   case LEME_LAYOUT_DWINDLE:
   default:
     return "dwindle";

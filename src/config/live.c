@@ -456,6 +456,7 @@ enum leme_live_setting_id {
   LEME_LIVE_STYLE_GAP_OUTER_BOTTOM,
   LEME_LIVE_STYLE_GAP_OUTER_LEFT,
   LEME_LIVE_STYLE_SMART_GAPS,
+  LEME_LIVE_DESKTOP_MINIMIZED_STRIP,
   LEME_LIVE_STYLE_BORDER_WIDTH,
   LEME_LIVE_STYLE_CORNER_RADIUS,
   LEME_LIVE_STYLE_BLUR,
@@ -522,6 +523,11 @@ static int find_live_setting(const char *const *path, size_t path_count) {
     return -1;
   }
   if (path_count == 2) {
+    if (strcmp(path[0], "desktop") == 0) {
+      return strcmp(path[1], "minimized_strip") == 0
+                 ? LEME_LIVE_DESKTOP_MINIMIZED_STRIP
+                 : -1;
+    }
     if (strcmp(path[0], "style") == 0) {
       if (strcmp(path[1], "gap") == 0)
         return LEME_LIVE_STYLE_GAP;
@@ -822,6 +828,7 @@ enum leme_control_code leme_config_live_prepare_set(
     break;
   }
   case LEME_LIVE_STYLE_SMART_GAPS:
+  case LEME_LIVE_DESKTOP_MINIMIZED_STRIP:
   case LEME_LIVE_OUTPUT_CROSS_FOCUS:
   case LEME_LIVE_OUTPUT_CROSS_MOVE:
   case LEME_LIVE_OUTPUT_CROSS_DRAG:
@@ -1015,6 +1022,9 @@ enum leme_control_code leme_config_live_prepare_set(
     break;
   case LEME_LIVE_OUTPUT_WARP_CURSOR:
     noop = (cur->output_policy.warp_cursor == prep->parsed.bool_val);
+    break;
+  case LEME_LIVE_DESKTOP_MINIMIZED_STRIP:
+    noop = (cur->desktop_minimized_strip == prep->parsed.bool_val);
     break;
   case LEME_LIVE_CURSOR_THEME:
     noop = ((cur->cursor.theme == NULL && prep->parsed.str_val == NULL) ||
@@ -1285,6 +1295,10 @@ leme_config_live_execute_one(struct leme_server *server,
     break;
   case LEME_LIVE_OUTPUT_WARP_CURSOR:
     cfg->output_policy.warp_cursor = prep->parsed.bool_val;
+    break;
+  case LEME_LIVE_DESKTOP_MINIMIZED_STRIP:
+    cfg->desktop_minimized_strip = prep->parsed.bool_val;
+    leme_view_arrange_instant(server);
     break;
   case LEME_LIVE_CURSOR_THEME:
     if (prep->prepared_cursor != NULL) {

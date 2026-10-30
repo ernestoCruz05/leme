@@ -1,5 +1,6 @@
 #include "core/gate.h"
 #include "workspace/tag.h"
+#include "desktop/desktop.h"
 #include "public/server.h"
 
 #include "config/config.h"
@@ -7,11 +8,13 @@
 #include "shell/ownership.h"
 #include "shell/ownership_internal.h"
 #include "shell/view.h"
+#include "shell/container.h"
 #include "core/server.h"
 #include "output/output.h"
 #include "protocols/publication.h"
 #include "render/render.h"
 #include "render/workspace_transition.h"
+#include "input/input.h"
 
 #include <assert.h>
 #include <math.h>
@@ -22,19 +25,24 @@ static void leme_tag_apply_settings(struct leme_tag *tag,
                                     const struct leme_tag_settings *settings);
 
 static bool leme_tags_view_tiled(const struct leme_view *view) {
-  return view->mapped && !view->unmanaged && !view->floating &&
+  return view->mapped && !view->unmanaged &&
+         leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_TAG_LAYOUT &&
          !view->fullscreen && !view->detached;
 }
 
 static size_t leme_tags_tiled_views(const struct leme_tag *tag,
-                                    struct leme_view **views, size_t capacity) {
+                                    struct leme_view **views, size_t capacity,
+                                    bool include_fullscreen) {
   struct wl_list *link;
   size_t count = 0;
 
   for (link = tag->views.next; link != &tag->views; link = link->next) {
     struct leme_view *view = wl_container_of(link, view, tag_link);
 
-    if (!leme_tags_view_tiled(view)) {
+    if (!view->mapped || view->unmanaged || view->floating || view->detached ||
+        (!include_fullscreen &&
+         (view->fullscreen ||
+          leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_TAG_LAYOUT))) {
       continue;
     }
     if (count < capacity) {
@@ -105,58 +113,56 @@ void leme_tags_apply_settings(struct leme_tags *tags,
         continue;
       }
     }
-    if (tag->layout.kind != new_settings.layout) {
-      struct leme_view **views;
-      size_t count = leme_tags_tiled_views(tag, NULL, 0);
-
-      if (count == 0) {
-        leme_layout_set_kind(&tag->layout, new_settings.layout, NULL, 0);
-      } else {
-        views = (struct leme_view **)calloc(count, sizeof(*views));
-        if (views != NULL) {
-          const size_t collected = leme_tags_tiled_views(tag, views, count);
-
-          if (collected == count) {
-            leme_layout_set_kind(&tag->layout, new_settings.layout, views,
-                                 count);
-          }
-          free((void *)views);
-        }
-      }
+    if (!leme_tag_set_layout(tag, new_settings.layout)) {
+      continue;
     }
     leme_tag_apply_settings(tag, &new_settings);
   }
 }
 
 bool leme_tag_set_layout(struct leme_tag *tag, enum leme_layout_kind kind) {
-  struct leme_view **views;
-  size_t count;
-
-  if (tag == NULL) {
+  if (tag == NULL || kind < LEME_LAYOUT_DWINDLE || kind > LEME_LAYOUT_DESKTOP) {
     return false;
   }
   if (tag->layout.kind == kind) {
     return true;
   }
-  count = leme_tags_tiled_views(tag, NULL, 0);
-  if (count == 0) {
-    leme_layout_set_kind(&tag->layout, kind, NULL, 0);
-    if (tag->owner != NULL && tag->owner->server != NULL) {
-      leme_public_server_invalidate(tag->owner->server);
+  struct leme_view *view;
+  wl_list_for_each(view, &tag->views, tag_link) {
+    leme_input_pointer_grab_cancel_view(view);
+    leme_render_view_finish_animation(view);
+    leme_view_remember_desktop_box(view, view->box);
+  }
+  const size_t count = leme_tags_tiled_views(tag, NULL, 0, true);
+  if (count > SIZE_MAX / sizeof(struct leme_view *)) {
+    return false;
+  }
+  struct leme_view **views = NULL;
+  if (count > 0) {
+    views = calloc(count, sizeof(*views));
+    if (views == NULL) {
+      return false;
     }
-    return true;
+    if (leme_tags_tiled_views(tag, views, count, true) != count) {
+      free(views);
+      return false;
+    }
   }
-  views = (struct leme_view **)calloc(count, sizeof(*views));
-  if (views == NULL) {
+  struct leme_layout prepared = {0};
+  if (!leme_layout_prepare(&tag->layout, kind, views, count, &prepared)) {
+    free(views);
     return false;
   }
-  if (leme_tags_tiled_views(tag, views, count) != count) {
-    free((void *)views);
-    return false;
+  free(views);
+  const enum leme_layout_kind previous = tag->layout.kind;
+  leme_container_tag_finish(tag);
+  leme_layout_finish(&tag->layout);
+  tag->layout = prepared;
+  wl_list_for_each(view, &tag->views, tag_link) {
+    leme_view_refresh_layout(view, previous);
   }
-  leme_layout_set_kind(&tag->layout, kind, views, count);
-  free((void *)views);
   if (tag->owner != NULL && tag->owner->server != NULL) {
+    leme_tags_refresh_visibility_passive(tag->owner);
     leme_public_server_invalidate(tag->owner->server);
   }
   return true;
@@ -188,6 +194,9 @@ bool leme_tags_cycle_layout(struct leme_tags *tags) {
     next = LEME_LAYOUT_ACCORDION;
     break;
   case LEME_LAYOUT_ACCORDION:
+    next = LEME_LAYOUT_DESKTOP;
+    break;
+  case LEME_LAYOUT_DESKTOP:
   default:
     next = LEME_LAYOUT_DWINDLE;
     break;
@@ -244,6 +253,7 @@ static struct leme_tag *materialize(struct leme_tags *tags, uint16_t id) {
     leme_tag_apply_settings(tag, &settings);
   }
   wl_list_init(&tag->views);
+  wl_list_init(&tag->containers);
   tags->table[id] = tag;
   leme_public_server_invalidate(tags->server);
   return tag;
@@ -316,6 +326,7 @@ void leme_tags_finish(struct leme_tags *tags) {
     if (tags->table == NULL || tags->table[id] == NULL) {
       continue;
     }
+    leme_container_tag_finish(tags->table[id]);
     wl_list_for_each_safe(view, next, &tags->table[id]->views, tag_link) {
       wl_list_remove(&view->tag_link);
       wl_list_init(&view->tag_link);
@@ -721,6 +732,7 @@ bool leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
   if (source == target) {
     return true;
   }
+  leme_container_remove_view(view);
   if (!view->floating && !view->detached) {
     leme_layout_remove_view(&source->layout, view);
   }
@@ -733,6 +745,7 @@ bool leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
   if (!view->floating && !view->detached) {
     leme_layout_add_view(&target->layout, target->focused_view, view);
   }
+  leme_view_refresh_layout(view, source->layout.kind);
   target->focused_view = view;
   if (target->id == destination->focused_id) {
     destination->focused_is_candidate = false;
@@ -760,6 +773,7 @@ bool leme_tags_move_view(struct leme_tags *tags, struct leme_view *view,
   if (source == destination) {
     return true;
   }
+  leme_container_remove_view(view);
   if (!view->floating) {
     leme_layout_remove_view(&source->layout, view);
   }
@@ -772,9 +786,23 @@ bool leme_tags_move_view(struct leme_tags *tags, struct leme_view *view,
   if (!view->floating) {
     leme_layout_add_view(&destination->layout, destination->focused_view, view);
   }
+  leme_view_refresh_layout(view, source->layout.kind);
   destination->focused_view = view;
   (void)leme_tags_prune_empty(tags, source);
   return true;
+}
+
+struct leme_view *leme_tag_fullscreen_view(const struct leme_tag *tag) {
+  if (tag == NULL) {
+    return NULL;
+  }
+  struct leme_view *view = NULL;
+  wl_list_for_each(view, &tag->views, tag_link) {
+    if (view->mapped && view->fullscreen) {
+      return view;
+    }
+  }
+  return NULL;
 }
 
 struct leme_view *leme_tags_directional_view(const struct leme_tags *tags,
@@ -804,7 +832,7 @@ struct leme_view *leme_tags_directional_view(const struct leme_tags *tags,
     }
   }
   wl_list_for_each(view, &tag->views, tag_link) {
-    if (!view->mapped || view->unmanaged || view->detached ||
+    if (!leme_ownership_focus_eligible(view) || view->detached ||
         (fullscreen != NULL && view != fullscreen) ||
         (tiled_only && (view->floating || view->fullscreen))) {
       continue;
@@ -819,7 +847,7 @@ struct leme_view *leme_tags_directional_view(const struct leme_tags *tags,
     return NULL;
   }
   wl_list_for_each(view, &tag->views, tag_link) {
-    if (!view->mapped || view->unmanaged || view->detached ||
+    if (!leme_ownership_focus_eligible(view) || view->detached ||
         (fullscreen != NULL && view != fullscreen) ||
         (tiled_only && (view->floating || view->fullscreen))) {
       continue;
@@ -859,7 +887,7 @@ leme_tags_pointer_drop_target(const struct leme_tags *tags,
     return NULL;
   }
   tag = tags->table[tags->focused_id];
-  if (tag == NULL) {
+  if (tag == NULL || tag->layout.kind == LEME_LAYOUT_DESKTOP) {
     return NULL;
   }
   wl_list_for_each(view, &tag->views, tag_link) {
@@ -908,7 +936,8 @@ bool leme_tags_swap_directional(struct leme_tags *tags, struct leme_view *view,
   struct leme_view *neighbor;
 
   if (tags == NULL || view == NULL || leme_ownership_tag(view) == NULL ||
-      view->floating || view->detached || view->fullscreen) {
+      leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
+      view->detached || view->fullscreen) {
     return false;
   }
   neighbor = leme_tags_directional_view(tags, view, direction, true);
@@ -944,7 +973,8 @@ static struct leme_box leme_tags_area_for_count(const struct leme_tag *tag,
 struct leme_box leme_tags_tiled_area(const struct leme_tag *tag,
                                      struct leme_box usable_box) {
   return leme_tags_area_for_count(
-      tag, usable_box, tag == NULL ? 0 : leme_tags_tiled_views(tag, NULL, 0));
+      tag, usable_box,
+      tag == NULL ? 0 : leme_tags_tiled_views(tag, NULL, 0, false));
 }
 
 void leme_tags_arrange_current(struct leme_tags *tags,
@@ -960,7 +990,10 @@ void leme_tags_arrange_current(struct leme_tags *tags,
   if (tag == NULL) {
     return;
   }
-  count = leme_tags_tiled_views(tag, NULL, 0);
+  if (tag->layout.kind == LEME_LAYOUT_DESKTOP) {
+    return;
+  }
+  count = leme_tags_tiled_views(tag, NULL, 0, false);
   usable_box = leme_tags_area_for_count(tag, usable_box, count);
   if (count == 0) {
     leme_layout_arrange_subject(&tag->layout, NULL, 0, tag->focused_view,
@@ -971,7 +1004,7 @@ void leme_tags_arrange_current(struct leme_tags *tags,
   if (views == NULL) {
     return;
   }
-  if (leme_tags_tiled_views(tag, views, count) != count) {
+  if (leme_tags_tiled_views(tag, views, count, false) != count) {
     free((void *)views);
     return;
   }
@@ -1094,6 +1127,7 @@ void leme_tags_commit_detach(struct leme_view *view,
   tag = plan->tag;
   tags = tag == NULL ? NULL : tag->owner;
   assert(tag != NULL && leme_ownership_tag(view) == tag);
+  leme_container_remove_view(view);
   if (!view->floating) {
     leme_layout_remove_view(&tag->layout, view);
   }
@@ -1167,6 +1201,7 @@ bool leme_tags_prepare_materialize(struct leme_tags *tags, uint16_t id,
       leme_tag_apply_settings(tag, &settings);
     }
     wl_list_init(&tag->views);
+    wl_list_init(&tag->containers);
     plan->owned = true;
   }
   plan->tags = tags;
@@ -1254,6 +1289,7 @@ void leme_tags_remove_view(struct leme_view *view) {
   struct leme_tag *tag;
   struct leme_tags *tags;
 
+  leme_container_remove_view(view);
   if (leme_ownership_tag(view) == NULL) {
     return;
   }
@@ -1273,7 +1309,8 @@ void leme_tags_remove_view(struct leme_view *view) {
   }
 }
 
-void leme_tags_refresh_visibility(struct leme_tags *tags) {
+static void leme_tags_refresh_visibility_with_focus(struct leme_tags *tags,
+                                                    bool update_focus) {
   struct leme_tag *current;
   struct leme_view *fullscreen = NULL;
   struct leme_view *focus = NULL;
@@ -1284,6 +1321,8 @@ void leme_tags_refresh_visibility(struct leme_tags *tags) {
   if (tags == NULL) {
     return;
   }
+  leme_view_refresh_reconcile(tags->server);
+  leme_view_refresh_desktop(tags->server);
   current = tags->focused_is_candidate ? NULL : tags->table[tags->focused_id];
 
   if (current != NULL) {
@@ -1295,7 +1334,7 @@ void leme_tags_refresh_visibility(struct leme_tags *tags) {
         break;
       }
     }
-    if (current->focused_view != NULL && current->focused_view->mapped &&
+    if (leme_ownership_focus_eligible(current->focused_view) &&
         (fullscreen == NULL || current->focused_view == fullscreen)) {
       focus = current->focused_view;
     }
@@ -1304,12 +1343,21 @@ void leme_tags_refresh_visibility(struct leme_tags *tags) {
     if (tags->table[id] == NULL) {
       continue;
     }
+    if (tags->table[id]->containers.next != NULL) {
+      struct leme_container *container = NULL;
+      wl_list_for_each(container, &tags->table[id]->containers, link) {
+        leme_render_container_set_visible(
+            container, current == container->tag && fullscreen == NULL &&
+                           !container->minimized);
+      }
+    }
     for (link = tags->table[id]->views.next; link != &tags->table[id]->views;
          link = link->next) {
       bool visible;
 
       view = wl_container_of(link, view, tag_link);
-      visible = current == tags->table[id] &&
+      visible = leme_ownership_scene_visible(view) &&
+                current == tags->table[id] &&
                 (fullscreen == NULL || fullscreen == view);
       leme_render_set_view_visible(view, visible);
       if (visible && focus == NULL) {
@@ -1317,17 +1365,34 @@ void leme_tags_refresh_visibility(struct leme_tags *tags) {
       }
     }
   }
-  if (tags->server != NULL && tags->output != NULL &&
-      tags->server->focused_output != tags->output) {
+  if (!update_focus || (tags->server != NULL && tags->output != NULL &&
+                        tags->server->focused_output != tags->output)) {
+    return;
+  }
+  if (fullscreen == NULL && leme_desk_focused(tags->server)) {
     return;
   }
   if (focus != NULL) {
-    leme_view_focus(focus);
+    leme_view_focus_ex(focus, current->layout.kind != LEME_LAYOUT_DESKTOP);
   } else if (tags->server != NULL &&
              !leme_layer_keyboard_is_exclusive(tags->server)) {
     leme_layer_release_for_view(tags->server);
     leme_view_clear_focus(tags->server);
   }
+}
+
+void leme_tags_refresh_visibility(struct leme_tags *tags) {
+  struct leme_server *server = tags == NULL ? NULL : tags->server;
+  leme_view_refresh_begin(server);
+  leme_tags_refresh_visibility_with_focus(tags, true);
+  leme_view_refresh_end(server);
+}
+
+void leme_tags_refresh_visibility_passive(struct leme_tags *tags) {
+  struct leme_server *server = tags == NULL ? NULL : tags->server;
+  leme_view_refresh_begin(server);
+  leme_tags_refresh_visibility_with_focus(tags, false);
+  leme_view_refresh_end(server);
 }
 
 static size_t leme_tags_collect_members(const struct leme_tags *tags,

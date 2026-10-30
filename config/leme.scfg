@@ -16,6 +16,8 @@ vars {
 binds "common" {
     $mod+Return spawn $term
     $mod+q close_view
+    $mod+m minimize_view
+    $mod+SHIFT+m restore_minimized
 
     for i in 1..3 {
         $mod+$i focus_tag $i

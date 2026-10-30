@@ -10,6 +10,8 @@
 #include <wlr/types/wlr_output.h>
 
 struct leme_config;
+struct leme_desk_output;
+struct leme_desk_strip_output;
 struct leme_server;
 struct leme_tags;
 struct leme_view;
@@ -24,6 +26,8 @@ struct leme_output {
   struct wlr_output *wlr_output;
   struct wlr_scene_output *scene_output;
   struct leme_render_timing *render_timing;
+  struct leme_desk_output *desk;
+  struct leme_desk_strip_output *desk_strip;
   struct leme_tags tags;
   struct leme_workspace_transition *workspace_transition;
   struct leme_box full_box;
@@ -49,6 +53,7 @@ bool leme_output_set_power(struct leme_output *output, bool on);
 void leme_output_publish_configuration(struct leme_server *server);
 struct leme_box leme_output_usable_box(const struct leme_output *output);
 struct leme_box leme_output_full_box(const struct leme_output *output);
+double leme_output_scale(const struct leme_output *output);
 void leme_output_refresh_geometry(struct leme_output *output);
 struct leme_output *leme_output_focused(const struct leme_server *server);
 struct leme_output *

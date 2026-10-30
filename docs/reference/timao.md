@@ -30,11 +30,75 @@ Command names and argument syntax are documented in the [command reference](comm
 - `focus_tag`, `focus`, `focus_output`
 - `switch_layout`, `set_layout`, `remove_empty_tag`, `mode`
 - `toggle_floating`, `toggle_sticky`, `toggle_fullscreen`, `close_view`
+- `minimize_view`, `restore_minimized`, `show_desktop`
+- `snap`, `place`, `window_menu`, `focus_cycle`
+- `focus_desktop`, `desktop_menu`, `grid_open`, `grid_trash`, `grid_rename`, `grid_new_folder`, `grid_select_all`, `grid_clear`, `grid_select`
+- `container_detach`, `container_dissolve`, `container_layout`, `container_join`
 - `move`, `move_view_to_tag`, `move_view_to_output`, `resize`
 - `reload_config`, `cycle_keyboard_layout`, `toggle_shortcuts_inhibit`
 - `scratchpad_send`, `scratchpad_retrieve`, `scratchpad_toggle`
 
 These commands use the compositor's command adapter. `spawn`, `quit` and `switch_vt` are not available as simple CLI commands. Scripts can start a detached process with `launch`. A command can succeed with a no-op result, for example when a requested state is already set.
+
+Desktop views expose a required boolean `minimized`, including hiding inherited
+from a parent. They remain in `views` while minimized. The typed action
+`set-minimized` accepts view targets and a boolean; explicit `focus` restores its
+target before focusing it. Setting false alone does not activate a window.
+
+```sh
+timao minimize_view
+timao restore_minimized
+timao eval '(query (where (views) .minimized))'
+timao eval '(act (set-minimized (where (views) .minimized) false))'
+```
+
+`restore_minimized` is limited to the focused output's current desktop tag. The
+last expression restores its selected targets across tags. Minimizing fullscreen,
+sticky, scratchpad or non-desktop views is refused. The writable live config path
+`desktop.minimized_strip` controls only the built-in recovery UI.
+
+View records also expose a required boolean `maximized`. It remains true while a
+maximized desktop window is minimized or fullscreen. Maximize is available through
+window controls, client or shell protocols, and the `place` and `snap` commands;
+there is no typed action for it.
+
+## Desktop containers
+
+The container commands act on the focused member, except `container_join`, which
+groups the focused standalone window with its neighbor in a direction:
+
+```sh
+timao container_layout accordion
+timao container_detach
+timao container_dissolve
+timao container_join right
+```
+
+The corresponding typed actions are `container-layout`, `container-detach`,
+`container-dissolve` and `container-join`. Each targets one existing view. For
+example:
+
+```sh
+timao eval '(act (container-layout (get (session) "focused_view") "dwindle"))'
+timao eval '(act (container-join (get (session) "focused_view") "left"))'
+```
+
+View records have a nullable text `container` field. Equal non-null values identify
+members of the same container. The value lasts for that container's lifetime and
+is never reused. It is not an entity reference: there is no container root,
+reference traversal or container `by-id` lookup. Existing view IDs stay unchanged.
+Dialogs have null `container`, even when their parent belongs to a group.
+
+A bar can group captured records by this field. With `jq`:
+
+```sh
+timao get views | jq 'map(select(.container != null)) | group_by(.container)'
+```
+
+`set-minimized` on a member affects its whole group. Each member's `minimized`
+field reports effective hiding, but its `maximized` field stays false while
+attached, even when the group fills the output. Explicit focus and foreign
+activation still address real clients.
 
 ## Queries and watches
 

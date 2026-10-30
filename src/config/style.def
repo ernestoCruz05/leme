@@ -1,0 +1,71 @@
+LEME_STYLE_STATE(INACTIVE, "inactive")
+LEME_STYLE_STATE(MAXIMIZED, "maximized")
+LEME_STYLE_STATE(HOVER, "hover")
+LEME_STYLE_STATE(PRESSED, "pressed")
+LEME_STYLE_STATE(FOCUS, "focus")
+LEME_STYLE_STATE(SELECTED, "selected")
+LEME_STYLE_STATE(DROP, "drop")
+LEME_STYLE_STATE(DISABLED, "disabled")
+
+LEME_STYLE_PROPERTY(BACKGROUND, "background", COLOR, 0, 0)
+LEME_STYLE_PROPERTY(COLOR, "color", COLOR, 0, 0)
+LEME_STYLE_PROPERTY(BORDER_COLOR, "border_color", COLOR, 0, 0)
+LEME_STYLE_PROPERTY(FONT, "font", TEXT, 1, 127)
+LEME_STYLE_PROPERTY(RADIUS, "radius", PIXELS, 0, 64)
+LEME_STYLE_PROPERTY(WIDTH, "width", PIXELS, 16, 512)
+LEME_STYLE_PROPERTY(HEIGHT, "height", PIXELS, 16, 96)
+LEME_STYLE_PROPERTY(PADDING, "padding", PIXELS, 0, 256)
+LEME_STYLE_PROPERTY(SIZE, "size", PIXELS, 8, 256)
+LEME_STYLE_PROPERTY(SPACING, "spacing", PIXELS, 32, 512)
+LEME_STYLE_PROPERTY(GAP, "gap", PIXELS, 0, 64)
+LEME_STYLE_PROPERTY(OPACITY, "opacity", DECIMAL, 0, 1)
+LEME_STYLE_PROPERTY(ALIGN, "align", ALIGN, 0, 0)
+LEME_STYLE_PROPERTY(LAYOUT, "layout", LAYOUT, 0, 0)
+LEME_STYLE_PROPERTY(SHADOW, "shadow", BOOLEAN, 0, 0)
+LEME_STYLE_PROPERTY(ICON, "icon", PATH, 1, 4095)
+LEME_STYLE_PROPERTY(THEME, "theme", TEXT, 1, 127)
+
+LEME_STYLE_ELEMENT(TITLEBAR, "titlebar", NONE, NONE,
+                   S(INACTIVE),
+                   P(BACKGROUND) | P(COLOR) | P(FONT) | P(HEIGHT) | P(ALIGN) |
+                       P(LAYOUT))
+LEME_STYLE_ELEMENT(BUTTON, "button", NONE, TITLEBAR,
+                   S(INACTIVE) | S(HOVER) | S(PRESSED) | S(DISABLED),
+                   P(BACKGROUND) | P(COLOR) | P(RADIUS) | P(WIDTH) | P(SIZE) |
+                       P(OPACITY) | P(ICON))
+LEME_STYLE_ELEMENT(MINIMIZE, "minimize", BUTTON, TITLEBAR,
+                   S(INACTIVE) | S(HOVER) | S(PRESSED) | S(DISABLED),
+                   P(BACKGROUND) | P(COLOR) | P(RADIUS) | P(SIZE) |
+                       P(OPACITY) | P(ICON))
+LEME_STYLE_ELEMENT(MAXIMIZE, "maximize", BUTTON, TITLEBAR,
+                   S(INACTIVE) | S(MAXIMIZED) | S(HOVER) | S(PRESSED) |
+                       S(DISABLED),
+                   P(BACKGROUND) | P(COLOR) | P(RADIUS) | P(SIZE) |
+                       P(OPACITY) | P(ICON))
+LEME_STYLE_ELEMENT(CLOSE, "close", BUTTON, TITLEBAR,
+                   S(INACTIVE) | S(HOVER) | S(PRESSED) | S(DISABLED),
+                   P(BACKGROUND) | P(COLOR) | P(RADIUS) | P(SIZE) |
+                       P(OPACITY) | P(ICON))
+LEME_STYLE_ELEMENT(MENU, "menu", NONE, NONE, 0,
+                   P(BACKGROUND) | P(COLOR) | P(FONT) | P(RADIUS) |
+                       P(BORDER_COLOR))
+LEME_STYLE_ELEMENT(MENU_ITEM, "menu_item", NONE, MENU,
+                   S(HOVER) | S(DISABLED),
+                   P(BACKGROUND) | P(COLOR) | P(BORDER_COLOR))
+LEME_STYLE_ELEMENT(MENU_SEPARATOR, "menu_separator", NONE, MENU, 0,
+                   P(COLOR))
+LEME_STYLE_ELEMENT(PROMPT, "prompt", NONE, NONE, 0,
+                   P(BACKGROUND) | P(COLOR) | P(FONT) | P(RADIUS) |
+                       P(BORDER_COLOR))
+LEME_STYLE_ELEMENT(PROMPT_FIELD, "prompt_field", NONE, PROMPT, S(FOCUS),
+                   P(BACKGROUND) | P(COLOR) | P(BORDER_COLOR))
+LEME_STYLE_ELEMENT(PROMPT_BUTTON, "prompt_button", NONE, PROMPT, S(FOCUS),
+                   P(BACKGROUND) | P(COLOR) | P(BORDER_COLOR))
+LEME_STYLE_ELEMENT(STRIP, "strip", NONE, NONE, S(DISABLED),
+                   P(BACKGROUND) | P(COLOR))
+LEME_STYLE_ELEMENT(ICON, "icon", NONE, NONE, S(SELECTED) | S(DROP),
+                   P(BACKGROUND) | P(BORDER_COLOR) | P(COLOR) | P(FONT) |
+                       P(SHADOW) | P(SIZE) | P(SPACING) | P(PADDING) |
+                       P(WIDTH) | P(GAP) | P(THEME))
+LEME_STYLE_ELEMENT(SELECTION, "selection", NONE, NONE, 0,
+                   P(BACKGROUND) | P(BORDER_COLOR))

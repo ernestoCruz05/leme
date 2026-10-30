@@ -1,5 +1,9 @@
 #include "shell/view.h"
+#include "shell/container.h"
+#include "desktop/decoration.h"
 #include "public/server.h"
+#include "protocols/publication.h"
+#include "protocols/desktop.h"
 
 #include "core/server.h"
 #include "input/input.h"
@@ -191,6 +195,10 @@ static void leme_view_handle_map(struct wl_listener *listener, void *data) {
         false);
     leme_sticky_commit_transient(&adoption);
   }
+  if (view->xdg_toplevel->requested.maximized) {
+    (void)leme_view_set_maximized(view, true);
+  }
+  leme_view_sync_wm_state(view);
   if (view->xdg_toplevel->requested.fullscreen ||
       ((rules.fields & LEME_WINDOW_RULE_FULLSCREEN) != 0 && rules.fullscreen)) {
     leme_view_set_fullscreen(view, true);
@@ -215,7 +223,8 @@ void leme_view_follow_committed_size(struct leme_view *view) {
   const struct wlr_box geometry = base->geometry;
   struct leme_box content;
 
-  if (!view->floating || view->fullscreen || geometry.width <= 0 ||
+  if (leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING ||
+      view->fullscreen || leme_view_is_placed(view) || geometry.width <= 0 ||
       geometry.height <= 0 || !wl_list_empty(&base->configure_list) ||
       leme_input_pointer_grabbing(view->server, view)) {
     return;
@@ -237,12 +246,16 @@ static void leme_view_handle_commit(struct wl_listener *listener, void *data) {
   if (view->mapped) {
     leme_render_view_clip_to_geometry(view);
     leme_view_follow_committed_size(view);
+    if (leme_view_is_placed(view) && !view->fullscreen &&
+        !leme_view_can_place(view, view->placement.kind)) {
+      leme_view_restore_placement(view);
+    }
+    leme_view_sync_wm_state(view);
   }
   if (view->xdg_toplevel->base->initial_commit) {
     struct leme_output *output = leme_output_focused(view->server);
 
-    wlr_xdg_toplevel_set_wm_capabilities(
-        view->xdg_toplevel, WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
+    leme_view_sync_wm_state(view);
     if (output != NULL) {
       const struct leme_box usable = leme_output_usable_box(output);
 
@@ -261,6 +274,7 @@ static void leme_view_handle_set_title(struct wl_listener *listener,
 
   (void)data;
   leme_public_server_invalidate(view->server);
+  leme_desk_decoration_refresh(view);
   leme_render_view_set_activated(view, view == view->server->focused_view);
 }
 
@@ -270,6 +284,9 @@ static void leme_view_handle_set_app_id(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(view);
+  if (view->mapped) {
+    leme_view_arrange_instant(view->server);
+  }
   leme_public_server_invalidate(view->server);
   leme_render_view_set_activated(view, view == view->server->focused_view);
 }
@@ -279,7 +296,23 @@ static void leme_view_handle_set_parent(struct wl_listener *listener,
   struct leme_view *view = wl_container_of(listener, view, set_parent);
 
   (void)data;
+  leme_container_reconcile_view(view);
   leme_public_server_invalidate(view->server);
+  if (view->mapped && !view->unmanaged) {
+    const bool refocus = leme_view_is_minimized(view->server->focused_view);
+    leme_view_refresh_begin(view->server);
+    leme_view_refresh_reconcile(view->server);
+    leme_render_view_restack(view);
+    const struct leme_tag *tag = leme_ownership_tag(view);
+    if (refocus) {
+      leme_view_refresh_tag_focus(view->server);
+    }
+    if (tag != NULL) {
+      leme_tags_refresh_visibility_passive(tag->owner);
+    }
+    leme_view_refresh_end(view->server);
+    leme_publication_invalidate(view->server);
+  }
 }
 
 static void leme_view_handle_request_fullscreen(struct wl_listener *listener,
@@ -301,7 +334,24 @@ static void leme_view_handle_request_maximize(struct wl_listener *listener,
   struct leme_view *view = wl_container_of(listener, view, request_maximize);
 
   (void)data;
-  leme_view_refuse_maximize(view);
+  if (!view->xdg_toplevel->base->initialized) {
+    return;
+  }
+  if (view->mapped) {
+    (void)leme_view_set_maximized(view,
+                                  view->xdg_toplevel->requested.maximized);
+  }
+  leme_view_sync_wm_state(view);
+  wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
+}
+
+static void leme_view_handle_request_minimize(struct wl_listener *listener,
+                                              void *data) {
+  struct leme_view *view = wl_container_of(listener, view, request_minimize);
+  (void)data;
+  if (view->mapped) {
+    (void)leme_view_set_minimized(view, true);
+  }
 }
 
 static void leme_view_handle_request_move(struct wl_listener *listener,
@@ -343,6 +393,7 @@ static void leme_view_handle_destroy(struct wl_listener *listener, void *data) {
   wl_list_remove(&view->set_parent.link);
   wl_list_remove(&view->request_fullscreen.link);
   wl_list_remove(&view->request_maximize.link);
+  wl_list_remove(&view->request_minimize.link);
   wl_list_remove(&view->request_move.link);
   wl_list_remove(&view->request_resize.link);
   wl_list_remove(&view->new_popup.link);
@@ -393,6 +444,9 @@ static void leme_view_handle_new_toplevel(struct wl_listener *listener,
   view->request_maximize.notify = leme_view_handle_request_maximize;
   wl_signal_add(&xdg_toplevel->events.request_maximize,
                 &view->request_maximize);
+  view->request_minimize.notify = leme_view_handle_request_minimize;
+  wl_signal_add(&xdg_toplevel->events.request_minimize,
+                &view->request_minimize);
   view->request_move.notify = leme_view_handle_request_move;
   wl_signal_add(&xdg_toplevel->events.request_move, &view->request_move);
   view->request_resize.notify = leme_view_handle_request_resize;
@@ -402,6 +456,7 @@ static void leme_view_handle_new_toplevel(struct wl_listener *listener,
   view->destroy.notify = leme_view_handle_destroy;
   wl_signal_add(&xdg_toplevel->events.destroy, &view->destroy);
   wl_list_insert(&server->views, &view->link);
+  leme_desktop_sync_view_decoration(view);
 }
 
 static bool leme_view_on_screen(const struct leme_view *view) {

@@ -30,7 +30,15 @@ PUBLIC_SCHEMA(CONFIG, "config", false,
   PUBLIC_FIELD("settings_schema", SETTING_DESCRIPTORS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Authoritative setting paths and application behavior")
 )
+PUBLIC_SCHEMA(DESKTOP_CONFIG, "desktop", false,
+  PUBLIC_FIELD("minimized_strip", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
+      "Show the desktop minimized-window recovery strip"),
+  PUBLIC_FIELD("container_modifier", STRING, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Modifier held while dragging a window to group it into a container")
+)
 PUBLIC_SCHEMA(SETTINGS, "settings", false,
+  PUBLIC_FIELD("desktop", DESKTOP_CONFIG, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Built-in desktop UI settings"),
   PUBLIC_FIELD("style", STYLE, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Normalized appearance settings"),
   PUBLIC_FIELD("tags", TAGS_CONFIG, false, true, NULL, SENSITIVE, ALWAYS, NULL,
@@ -86,7 +94,25 @@ PUBLIC_SCHEMA(STYLE, "style", false,
   PUBLIC_FIELD("opacity_inactive", RATIO, false, true, "ratio", SENSITIVE, ALWAYS, "config_writes",
       "Inactive view opacity"),
   PUBLIC_FIELD("fullscreen_covers", COVERS, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
-      "Layers covered by a fullscreen view")
+      "Layers covered by a fullscreen view"),
+  PUBLIC_FIELD("titlebar", TITLEBAR, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Desktop titlebar colors, font and buttons")
+)
+PUBLIC_SCHEMA(TITLEBAR, "titlebar", false,
+  PUBLIC_FIELD("background_active", COLOR, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Focused titlebar background normalized to uppercase #RRGGBBAA"),
+  PUBLIC_FIELD("background_inactive", COLOR, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Unfocused titlebar background normalized to uppercase #RRGGBBAA"),
+  PUBLIC_FIELD("text_active", COLOR, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Focused title and button color normalized to uppercase #RRGGBBAA"),
+  PUBLIC_FIELD("text_inactive", COLOR, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Unfocused title and button color normalized to uppercase #RRGGBBAA"),
+  PUBLIC_FIELD("font", STRING, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Pango font description for titles"),
+  PUBLIC_FIELD("align", STRING, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Title alignment: left or center"),
+  PUBLIC_FIELD("buttons", STRINGS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Titlebar buttons in display order")
 )
 PUBLIC_SCHEMA(OUTER_GAPS, "outer_gaps", false,
   PUBLIC_FIELD("top", PIXELS, false, true, "logical_px", SENSITIVE, ALWAYS, "config_writes",

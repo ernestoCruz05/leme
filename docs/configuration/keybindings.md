@@ -21,6 +21,8 @@ The supported modifiers are `SUPER`, `ALT`, `CTRL` or `CONTROL`, and `SHIFT`. Th
 
 The complete command list is in the [command reference](../reference/commands.md).
 
+Bindings to the file grid's `grid_*` commands apply only while the grid has keyboard focus. Otherwise the key goes to the focused client, so plain keys such as Delete or F2 can be bound to them without affecting other applications.
+
 ## Modes
 
 Every `binds "name"` block creates a persistent keyboard mode. A mode named `common` is required. Modes replace the keymap rather than extending it: only the active mode's bindings are checked, and every other key goes to the focused client.

@@ -167,11 +167,19 @@ bool leme_config_validate_command(const struct leme_config *config,
   case LEME_COMMAND_REMOVE_EMPTY_TAG:
     return command->tag_id > 0 && command->tag_id <= config->max_tags;
   case LEME_COMMAND_FOCUS_DIRECTION:
+  case LEME_COMMAND_CONTAINER_JOIN:
+  case LEME_COMMAND_SNAP:
+  case LEME_COMMAND_GRID_SELECT:
     return command->direction >= LEME_DIRECTION_LEFT &&
            command->direction <= LEME_DIRECTION_DOWN;
-  case LEME_COMMAND_SET_LAYOUT:
+  case LEME_COMMAND_PLACE:
+    return leme_command_placement_name(command->placement) != NULL;
+  case LEME_COMMAND_CONTAINER_LAYOUT:
     return command->layout >= LEME_LAYOUT_DWINDLE &&
            command->layout <= LEME_LAYOUT_ACCORDION;
+  case LEME_COMMAND_SET_LAYOUT:
+    return command->layout >= LEME_LAYOUT_DWINDLE &&
+           command->layout <= LEME_LAYOUT_DESKTOP;
   case LEME_COMMAND_SWITCH_LAYOUT:
     return true;
   case LEME_COMMAND_FOCUS_OUTPUT:
@@ -202,7 +210,22 @@ bool leme_config_validate_command(const struct leme_config *config,
   case LEME_COMMAND_TOGGLE_FLOATING:
   case LEME_COMMAND_TOGGLE_STICKY:
   case LEME_COMMAND_TOGGLE_FULLSCREEN:
+  case LEME_COMMAND_CONTAINER_DETACH:
+  case LEME_COMMAND_CONTAINER_DISSOLVE:
   case LEME_COMMAND_CLOSE_VIEW:
+  case LEME_COMMAND_MINIMIZE_VIEW:
+  case LEME_COMMAND_RESTORE_MINIMIZED:
+  case LEME_COMMAND_WINDOW_MENU:
+  case LEME_COMMAND_SHOW_DESKTOP:
+  case LEME_COMMAND_FOCUS_CYCLE:
+  case LEME_COMMAND_FOCUS_DESKTOP:
+  case LEME_COMMAND_DESKTOP_MENU:
+  case LEME_COMMAND_GRID_OPEN:
+  case LEME_COMMAND_GRID_TRASH:
+  case LEME_COMMAND_GRID_RENAME:
+  case LEME_COMMAND_GRID_NEW_FOLDER:
+  case LEME_COMMAND_GRID_SELECT_ALL:
+  case LEME_COMMAND_GRID_CLEAR:
   case LEME_COMMAND_RELOAD_CONFIG:
   case LEME_COMMAND_QUIT:
   case LEME_COMMAND_SCRATCHPAD_TOGGLE:
@@ -507,11 +530,13 @@ bool leme_config_apply(struct leme_server *server, struct leme_config *next,
   leme_input_apply_pointer_config(server, next);
   leme_render_apply_fullscreen_coverage(server);
   leme_view_refresh_fullscreen(server);
+  leme_view_refresh_begin(server);
   leme_view_arrange_instant(server);
   if (leme_output_focused(server) != NULL) {
     leme_render_refresh_views(server);
     leme_tags_refresh_visibility(leme_focused_tags(server));
   }
+  leme_view_refresh_end(server);
   leme_gpu_apply_config(server);
   leme_config_destroy(old);
   free(resizes);

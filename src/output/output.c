@@ -2,6 +2,8 @@
 #include "output/control.h"
 #include "output/home.h"
 #include "output/output.h"
+#include "desktop/menu.h"
+#include "desktop/owner.h"
 #include "public/server.h"
 
 #include "config/config.h"
@@ -1419,12 +1421,14 @@ static void leme_output_refresh_restored(struct leme_server *server) {
   struct leme_output *output;
 
   leme_view_refresh_fullscreen(server);
+  leme_view_refresh_begin(server);
   leme_view_arrange_instant(server);
   wl_list_for_each(output, &server->outputs, link) {
     if (output->wlr_output->enabled) {
       leme_tags_refresh_visibility(leme_output_tags(output));
     }
   }
+  leme_view_refresh_end(server);
   leme_publication_invalidate(server);
 }
 
@@ -1499,6 +1503,11 @@ static void leme_output_handle_destroy(struct wl_listener *listener,
   bool was_active = server->focused_output == output;
 
   (void)data;
+  if (was_active) {
+    leme_desk_owner_cancel(server);
+  } else {
+    leme_desk_menu_close(server);
+  }
   successor = leme_output_surviving(server, output);
   leme_input_pointer_grab_cancel(server);
   if (server != NULL && server->gesture.output == output) {
@@ -1682,6 +1691,12 @@ struct leme_box leme_output_usable_box(const struct leme_output *output) {
 
 struct leme_box leme_output_full_box(const struct leme_output *output) {
   return output == NULL ? (struct leme_box){0} : output->full_box;
+}
+
+double leme_output_scale(const struct leme_output *output) {
+  return output == NULL || output->wlr_output == NULL
+             ? 1.0
+             : (double)output->wlr_output->scale;
 }
 
 static bool leme_output_boxes_equal(struct leme_box left,

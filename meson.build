@@ -83,6 +83,9 @@ leme_sources = files(
   'src/config/envfile.c',
   'src/config/expand.c',
   'src/config/parse.c',
+  'src/config/style.c',
+  'src/config/style-parse.c',
+  'src/config/desktop-menu.c',
   'src/config/render.c',
   'src/config/source_table.c',
   'src/config/scfg_lex.c',
@@ -121,6 +124,13 @@ leme_sources = files(
   'src/shell/scratchpad.c',
   'src/shell/sticky.c',
   'src/shell/view.c',
+  'src/shell/minimize.c',
+  'src/shell/maximize.c',
+  'src/shell/placement.c',
+  'src/shell/container-policy.c',
+  'src/shell/container.c',
+  'src/render/container.c',
+  'src/desktop/frame.c',
   'src/shell/public.c',
   'src/shell/control.c',
   'src/shell/xdg.c',
@@ -162,7 +172,22 @@ leme_sources += files('src/public/json.c', 'src/public/server.c') + leme_public_
 yyjson_dep = dependency('yyjson', version: '>=0.12.0',
   fallback: ['yyjson', 'yyjson_dep'])
 
+leme_desk_gio_dep = dependency('gio-2.0')
+leme_desk_cairo_dep = dependency('cairo')
+leme_desk_pango_dep = dependency('pangocairo')
+leme_desk_rsvg_dep = dependency('librsvg-2.0', version: '>=2.46')
+leme_desk_catalog_sources = files('src/desktop/catalog.c', 'src/desktop/positions.c', 'src/desktop/theme.c', 'src/desktop/app-icon.c')
+leme_desk_pixel_sources = files('src/desktop/pixels.c', 'src/desktop/icons.c')
+leme_desk_watch_sources = files('src/desktop/watch.c')
+leme_desk_file_sources = files('src/desktop/fileops.c')
+leme_desk_scene_sources = files('src/desktop/desktop.c', 'src/desktop/grid.c', 'src/desktop/open.c', 'src/desktop/strip.c', 'src/desktop/decoration.c', 'src/desktop/buttons.c', 'src/desktop/owner.c', 'src/desktop/target.c', 'src/desktop/drag.c', 'src/desktop/menu.c', 'src/desktop/prompt.c') + leme_desk_watch_sources
+leme_sources += leme_desk_catalog_sources + leme_desk_pixel_sources + leme_desk_scene_sources + leme_desk_file_sources
+
 leme_dependencies = [
+  leme_desk_gio_dep,
+  leme_desk_cairo_dep,
+  leme_desk_pango_dep,
+  leme_desk_rsvg_dep,
   wlroots_dep,
   wayland_server_dep,
   xkbcommon_dep,

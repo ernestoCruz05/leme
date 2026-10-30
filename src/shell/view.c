@@ -1,4 +1,8 @@
 #include "shell/view.h"
+#include "shell/container.h"
+#include "desktop/desktop.h"
+#include "desktop/decoration.h"
+#include "desktop/buttons.h"
 
 #include "input/input.h"
 #include "protocols/input.h"
@@ -14,12 +18,38 @@
 #include "protocols/session.h"
 #include "workspace/tag.h"
 
+#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/util/edges.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland/xwayland.h>
+
+struct leme_view *leme_view_parent(const struct leme_view *view) {
+  if (view == NULL || view->server == NULL ||
+      view->server->views.next == NULL) {
+    return NULL;
+  }
+  struct leme_view *parent = NULL;
+  wl_list_for_each(parent, &view->server->views, link) {
+    if (parent == view || parent->kind != view->kind || !parent->mapped ||
+        parent->unmanaged) {
+      continue;
+    }
+    if (view->kind == LEME_VIEW_XDG && view->xdg_toplevel != NULL &&
+        parent->xdg_toplevel != NULL &&
+        view->xdg_toplevel->parent == parent->xdg_toplevel) {
+      return parent;
+    }
+    if (view->kind == LEME_VIEW_XWAYLAND && view->xwayland_surface != NULL &&
+        parent->xwayland_surface != NULL &&
+        view->xwayland_surface->parent == parent->xwayland_surface) {
+      return parent;
+    }
+  }
+  return NULL;
+}
 
 struct wlr_surface *leme_view_surface(const struct leme_view *view) {
   if (view == NULL) {
@@ -83,6 +113,11 @@ void leme_view_set_activated(struct leme_view *view, bool activated) {
     wlr_xwayland_surface_activate(view->xwayland_surface, activated);
   }
   leme_render_view_set_activated(view, activated);
+  leme_desk_decoration_set_activated(view, activated);
+  struct leme_container *container = leme_container_for_view(view);
+  if (container != NULL) {
+    leme_render_container_set_activated(container, activated);
+  }
 }
 
 static int16_t leme_view_xwayland_coordinate(int value) {
@@ -168,13 +203,48 @@ void leme_view_ack_fullscreen(struct leme_view *view, bool fullscreen) {
   }
 }
 
-void leme_view_refuse_maximize(struct leme_view *view) {
-  if (view != NULL && view->kind == LEME_VIEW_XDG &&
-      view->xdg_toplevel != NULL && view->xdg_toplevel->base->initialized) {
-    wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, false);
-  } else if (view != NULL && view->kind == LEME_VIEW_XWAYLAND &&
-             view->xwayland_surface != NULL) {
-    wlr_xwayland_surface_set_maximized(view->xwayland_surface, false, false);
+void leme_view_sync_wm_state(struct leme_view *view) {
+  if (view == NULL || view->server == NULL) {
+    return;
+  }
+  if (view->kind == LEME_VIEW_XDG && view->xdg_toplevel != NULL &&
+      view->xdg_toplevel->base != NULL &&
+      view->xdg_toplevel->base->initialized) {
+    uint32_t caps = WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN;
+    if (leme_view_minimize_available(view)) {
+      caps |= WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MINIMIZE;
+    }
+    if (leme_view_can_maximize(view)) {
+      caps |= WLR_XDG_TOPLEVEL_WM_CAPABILITIES_MAXIMIZE;
+    }
+    if (view->mapped && view->xdg_toplevel->scheduled.wm_capabilities != caps) {
+      wlr_xdg_toplevel_set_wm_capabilities(view->xdg_toplevel, caps);
+      leme_desk_buttons_invalidate_view(view);
+      leme_desk_decoration_feedback(view, LEME_RENDER_DECORATION_NONE, false);
+    }
+    if (view->mapped) {
+      leme_view_update_tiled(view);
+    }
+    if (view->xdg_toplevel->scheduled.maximized !=
+        leme_view_is_maximized(view)) {
+      wlr_xdg_toplevel_set_maximized(view->xdg_toplevel,
+                                     leme_view_is_maximized(view));
+    }
+  } else if (view->kind == LEME_VIEW_XWAYLAND && view->mapped &&
+             view->xwayland_surface != NULL &&
+             view->xwayland_surface->xwm != NULL) {
+    const bool minimized = leme_view_is_minimized(view);
+    if (view->xwayland_surface->minimized != minimized) {
+      wlr_xwayland_surface_set_minimized(view->xwayland_surface, minimized);
+    }
+    if (view->xwayland_surface->maximized_horz !=
+            leme_view_is_maximized(view) ||
+        view->xwayland_surface->maximized_vert !=
+            leme_view_is_maximized(view)) {
+      wlr_xwayland_surface_set_maximized(view->xwayland_surface,
+                                         leme_view_is_maximized(view),
+                                         leme_view_is_maximized(view));
+    }
   }
 }
 
@@ -202,21 +272,137 @@ void leme_view_focus_history_remove(struct leme_view *view) {
   }
 }
 
+enum leme_view_geometry_owner
+leme_view_geometry_owner(const struct leme_view *view) {
+  if (view == NULL) {
+    return LEME_VIEW_GEOMETRY_TAG_LAYOUT;
+  }
+  if (view->container != NULL) {
+    return LEME_VIEW_GEOMETRY_CONTAINER;
+  }
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  return view->floating ||
+                 (tag != NULL && tag->layout.kind == LEME_LAYOUT_DESKTOP)
+             ? LEME_VIEW_GEOMETRY_FLOATING
+             : LEME_VIEW_GEOMETRY_TAG_LAYOUT;
+}
+
+static int leme_view_desktop_offset(int value, int from, int to) {
+  const int64_t result = (int64_t)value - from + to;
+  if (result < INT_MIN) {
+    return INT_MIN;
+  }
+  if (result > INT_MAX) {
+    return INT_MAX;
+  }
+  return (int)result;
+}
+
+void leme_view_remember_desktop_box(struct leme_view *view,
+                                    struct leme_box box) {
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  const struct leme_output *output = leme_view_output(view);
+  if (leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING ||
+      tag == NULL || tag->layout.kind != LEME_LAYOUT_DESKTOP ||
+      output == NULL || view->floating || view->fullscreen || view->detached ||
+      box.width <= 0 || box.height <= 0) {
+    return;
+  }
+  if (leme_view_is_placed(view)) {
+    box = leme_view_normal_box(view);
+  }
+  box.x = leme_view_desktop_offset(box.x, output->full_box.x, 0);
+  box.y = leme_view_desktop_offset(box.y, output->full_box.y, 0);
+  view->desktop_box = box;
+  view->desktop_box_valid = true;
+}
+
+void leme_view_refresh_layout(struct leme_view *view,
+                              enum leme_layout_kind previous) {
+  leme_desk_buttons_invalidate_view(view);
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  const struct leme_output *output = leme_view_output(view);
+  if (tag == NULL || output == NULL) {
+    return;
+  }
+  if (tag->layout.kind != LEME_LAYOUT_DESKTOP) {
+    view->minimized = false;
+    leme_view_restore_placement(view);
+  }
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
+      !view->floating && !view->detached &&
+      tag->layout.kind == LEME_LAYOUT_DESKTOP &&
+      (previous != LEME_LAYOUT_DESKTOP || view->fullscreen)) {
+    (void)leme_desk_decoration_sync(view);
+    struct leme_box box = view->fullscreen ? view->saved_box : view->box;
+    if (view->desktop_box_valid) {
+      box = view->desktop_box;
+      box.x = leme_view_desktop_offset(box.x, 0, output->full_box.x);
+      box.y = leme_view_desktop_offset(box.y, 0, output->full_box.y);
+    }
+    box = leme_view_policy_clamp_box(box, output->usable_box);
+    if (view->fullscreen) {
+      view->saved_box = box;
+    } else {
+      view->box = box;
+      leme_view_configure(view, leme_render_view_content_box(view, box));
+    }
+  }
+  leme_view_update_tiled(view);
+  leme_render_view_update_layer(view);
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
+      !view->fullscreen) {
+    leme_render_view_set_box(view, view->box);
+  }
+}
+
 void leme_view_update_tiled(struct leme_view *view) {
   uint32_t edges = WLR_EDGE_NONE;
 
   if (view->kind != LEME_VIEW_XDG || view->xdg_toplevel == NULL ||
+      view->xdg_toplevel->base == NULL ||
+      view->xdg_toplevel->base->client == NULL ||
+      view->xdg_toplevel->base->client->resource == NULL ||
       wl_resource_get_version(view->xdg_toplevel->base->client->resource) <
           XDG_TOPLEVEL_STATE_TILED_LEFT_SINCE_VERSION) {
     return;
   }
-  if (!view->floating && !view->fullscreen) {
+  if (leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING &&
+      !view->fullscreen) {
     edges = WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT;
   }
-  wlr_xdg_toplevel_set_tiled(view->xdg_toplevel, edges);
+  if (!view->fullscreen && leme_view_is_placed(view)) {
+    switch (view->placement.kind) {
+    case LEME_VIEW_PLACEMENT_LEFT_HALF:
+      edges = WLR_EDGE_LEFT | WLR_EDGE_TOP | WLR_EDGE_BOTTOM;
+      break;
+    case LEME_VIEW_PLACEMENT_RIGHT_HALF:
+      edges = WLR_EDGE_RIGHT | WLR_EDGE_TOP | WLR_EDGE_BOTTOM;
+      break;
+    case LEME_VIEW_PLACEMENT_TOP_LEFT:
+      edges = WLR_EDGE_LEFT | WLR_EDGE_TOP;
+      break;
+    case LEME_VIEW_PLACEMENT_TOP_RIGHT:
+      edges = WLR_EDGE_RIGHT | WLR_EDGE_TOP;
+      break;
+    case LEME_VIEW_PLACEMENT_BOTTOM_LEFT:
+      edges = WLR_EDGE_LEFT | WLR_EDGE_BOTTOM;
+      break;
+    case LEME_VIEW_PLACEMENT_BOTTOM_RIGHT:
+      edges = WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM;
+      break;
+    default:
+      edges = WLR_EDGE_NONE;
+      break;
+    }
+  }
+  if (view->xdg_toplevel->scheduled.tiled != edges) {
+    wlr_xdg_toplevel_set_tiled(view->xdg_toplevel, edges);
+  }
 }
 
 void leme_view_clear_focus(struct leme_server *server) {
+  leme_desk_owner_cancel(server);
   if (server->focused_view != NULL) {
     leme_view_set_activated(server->focused_view, false);
     server->focused_view = NULL;
@@ -229,6 +415,77 @@ void leme_view_clear_focus(struct leme_server *server) {
   leme_publication_invalidate(server);
 }
 
+void leme_view_refresh_begin(struct leme_server *server) {
+  if (server == NULL) {
+    return;
+  }
+  struct leme_view_refresh *refresh = &server->view_refresh;
+  if (refresh->depth == 0) {
+    refresh->reconciled = false;
+    refresh->desktop_synced = false;
+  }
+  refresh->depth++;
+}
+
+void leme_view_refresh_end(struct leme_server *server) {
+  if (server == NULL || server->view_refresh.depth == 0) {
+    return;
+  }
+  struct leme_view_refresh *refresh = &server->view_refresh;
+  if (--refresh->depth != 0) {
+    return;
+  }
+  refresh->reconciled = false;
+  refresh->desktop_synced = false;
+}
+
+size_t leme_minimize_unit_count(const struct leme_tag *tag) {
+  if (tag == NULL) {
+    return 0;
+  }
+  size_t count = 0;
+  const struct leme_view *view = NULL;
+  wl_list_for_each(view, &tag->views, tag_link) {
+    if (leme_view_minimized_root(view) == view) {
+      count++;
+    }
+  }
+  if (tag->containers.next != NULL) {
+    const struct leme_container *container = NULL;
+    wl_list_for_each(container, &tag->containers, link) {
+      if (container->minimized) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+void leme_view_refresh_reconcile(struct leme_server *server) {
+  if (server == NULL) {
+    return;
+  }
+  leme_view_refresh_begin(server);
+  if (!server->view_refresh.reconciled) {
+    server->view_refresh.reconciled = true;
+    leme_view_reconcile_minimized(server);
+    leme_view_reconcile_placement(server);
+  }
+  leme_view_refresh_end(server);
+}
+
+void leme_view_refresh_desktop(struct leme_server *server) {
+  if (server == NULL) {
+    return;
+  }
+  leme_view_refresh_begin(server);
+  if (!server->view_refresh.desktop_synced) {
+    server->view_refresh.desktop_synced = true;
+    leme_desk_sync(server);
+  }
+  leme_view_refresh_end(server);
+}
+
 void leme_view_arrange(struct leme_server *server) {
   struct leme_output *output;
   int gap = server->config == NULL ? 0 : server->config->gap;
@@ -236,6 +493,15 @@ void leme_view_arrange(struct leme_server *server) {
   if (server->outputs.next == NULL) {
     return;
   }
+  leme_view_refresh_begin(server);
+  server->view_refresh.desktop_synced = false;
+  if (server->desk_decorations_ready) {
+    struct leme_view *view = NULL;
+    wl_list_for_each(view, &server->views, link) {
+      leme_desk_decoration_refresh(view);
+    }
+  }
+  leme_view_refresh_reconcile(server);
   wl_list_for_each(output, &server->outputs, link) {
     if (!output->wlr_output->enabled) {
       continue;
@@ -243,6 +509,8 @@ void leme_view_arrange(struct leme_server *server) {
     leme_tags_arrange_current(leme_output_tags(output),
                               leme_output_usable_box(output), gap);
   }
+  leme_view_refresh_desktop(server);
+  leme_view_refresh_end(server);
 }
 
 void leme_view_arrange_instant(struct leme_server *server) {
@@ -254,10 +522,12 @@ void leme_view_arrange_instant(struct leme_server *server) {
 }
 
 void leme_view_refresh_tag_focus(struct leme_server *server) {
+  leme_view_refresh_begin(server);
   leme_view_arrange(server);
   leme_tags_refresh_visibility(leme_focused_tags(server));
+  leme_view_refresh_end(server);
   /* A reconciliação de saídas não passa por aqui, e não pode passar. */
-  if (server->focused_view == NULL) {
+  if (server->focused_view == NULL && !leme_desk_focused(server)) {
     leme_view_focus(
         leme_sticky_focus_candidate(server, leme_output_focused(server)));
   }
@@ -276,13 +546,15 @@ static bool leme_view_adopt_to_output(struct leme_view *view,
   if (!leme_tags_adopt_view(destination, view, 0)) {
     return false;
   }
-  leme_view_arrange(server);
-  if (view->floating && !view->fullscreen) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
+      !view->fullscreen) {
     leme_render_view_set_box(view, view->box);
   }
   if (view->fullscreen) {
     leme_view_apply_layout_box(view, leme_output_full_box(output), false);
   }
+  leme_view_refresh_begin(server);
+  leme_view_arrange(server);
   if (follow) {
     leme_output_set_focused(server, output, warp);
     leme_view_focus(view);
@@ -291,6 +563,7 @@ static bool leme_view_adopt_to_output(struct leme_view *view,
     leme_tags_refresh_visibility(leme_output_tags(source));
   }
   leme_tags_refresh_visibility(destination);
+  leme_view_refresh_end(server);
   return true;
 }
 
@@ -307,18 +580,29 @@ bool leme_view_move_to_output(struct leme_view *view,
   if (leme_output_tags(output) == NULL || source == output) {
     return false;
   }
-  if (view->floating && !view->fullscreen && source != NULL) {
-    struct leme_box from = leme_output_full_box(source);
-    struct leme_box to = leme_output_full_box(output);
-
-    view->box.x += to.x - from.x;
-    view->box.y += to.y - from.y;
-    view->box =
-        leme_view_policy_clamp_box(view->box, leme_output_usable_box(output));
+  const bool placed = leme_view_is_placed(view);
+  const struct leme_box saved_restore = view->placement.restore_box;
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
+      !view->fullscreen && source != NULL) {
+    const struct leme_box from = leme_output_full_box(source);
+    const struct leme_box to = leme_output_full_box(output);
+    struct leme_box box = placed ? saved_restore : view->box;
+    box.x = leme_view_desktop_offset(box.x, from.x, to.x);
+    box.y = leme_view_desktop_offset(box.y, from.y, to.y);
+    if (placed) {
+      view->placement.restore_box = box;
+    } else {
+      view->box =
+          leme_view_policy_clamp_box(box, leme_output_usable_box(output));
+    }
   }
   warp = view->server->config == NULL ||
          view->server->config->output_policy.warp_cursor;
-  return leme_view_adopt_to_output(view, output, follow, warp);
+  const bool moved = leme_view_adopt_to_output(view, output, follow, warp);
+  if (!moved && placed) {
+    view->placement.restore_box = saved_restore;
+  }
+  return moved;
 }
 
 bool leme_view_drop_to_output(struct leme_view *view,
@@ -336,7 +620,7 @@ bool leme_view_drop_to_output(struct leme_view *view,
   if (destination == NULL || leme_view_output(view) == output) {
     return false;
   }
-  if (view->floating) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
     return leme_view_adopt_to_output(view, output, true, false);
   }
   if (detach == NULL || *detach == NULL || !view->detached) {
@@ -352,14 +636,17 @@ bool leme_view_drop_to_output(struct leme_view *view,
   view->detached = false;
   leme_layout_add_view(&leme_ownership_tag(view)->layout, NULL, view);
   leme_render_view_update_layer(view);
+  leme_view_refresh_begin(view->server);
   leme_view_arrange(view->server);
   leme_tags_refresh_visibility(destination);
   leme_view_focus(view);
+  leme_view_refresh_end(view->server);
   return true;
 }
 
 static void leme_view_set_initial_floating_box(struct leme_view *view,
                                                const struct leme_view *parent) {
+  (void)leme_desk_decoration_sync(view);
   const struct leme_box area = leme_output_usable_box(leme_view_output(view));
   const struct leme_box anchor = parent == NULL ? area : parent->box;
   struct wlr_box geometry = {0};
@@ -444,12 +731,14 @@ bool leme_view_map(struct leme_view *view,
   }
   leme_public_server_view_mapped(view);
   leme_view_update_tiled(view);
-  if (view->floating) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
     leme_view_set_initial_floating_box(view, options->parent);
   }
   leme_render_view_set_activated(view, false);
+  leme_view_refresh_begin(view->server);
   leme_view_arrange(view->server);
-  if (view->floating) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
+    leme_render_view_update_layer(view);
     leme_render_view_set_box(view, view->box);
   }
   visible_destination =
@@ -460,6 +749,7 @@ bool leme_view_map(struct leme_view *view,
     leme_view_focus(view);
   }
   leme_tags_refresh_visibility(options->tags);
+  leme_view_refresh_end(view->server);
   leme_render_view_animate(view, LEME_ANIMATION_OPEN);
   leme_publication_invalidate(view->server);
   return true;
@@ -467,24 +757,37 @@ bool leme_view_map(struct leme_view *view,
 
 void leme_view_unmap(struct leme_view *view) {
   struct leme_server *server;
-  const bool hidden = view != NULL && leme_view_is_scratchpad(view) &&
-                      !leme_view_is_shown_scratchpad(view);
+  struct leme_container *reflow =
+      view != NULL && view->container != NULL && view->container->count > 2
+          ? view->container
+          : NULL;
+  const bool hidden = leme_view_is_minimized(view) ||
+                      (view != NULL && leme_view_is_scratchpad(view) &&
+                       !leme_view_is_shown_scratchpad(view));
 
   if (view == NULL || !view->mapped) {
     return;
   }
   server = view->server;
+  leme_desk_buttons_invalidate_view(view);
   /* Um scratchpad exposto continua dono da saída onde aparece até o
    * instantâneo de fecho estar pronto. Os escondidos nunca criam
    * instantâneos. */
   if (!hidden) {
     leme_render_view_animate(view, LEME_ANIMATION_CLOSE);
   }
+  leme_container_remove_view(view);
+  if (reflow != NULL) {
+    leme_animation_manager_set_gate(&server->animations, view->animation_state,
+                                    reflow->animation_gate);
+  }
   leme_scratchpad_handle_unmap(view);
   leme_sticky_handle_unmap(view);
   leme_input_pointer_grab_cancel_view(view);
   leme_view_focus_history_remove(view);
   view->mapped = false;
+  view->minimized = false;
+  leme_placement_forget(&view->placement);
   view->configured_box_valid = false;
   if (server->focused_view == view) {
     leme_view_clear_focus(server);
@@ -517,10 +820,14 @@ void leme_view_destroy_core(struct leme_view *view) {
   leme_publication_invalidate(view->server);
 }
 
-static void leme_view_focus_eligible(struct leme_view *view) {
+static void leme_view_focus_eligible(struct leme_view *view, bool raise) {
   struct leme_server *server;
 
   server = view->server;
+  if (!raise && server->focused_view == view && server->seat != NULL &&
+      server->seat->keyboard_state.focused_surface == leme_view_surface(view)) {
+    return;
+  }
   if (leme_session_locked(server)) {
     return;
   }
@@ -529,6 +836,7 @@ static void leme_view_focus_eligible(struct leme_view *view) {
   }
   leme_layer_release_for_view(server);
   if (server->focused_view != view) {
+    leme_desk_owner_cancel(server);
     if (server->focused_view != NULL) {
       leme_view_set_activated(server->focused_view, false);
     }
@@ -545,28 +853,33 @@ static void leme_view_focus_eligible(struct leme_view *view) {
     leme_view_focus_history_remove(view);
     wl_list_insert(&server->focus_history, &view->focus_link);
   }
-  if (leme_view_is_sticky(view)) {
-    leme_sticky_raise_group(view);
-  } else {
-    leme_render_view_focus(view);
+  leme_container_focus_view(view);
+  if (raise) {
+    if (leme_view_is_sticky(view)) {
+      leme_sticky_raise_group(view);
+    } else {
+      leme_render_view_focus(view);
+    }
   }
   leme_input_keyboard_enter(server, leme_view_surface(view));
   leme_input_protocols_update_keyboard_focus(server);
   leme_publication_invalidate(server);
 }
 
-void leme_view_focus(struct leme_view *view) {
+void leme_view_focus_ex(struct leme_view *view, bool raise) {
   if (view != NULL && leme_ownership_focus_eligible(view)) {
-    leme_view_focus_eligible(view);
+    leme_view_focus_eligible(view, raise);
   }
 }
+
+void leme_view_focus(struct leme_view *view) { leme_view_focus_ex(view, true); }
 
 void leme_view_focus_unmanaged_xwayland(struct leme_view *view) {
   if (view != NULL && view->mapped && view->unmanaged &&
       view->kind == LEME_VIEW_XWAYLAND &&
       leme_ownership_kind(view) == LEME_VIEW_OWNER_NONE &&
       leme_ownership_effective_output(view) != NULL) {
-    leme_view_focus_eligible(view);
+    leme_view_focus_eligible(view, true);
   }
 }
 
@@ -641,13 +954,56 @@ bool leme_view_focus_previous(struct leme_server *server) {
         leme_view_is_sticky(view) &&
         leme_ownership_effective_output(view) == leme_output_focused(server);
 
-    if (view != server->focused_view && view->mapped && !view->unmanaged &&
+    if (view != server->focused_view && leme_ownership_focus_eligible(view) &&
         (current_tag || visible_sticky)) {
       leme_view_focus(view);
       return server->focused_view == view;
     }
   }
   return false;
+}
+
+bool leme_view_focus_cycle(struct leme_server *server, bool backward) {
+  struct leme_tags *tags = leme_focused_tags(server);
+  const struct leme_tag *current = tags == NULL || tags->focused_is_candidate
+                                       ? NULL
+                                       : tags->table[tags->focused_id];
+  if (current == NULL) {
+    return false;
+  }
+  struct leme_view *first = NULL;
+  struct leme_view *last = NULL;
+  struct leme_view *before = NULL;
+  struct leme_view *after = NULL;
+  bool seen = false;
+  struct leme_view *view;
+  wl_list_for_each(view, &server->views, link) {
+    if (view == server->focused_view) {
+      seen = true;
+      continue;
+    }
+    const bool visible_sticky =
+        leme_view_is_sticky(view) &&
+        leme_ownership_effective_output(view) == leme_output_focused(server);
+    if (!leme_ownership_focus_eligible(view) ||
+        (leme_ownership_tag(view) != current && !visible_sticky)) {
+      continue;
+    }
+    first = first == NULL ? view : first;
+    last = view;
+    if (!seen) {
+      before = view;
+    } else if (after == NULL) {
+      after = view;
+    }
+  }
+  struct leme_view *target = backward ? (before != NULL ? before : last)
+                                      : (after != NULL ? after : first);
+  if (target == NULL) {
+    return false;
+  }
+  leme_view_focus(target);
+  return server->focused_view == target;
 }
 
 bool leme_view_move_direction(struct leme_server *server,
@@ -660,7 +1016,12 @@ bool leme_view_move_direction(struct leme_server *server,
     return false;
   }
   view = server->focused_view;
-  if (!view->mapped || view->unmanaged || view->fullscreen) {
+  if (view->container != NULL) {
+    return leme_container_swap_direction(view, direction);
+  }
+  if (!view->mapped || view->unmanaged || view->fullscreen ||
+      leme_view_is_placed(view) ||
+      leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER) {
     return false;
   }
   if (leme_view_is_shown_scratchpad(view)) {
@@ -682,7 +1043,7 @@ bool leme_view_move_direction(struct leme_server *server,
   if (leme_ownership_tag(view) == NULL || leme_ownership_tag(view) != current) {
     return false;
   }
-  if (view->floating) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
     view->box = leme_layout_move_box(view->box, direction, amount);
     leme_render_view_set_box(view, view->box);
     return true;
@@ -710,8 +1071,9 @@ bool leme_view_begin_tiled_drag(struct leme_view *view,
   struct leme_box box;
 
   if (view == NULL || detach == NULL || *detach != NULL || !view->mapped ||
-      view->unmanaged || view->floating || view->detached || view->fullscreen ||
-      leme_ownership_tag(view) == NULL ||
+      view->unmanaged ||
+      leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
+      view->detached || view->fullscreen || leme_ownership_tag(view) == NULL ||
       !leme_layout_drag_supported(&leme_ownership_tag(view)->layout)) {
     return false;
   }
@@ -742,17 +1104,20 @@ bool leme_view_commit_tiled_drag(struct leme_view *view,
   if (view == NULL || detach == NULL || *detach == NULL || !view->detached ||
       leme_ownership_tag(view) == NULL || target == NULL ||
       leme_ownership_tag(target) != leme_ownership_tag(view) ||
-      !target->mapped || target->floating || target->detached ||
-      target->fullscreen ||
+      !target->mapped ||
+      leme_view_geometry_owner(target) != LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
+      target->detached || target->fullscreen ||
       !leme_layout_insert_detached(&leme_ownership_tag(view)->layout.root,
                                    detach, target, direction)) {
     return false;
   }
   view->detached = false;
   leme_render_view_update_layer(view);
+  leme_view_refresh_begin(view->server);
   leme_view_arrange(view->server);
   leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
   leme_view_focus(view);
+  leme_view_refresh_end(view->server);
   return true;
 }
 
@@ -781,8 +1146,10 @@ bool leme_view_restore_tiled_drag(struct leme_view *view,
     leme_render_view_update_layer(view);
   }
   if (leme_focused_tags(view->server) != NULL) {
+    leme_view_refresh_begin(view->server);
     leme_view_arrange(view->server);
     leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
+    leme_view_refresh_end(view->server);
   }
   if (view->mapped) {
     leme_view_focus(view);
@@ -801,7 +1168,8 @@ void leme_view_discard_tiled_drag(struct leme_view *view,
 
 bool leme_view_set_floating(struct leme_view *view, bool floating) {
   if (view == NULL || leme_view_is_scratchpad(view) ||
-      leme_view_is_sticky(view)) {
+      leme_view_is_sticky(view) ||
+      leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER) {
     return false;
   }
   if (leme_ownership_tag(view) == NULL || view->floating == floating ||
@@ -825,11 +1193,13 @@ bool leme_view_set_floating(struct leme_view *view, bool floating) {
   }
   leme_view_update_tiled(view);
   leme_render_view_update_layer(view);
-  if (floating) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
     leme_render_view_set_box(view, view->box);
   }
+  leme_view_refresh_begin(view->server);
   leme_view_arrange(view->server);
   leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
+  leme_view_refresh_end(view->server);
   return true;
 }
 
@@ -919,16 +1289,21 @@ bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen) {
     view->saved_box = view->box;
   }
   view->fullscreen = fullscreen;
+  if (fullscreen) {
+    view->minimized = false;
+  }
   leme_view_update_tiled(view);
   leme_render_view_update_layer(view);
   leme_view_ack_fullscreen(view, fullscreen);
+  leme_view_refresh_begin(view->server);
   if (fullscreen) {
     area = leme_view_fullscreen_area(view);
     view->box = area;
     leme_render_view_set_box(view, area);
   } else {
-    if (view->floating) {
+    if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
       view->box = view->saved_box;
+      leme_view_configure(view, leme_render_view_content_box(view, view->box));
       leme_render_view_set_box(view, view->box);
     } else {
       leme_view_arrange(view->server);
@@ -936,6 +1311,7 @@ bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen) {
   }
   leme_render_view_set_activated(view, view == view->server->focused_view);
   leme_tags_refresh_visibility(leme_output_tags(leme_view_output(view)));
+  leme_view_refresh_end(view->server);
   return true;
 }
 
@@ -944,12 +1320,24 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
   struct leme_box area;
   int limit;
 
-  if (view == NULL || view->fullscreen || amount <= 0 ||
+  if (view == NULL || view->fullscreen || leme_view_is_placed(view) ||
+      amount <= 0 ||
       (!leme_view_is_shown_scratchpad(view) && !leme_view_is_sticky(view) &&
        leme_ownership_tag(view) == NULL)) {
     return false;
   }
-  if (!view->floating) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER) {
+    if (!leme_container_action_allowed(view) ||
+        !leme_layout_resize(&view->container->layout, view, edge, amount,
+                            leme_container_content_box(view->container,
+                                                       view->container->box))) {
+      return false;
+    }
+    view->container->generation++;
+    leme_container_arrange(view->container, true);
+    return true;
+  }
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_TAG_LAYOUT) {
     leme_input_pointer_grab_cancel_tiled(view->server);
     if (!leme_layout_resize(
             &leme_ownership_tag(view)->layout, view, edge, amount,
@@ -1004,8 +1392,10 @@ bool leme_view_resize(struct leme_view *view, enum leme_resize_edge edge,
 
 bool leme_view_apply_interactive_box(struct leme_view *view,
                                      struct leme_box box, bool resizing) {
-  if (view == NULL || !view->mapped || (!view->floating && !view->detached) ||
-      view->fullscreen ||
+  if (view == NULL || !view->mapped ||
+      (leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING &&
+       !view->detached) ||
+      view->fullscreen || leme_view_is_placed(view) ||
       (leme_view_is_scratchpad(view) && !leme_view_is_shown_scratchpad(view))) {
     return false;
   }
@@ -1024,7 +1414,7 @@ void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box,
                                 bool animate) {
   const struct leme_box from = view->box;
 
-  if (view->fullscreen) {
+  if (view->fullscreen || leme_view_is_placed(view)) {
     return;
   }
   view->box = box;

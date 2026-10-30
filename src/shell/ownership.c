@@ -135,15 +135,15 @@ leme_ownership_restore(const struct leme_view *view) {
 }
 
 bool leme_ownership_scene_visible(const struct leme_view *view) {
-  return leme_ownership_base_eligible(view);
+  return leme_ownership_base_eligible(view) && !leme_view_is_minimized(view);
 }
 
 bool leme_ownership_hit_test_eligible(const struct leme_view *view) {
-  return leme_ownership_base_eligible(view);
+  return leme_ownership_base_eligible(view) && !leme_view_is_minimized(view);
 }
 
 bool leme_ownership_focus_eligible(const struct leme_view *view) {
-  return leme_ownership_base_eligible(view);
+  return leme_ownership_base_eligible(view) && !leme_view_is_minimized(view);
 }
 
 bool leme_ownership_activation_eligible(const struct leme_view *view) {
@@ -394,6 +394,11 @@ void leme_ownership_commit(struct leme_ownership_transition **slot) {
     break;
   }
   for (index = 0; index < prepared->view_count; index++) {
+    if (leme_ownership_kind(prepared->views[index]) ==
+        LEME_VIEW_OWNER_DURABLE) {
+      prepared->views[index]->minimized = false;
+      leme_view_restore_placement(prepared->views[index]);
+    }
     leme_public_server_invalidate(prepared->views[index]->server);
   }
   free((void *)prepared->views);

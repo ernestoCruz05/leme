@@ -29,6 +29,10 @@ static void *unconst(const void *p) {
 static bool op_is_single_target(enum leme_control_opcode opcode,
                                 enum leme_public_entity *out_entity) {
   switch (opcode) {
+  case LEME_CONTROL_OP_CONTAINER_LAYOUT:
+  case LEME_CONTROL_OP_CONTAINER_DETACH:
+  case LEME_CONTROL_OP_CONTAINER_DISSOLVE:
+  case LEME_CONTROL_OP_CONTAINER_JOIN:
   case LEME_CONTROL_OP_FOCUS:
   case LEME_CONTROL_OP_RESIZE:
     *out_entity = LEME_PUBLIC_VIEW;
@@ -50,6 +54,7 @@ static bool op_is_bulk_target(enum leme_control_opcode opcode,
   switch (opcode) {
   case LEME_CONTROL_OP_MOVE_TO_TAG:
   case LEME_CONTROL_OP_MOVE_TO_OUTPUT:
+  case LEME_CONTROL_OP_SET_MINIMIZED:
   case LEME_CONTROL_OP_SET_FLOATING:
   case LEME_CONTROL_OP_SET_FULLSCREEN:
   case LEME_CONTROL_OP_SET_STICKY:

@@ -31,7 +31,7 @@ tags {
 | --- | --- | --- | --- |
 | `initial` | positive integer, no greater than `maximum` | `3` | pinned tags on every output |
 | `maximum` | positive integer, up to `64` | `9` | highest tag id |
-| `layout` | `dwindle`, `master_stack`, `accordion` | `dwindle` | all tags |
+| `layout` | `dwindle`, `master_stack`, `accordion`, `desktop` | `dwindle` | all tags |
 | `drop_mode` | `simple`, `edges` | `simple` | tiled drag insertion |
 
 `initial` and `maximum` are optional. Without them, Leme starts with three
@@ -69,17 +69,20 @@ The `SPEC` is one token. Whitespace inside it is invalid. An id must be within `
 
 | Key | Values | Default | Used by |
 | --- | --- | --- | --- |
-| `layout` | `dwindle`, `master_stack`, `accordion` | `dwindle` | all layouts |
+| `layout` | `dwindle`, `master_stack`, `accordion`, `desktop` | `dwindle` | all layouts |
 | `drop_mode` | `simple`, `edges` | `simple` | tiled drag |
 | `mfact` | `0.10` through `0.90` | `0.5` | master-stack |
 | `nmaster` | `1` through `16` | `1` | master-stack |
-| `gap` | integer from `0` through `65535` | `style.gap` | inner spacing in all layouts |
+| `gap` | integer from `0` through `65535` | `style.gap` | inner spacing in tiled layouts |
 | `split_ratio` | `0.10` through `0.90` | `0.5` | dwindle |
 | `accordion_collapse_width` | `10` through `400` | `46` | accordion |
 
 Outer and smart gaps use the global [appearance settings](appearance.md#gaps).
 
-Settings for an adaptive tag apply when that tag materializes. Settings for a layout that is not currently active are retained and take effect if the tag later switches layout.
+An adaptive tag uses its configured settings when it materializes. Its configured
+layout also controls whether desktop icons appear while it is still an empty
+candidate. Showing icons does not materialize the tag. Settings for an inactive
+layout are retained and take effect if the tag later switches layout.
 
 A reload compares effective settings per tag. A live tag resets to its
 configured values only when those settings change. An unrelated reload keeps

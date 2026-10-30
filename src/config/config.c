@@ -1,5 +1,6 @@
 #include "config/config.h"
 #include "config/internal.h"
+#include "config/style.h"
 
 #include "core/command.h"
 
@@ -161,6 +162,8 @@ void leme_config_destroy(struct leme_config *config) {
     free(config->outputs[index].relative_to);
   }
   free(config->outputs);
+  leme_desk_style_destroy(config->desk_style);
+  leme_config_desktop_menu_finish(config);
   for (index = 0; index < config->tag_rule_count; index++) {
     free(config->tag_rules[index].ids);
   }
@@ -354,6 +357,12 @@ struct leme_config *leme_config_defaults(void) {
   }
   config->refcount = 1;
   config->initial_tags = 3;
+  config->desktop_minimized_strip = true;
+  config->desktop_container_modifier = WLR_MODIFIER_SHIFT;
+  if (!leme_config_desktop_menu_defaults(config)) {
+    leme_config_destroy(config);
+    return NULL;
+  }
   config->max_tags = 9;
   config->drop_mode = LEME_DROP_MODE_SIMPLE;
   config->cursor.size = LEME_CURSOR_SIZE_DEFAULT;
@@ -390,12 +399,12 @@ struct leme_config *leme_config_defaults(void) {
   common = &config->modes[0];
   common->escape_exits = true;
   common->name = strdup("common");
-  common->bindings = calloc(17, sizeof(*common->bindings));
+  common->bindings = calloc(19, sizeof(*common->bindings));
   if (common->name == NULL || common->bindings == NULL) {
     leme_config_destroy(config);
     return NULL;
   }
-  common->binding_count = 17;
+  common->binding_count = 19;
   leme_config_default_binding(common, 0, 0, XKB_KEY_Escape,
                               LEME_COMMAND_SET_MODE);
   common->bindings[0].command.text = strdup("common");
@@ -415,6 +424,11 @@ struct leme_config *leme_config_defaults(void) {
   leme_config_default_binding(common, 16, WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,
                               XKB_KEY_space,
                               LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT);
+  leme_config_default_binding(common, 17, WLR_MODIFIER_LOGO, XKB_KEY_m,
+                              LEME_COMMAND_MINIMIZE_VIEW);
+  leme_config_default_binding(common, 18,
+                              WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT, XKB_KEY_m,
+                              LEME_COMMAND_RESTORE_MINIMIZED);
   if (common->bindings[0].command.text == NULL ||
       common->bindings[1].command.argv == NULL) {
     leme_config_destroy(config);

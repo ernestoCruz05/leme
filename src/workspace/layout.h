@@ -39,6 +39,7 @@ enum leme_layout_kind {
   LEME_LAYOUT_DWINDLE,
   LEME_LAYOUT_MASTER_STACK,
   LEME_LAYOUT_ACCORDION,
+  LEME_LAYOUT_DESKTOP,
 };
 
 struct leme_layout_node;
@@ -149,6 +150,15 @@ void leme_layout_destroy(struct leme_layout_node *root);
 
 void leme_layout_init(struct leme_layout *layout, enum leme_layout_kind kind);
 void leme_layout_finish(struct leme_layout *layout);
+bool leme_layout_prepare_insert(const struct leme_layout *current,
+                                struct leme_view *target,
+                                struct leme_view *added,
+                                enum leme_direction direction,
+                                struct leme_layout *out);
+bool leme_layout_prepare(const struct leme_layout *current,
+                         enum leme_layout_kind kind,
+                         struct leme_view *const *views, size_t count,
+                         struct leme_layout *out);
 void leme_layout_add_view(struct leme_layout *layout, struct leme_view *focused,
                           struct leme_view *added);
 void leme_layout_remove_view(struct leme_layout *layout,
@@ -161,9 +171,6 @@ void leme_layout_arrange_subject(struct leme_layout *layout,
 bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
                         enum leme_resize_edge edge, int delta,
                         struct leme_box area);
-void leme_layout_set_kind(struct leme_layout *layout,
-                          enum leme_layout_kind kind,
-                          struct leme_view *const *views, size_t count);
 bool leme_layout_drag_supported(const struct leme_layout *layout);
 
 #endif

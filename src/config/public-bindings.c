@@ -42,8 +42,48 @@ static const char *command_name(enum leme_command_type type) {
     return "toggle_fullscreen";
   case LEME_COMMAND_RESIZE:
     return "resize";
+  case LEME_COMMAND_CONTAINER_LAYOUT:
+    return "container_layout";
+  case LEME_COMMAND_CONTAINER_DETACH:
+    return "container_detach";
+  case LEME_COMMAND_CONTAINER_DISSOLVE:
+    return "container_dissolve";
+  case LEME_COMMAND_CONTAINER_JOIN:
+    return "container_join";
   case LEME_COMMAND_CLOSE_VIEW:
     return "close_view";
+  case LEME_COMMAND_MINIMIZE_VIEW:
+    return "minimize_view";
+  case LEME_COMMAND_SNAP:
+    return "snap";
+  case LEME_COMMAND_PLACE:
+    return "place";
+  case LEME_COMMAND_WINDOW_MENU:
+    return "window_menu";
+  case LEME_COMMAND_SHOW_DESKTOP:
+    return "show_desktop";
+  case LEME_COMMAND_FOCUS_CYCLE:
+    return "focus_cycle";
+  case LEME_COMMAND_FOCUS_DESKTOP:
+    return "focus_desktop";
+  case LEME_COMMAND_DESKTOP_MENU:
+    return "desktop_menu";
+  case LEME_COMMAND_GRID_OPEN:
+    return "grid_open";
+  case LEME_COMMAND_GRID_TRASH:
+    return "grid_trash";
+  case LEME_COMMAND_GRID_RENAME:
+    return "grid_rename";
+  case LEME_COMMAND_GRID_NEW_FOLDER:
+    return "grid_new_folder";
+  case LEME_COMMAND_GRID_SELECT_ALL:
+    return "grid_select_all";
+  case LEME_COMMAND_GRID_CLEAR:
+    return "grid_clear";
+  case LEME_COMMAND_GRID_SELECT:
+    return "grid_select";
+  case LEME_COMMAND_RESTORE_MINIMIZED:
+    return "restore_minimized";
   case LEME_COMMAND_SPAWN:
     return "spawn";
   case LEME_COMMAND_RELOAD_CONFIG:
@@ -131,8 +171,24 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
     status = integer_text(b, command->tag_id, &arguments[count++]);
     break;
   case LEME_COMMAND_FOCUS_DIRECTION:
+  case LEME_COMMAND_CONTAINER_JOIN:
+  case LEME_COMMAND_SNAP:
     status = argument_text(b, direction_name(command->direction),
                            &arguments[count++]);
+    break;
+  case LEME_COMMAND_PLACE:
+    status = argument_text(b, leme_command_placement_name(command->placement),
+                           &arguments[count++]);
+    break;
+  case LEME_COMMAND_FOCUS_CYCLE:
+    status = argument_text(b, command->backward ? "previous" : "next",
+                           &arguments[count++]);
+    break;
+  case LEME_COMMAND_GRID_SELECT:
+    status = argument_text(b, direction_name(command->direction),
+                           &arguments[count++]);
+    if (status == LEME_PUBLIC_OK && command->extend)
+      status = argument_text(b, "extend", &arguments[count++]);
     break;
   case LEME_COMMAND_MOVE_DIRECTION:
     if (command->amount <= 0)
@@ -169,7 +225,13 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
       status = argument_text(b, "follow", &arguments[count++]);
     }
     break;
+  case LEME_COMMAND_CONTAINER_LAYOUT:
   case LEME_COMMAND_SET_LAYOUT:
+    if (command->type == LEME_COMMAND_CONTAINER_LAYOUT &&
+        (command->layout < LEME_LAYOUT_DWINDLE ||
+         command->layout > LEME_LAYOUT_ACCORDION)) {
+      return leme_public_fail(b, LEME_PUBLIC_INVALID);
+    }
     status = argument_text(b, leme_layout_public_name(command->layout),
                            &arguments[count++]);
     break;
@@ -203,7 +265,21 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
   case LEME_COMMAND_TOGGLE_FLOATING:
   case LEME_COMMAND_TOGGLE_STICKY:
   case LEME_COMMAND_TOGGLE_FULLSCREEN:
+  case LEME_COMMAND_CONTAINER_DETACH:
+  case LEME_COMMAND_CONTAINER_DISSOLVE:
   case LEME_COMMAND_CLOSE_VIEW:
+  case LEME_COMMAND_MINIMIZE_VIEW:
+  case LEME_COMMAND_RESTORE_MINIMIZED:
+  case LEME_COMMAND_WINDOW_MENU:
+  case LEME_COMMAND_SHOW_DESKTOP:
+  case LEME_COMMAND_FOCUS_DESKTOP:
+  case LEME_COMMAND_DESKTOP_MENU:
+  case LEME_COMMAND_GRID_OPEN:
+  case LEME_COMMAND_GRID_TRASH:
+  case LEME_COMMAND_GRID_RENAME:
+  case LEME_COMMAND_GRID_NEW_FOLDER:
+  case LEME_COMMAND_GRID_SELECT_ALL:
+  case LEME_COMMAND_GRID_CLEAR:
   case LEME_COMMAND_RELOAD_CONFIG:
   case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
   case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:

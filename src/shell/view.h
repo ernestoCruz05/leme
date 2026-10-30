@@ -2,7 +2,9 @@
 #define LEME_VIEW_H
 
 #include "public/identity.h"
+#include "render/owner.h"
 #include "shell/ownership.h"
+#include "shell/placement.h"
 #include "shell/scratchpad.h"
 #include "workspace/layout.h"
 
@@ -10,7 +12,9 @@
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
+struct leme_container;
 struct leme_output;
+struct leme_desk_decoration;
 struct leme_publication_toplevel;
 struct leme_render_view_state;
 struct leme_server;
@@ -24,6 +28,12 @@ struct wlr_scene_rect;
 struct wlr_scene_tree;
 struct wlr_surface;
 struct wlr_xwayland_surface;
+
+enum leme_view_geometry_owner {
+  LEME_VIEW_GEOMETRY_TAG_LAYOUT,
+  LEME_VIEW_GEOMETRY_FLOATING,
+  LEME_VIEW_GEOMETRY_CONTAINER,
+};
 
 enum leme_view_kind {
   LEME_VIEW_XDG,
@@ -57,7 +67,9 @@ struct leme_view {
   enum leme_view_kind kind;
   struct wlr_xdg_toplevel *xdg_toplevel;
   struct wlr_xwayland_surface *xwayland_surface;
+  struct leme_desk_decoration *desk_decoration;
   struct wlr_scene_tree *render_tree;
+  struct leme_render_owner render_owner;
   struct wlr_scene_tree *scene_tree;
   struct wlr_scene *capture_scene;
   struct wlr_scene_tree *capture_content;
@@ -67,6 +79,7 @@ struct leme_view {
   struct wlr_scene_rect *drop_preview;
   struct wl_list link;
   struct wl_list tag_link;
+  struct leme_container *container;
   struct wl_list focus_link;
   struct wl_list scratchpad_link;
   struct wl_list popups;
@@ -80,6 +93,7 @@ struct leme_view {
   struct wl_listener set_parent;
   struct wl_listener request_fullscreen;
   struct wl_listener request_maximize;
+  struct wl_listener request_minimize;
   struct wl_listener request_move;
   struct wl_listener request_resize;
   struct wl_listener new_popup;
@@ -98,10 +112,16 @@ struct leme_view {
   bool configure_deferred;
   bool configure_dirty;
   bool mapped;
+  bool server_decorated;
   bool floating;
   bool detached; /* Tiled drag transaction only; never scratchpad ownership. */
   bool unmanaged;
   bool fullscreen;
+  bool minimized;
+  bool desktop_hidden;
+  uint64_t minimized_order;
+  struct leme_placement_state placement;
+  bool desktop_box_valid;
   bool open_animation_pending;
   uint32_t open_animation_serial;
   struct wl_event_source *open_animation_timeout;
@@ -111,11 +131,13 @@ struct leme_view {
   struct leme_publication_toplevel *publication;
   struct leme_box box;
   struct leme_box saved_box;
+  struct leme_box desktop_box;
 };
 
 void leme_view_init(struct leme_server *server);
 void leme_view_finish(struct leme_server *server);
 struct wlr_surface *leme_view_surface(const struct leme_view *view);
+struct leme_view *leme_view_parent(const struct leme_view *view);
 const char *leme_view_identity(const struct leme_view *view);
 const char *leme_view_title(const struct leme_view *view);
 struct leme_view *leme_view_from_surface(struct leme_server *server,
@@ -126,13 +148,39 @@ void leme_view_set_configure_deferred(struct leme_view *view, bool deferred);
 void leme_view_flush_deferred_configure(struct leme_view *view);
 void leme_view_flush_deferred_configures(struct leme_server *server);
 void leme_view_ack_fullscreen(struct leme_view *view, bool fullscreen);
-void leme_view_refuse_maximize(struct leme_view *view);
+void leme_view_sync_wm_state(struct leme_view *view);
+bool leme_view_can_maximize(const struct leme_view *view);
+bool leme_view_set_maximized(struct leme_view *view, bool maximized);
+bool leme_view_is_placed(const struct leme_view *view);
+bool leme_view_is_maximized(const struct leme_view *view);
+bool leme_view_placement_box(const struct leme_view *view,
+                             const struct leme_output *output,
+                             enum leme_view_placement placement,
+                             struct leme_box *box);
+bool leme_view_can_place(const struct leme_view *view,
+                         enum leme_view_placement placement);
+bool leme_view_set_placement(struct leme_view *view,
+                             enum leme_view_placement placement);
+bool leme_view_unplace_for_resize(struct leme_view *view);
+void leme_view_restore_placement(struct leme_view *view);
+void leme_view_reconcile_placement(struct leme_server *server);
+struct leme_box leme_view_normal_box(const struct leme_view *view);
+bool leme_view_can_minimize(const struct leme_view *view);
+bool leme_view_minimize_available(const struct leme_view *view);
+bool leme_view_is_minimized(const struct leme_view *view);
+struct leme_desk_target;
+bool leme_view_minimized_unit(const struct leme_view *view,
+                              struct leme_desk_target *out);
+const struct leme_view *leme_view_minimized_root(const struct leme_view *view);
+bool leme_view_set_minimized(struct leme_view *view, bool minimized);
+void leme_view_reconcile_minimized(struct leme_server *server);
 void leme_view_sync_suspended(struct leme_server *server);
 void leme_view_protocol_close(struct leme_view *view);
 bool leme_view_map(struct leme_view *view,
                    const struct leme_view_map_options *options);
 void leme_view_unmap(struct leme_view *view);
 void leme_view_destroy_core(struct leme_view *view);
+void leme_view_focus_ex(struct leme_view *view, bool raise);
 void leme_view_focus(struct leme_view *view);
 void leme_view_focus_unmanaged_xwayland(struct leme_view *view);
 void leme_view_focus_history_remove(struct leme_view *view);
@@ -140,6 +188,8 @@ void leme_view_clear_focus(struct leme_server *server);
 bool leme_view_focus_direction(struct leme_server *server,
                                enum leme_direction direction);
 bool leme_view_focus_previous(struct leme_server *server);
+bool leme_view_focus_cycle(struct leme_server *server, bool backward);
+bool leme_view_show_desktop(struct leme_server *server);
 bool leme_view_move_direction(struct leme_server *server,
                               enum leme_direction direction, int amount);
 bool leme_view_begin_tiled_drag(struct leme_view *view,
@@ -152,6 +202,11 @@ bool leme_view_restore_tiled_drag(struct leme_view *view,
                                   struct leme_layout_detach **detach);
 void leme_view_discard_tiled_drag(struct leme_view *view,
                                   struct leme_layout_detach **detach);
+void leme_view_refresh_begin(struct leme_server *server);
+void leme_view_refresh_end(struct leme_server *server);
+void leme_view_refresh_reconcile(struct leme_server *server);
+void leme_view_refresh_desktop(struct leme_server *server);
+size_t leme_minimize_unit_count(const struct leme_tag *tag);
 void leme_view_arrange(struct leme_server *server);
 void leme_view_arrange_instant(struct leme_server *server);
 void leme_view_refresh_tag_focus(struct leme_server *server);
@@ -163,6 +218,12 @@ bool leme_view_drop_to_output(struct leme_view *view,
                               struct leme_view *target,
                               enum leme_direction direction);
 bool leme_view_set_floating(struct leme_view *view, bool floating);
+enum leme_view_geometry_owner
+leme_view_geometry_owner(const struct leme_view *view);
+void leme_view_remember_desktop_box(struct leme_view *view,
+                                    struct leme_box box);
+void leme_view_refresh_layout(struct leme_view *view,
+                              enum leme_layout_kind previous);
 void leme_view_update_tiled(struct leme_view *view);
 void leme_view_follow_committed_size(struct leme_view *view);
 bool leme_view_set_fullscreen(struct leme_view *view, bool fullscreen);

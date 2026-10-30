@@ -39,6 +39,7 @@ struct leme_tag {
   struct leme_tags *owner;
   struct leme_layout layout;
   struct wl_list views;
+  struct wl_list containers;
   struct leme_view *focused_view;
 };
 
@@ -91,6 +92,7 @@ bool leme_tags_move_view(struct leme_tags *tags, struct leme_view *view,
                          uint16_t id);
 bool leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
                           uint16_t id);
+struct leme_view *leme_tag_fullscreen_view(const struct leme_tag *tag);
 struct leme_view *leme_tags_directional_view(const struct leme_tags *tags,
                                              const struct leme_view *origin,
                                              enum leme_direction direction,
@@ -123,6 +125,7 @@ void leme_tags_attach_floating(struct leme_tags *tags, struct leme_view *view,
                                uint16_t id);
 void leme_tags_remove_view(struct leme_view *view);
 void leme_tags_refresh_visibility(struct leme_tags *tags);
+void leme_tags_refresh_visibility_passive(struct leme_tags *tags);
 enum leme_layout_kind leme_tags_layout_kind(const struct leme_tags *tags);
 bool leme_tags_swap_list_order(struct leme_tag *tag, struct leme_view *first,
                                struct leme_view *second);

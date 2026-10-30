@@ -8,6 +8,10 @@
 #include "config/live.h"
 #include "core/command.h"
 #include "core/server.h"
+#include "desktop/desktop.h"
+#include "desktop/buttons.h"
+#include "desktop/drag.h"
+#include "desktop/owner.h"
 #include "protocols/input.h"
 #include "protocols/session.h"
 
@@ -18,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_seat.h>
@@ -30,6 +35,7 @@ struct leme_keyboard {
   bool public_keymap_configured;
   bool is_virtual;
   bool handled[KEY_MAX + 1];
+  bool desktop_handled[KEY_MAX + 1];
   bool state_skipped[KEY_MAX + 1];
   struct wl_listener key;
   struct wl_listener keymap;
@@ -392,6 +398,8 @@ static void leme_input_handle_modifiers(struct wl_listener *listener,
   wlr_seat_set_keyboard(keyboard->server->seat, keyboard->keyboard);
   wlr_seat_keyboard_notify_modifiers(keyboard->server->seat,
                                      &keyboard->keyboard->modifiers);
+  leme_input_pointer_grab_modifiers_changed(keyboard->server);
+  leme_desk_buttons_refresh(keyboard->server);
   leme_public_server_invalidate(keyboard->server);
 }
 
@@ -447,6 +455,11 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
   bool inhibited;
 
   leme_session_notify_activity(keyboard->server);
+  if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+      event->keycode < LEME_ARRAY_LENGTH(keyboard->desktop_handled) &&
+      keyboard->desktop_handled[event->keycode]) {
+    return;
+  }
   keycode = event->keycode + 8;
   layout = xkb_state_key_get_layout(keyboard->keyboard->xkb_state, keycode);
   count = layout == XKB_LAYOUT_INVALID
@@ -456,6 +469,40 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
   modifiers = wlr_keyboard_get_modifiers(keyboard->keyboard);
   inhibited = leme_input_protocols_shortcuts_inhibited(keyboard->server);
   if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if (leme_desk_drag_active(keyboard->server) &&
+        event->keycode < LEME_ARRAY_LENGTH(keyboard->handled) &&
+        xkb_state_key_get_one_sym(keyboard->keyboard->xkb_state, keycode) ==
+            XKB_KEY_Escape) {
+      leme_desk_drag_cancel(keyboard->server);
+      keyboard->handled[event->keycode] = true;
+      keyboard->desktop_handled[event->keycode] = true;
+      return;
+    }
+    if (leme_desk_owner_modal(keyboard->server)) {
+      binding =
+          leme_input_find_binding(keyboard->server, modifiers, syms, count);
+      if (binding == NULL) {
+        binding = leme_input_find_binding_other_layouts(keyboard, keycode,
+                                                        layout, modifiers);
+      }
+      char utf8[128] = {0};
+      const int length = xkb_state_key_get_utf8(keyboard->keyboard->xkb_state,
+                                                keycode, utf8, sizeof(utf8));
+      const size_t used =
+          length > 0 && (size_t)length < sizeof(utf8) ? (size_t)length : 0;
+      const xkb_keysym_t symbol =
+          xkb_state_key_get_one_sym(keyboard->keyboard->xkb_state, keycode);
+      const bool reserved =
+          inhibited || leme_session_locked(keyboard->server) ||
+          event->keycode >= LEME_ARRAY_LENGTH(keyboard->handled) ||
+          (binding != NULL && leme_input_binding_reserved(binding));
+      if (leme_desk_owner_handle_key(keyboard->server, symbol, modifiers, utf8,
+                                     used, reserved)) {
+        keyboard->handled[event->keycode] = true;
+        keyboard->desktop_handled[event->keycode] = true;
+        return;
+      }
+    }
     if (!inhibited && !leme_session_locked(keyboard->server) &&
         (keyboard->server->active_mode == NULL ||
          keyboard->server->active_mode->escape_exits)) {
@@ -472,6 +519,10 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
                                                       modifiers);
     }
     if (binding != NULL && inhibited && !leme_input_binding_reserved(binding)) {
+      binding = NULL;
+    }
+    if (binding != NULL && leme_command_grid_only(&binding->command) &&
+        !leme_desk_focused(keyboard->server)) {
       binding = NULL;
     }
     if (binding != NULL &&
@@ -492,9 +543,21 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
         }
       }
     }
+    if (!handled && !inhibited &&
+        event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
+      for (index = 0; index < count; index++) {
+        if (leme_desk_handle_key(keyboard->server, syms[index], modifiers)) {
+          handled = true;
+          keyboard->handled[event->keycode] = true;
+          keyboard->desktop_handled[event->keycode] = true;
+          break;
+        }
+      }
+    }
   } else if (event->keycode < LEME_ARRAY_LENGTH(keyboard->handled) &&
              keyboard->handled[event->keycode]) {
     keyboard->handled[event->keycode] = false;
+    keyboard->desktop_handled[event->keycode] = false;
     if (keyboard->state_skipped[event->keycode]) {
       keyboard->state_skipped[event->keycode] = false;
       event->update_state = false;
@@ -622,14 +685,37 @@ void leme_input_apply_keyboard_repeat(struct leme_server *server) {
 
 void leme_input_keyboard_enter(struct leme_server *server,
                                struct wlr_surface *surface) {
+  leme_desk_unfocus(server);
   struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
 
   if (keyboard == NULL) {
     wlr_seat_keyboard_notify_enter(server->seat, surface, NULL, 0, NULL);
     return;
   }
-  wlr_seat_keyboard_notify_enter(server->seat, surface, keyboard->keycodes,
-                                 keyboard->num_keycodes, &keyboard->modifiers);
+  struct leme_keyboard *owner = NULL;
+  struct leme_keyboard *candidate;
+  if (server->keyboards.next != NULL) {
+    wl_list_for_each(candidate, &server->keyboards, link) {
+      if (candidate->keyboard == keyboard) {
+        owner = candidate;
+        break;
+      }
+    }
+  }
+  uint32_t keycodes[WLR_KEYBOARD_KEYS_CAP] = {0};
+  size_t count = 0;
+  for (size_t i = 0;
+       i < keyboard->num_keycodes && i < LEME_ARRAY_LENGTH(keyboard->keycodes);
+       i++) {
+    const uint32_t keycode = keyboard->keycodes[i];
+    if (owner != NULL && keycode < LEME_ARRAY_LENGTH(owner->desktop_handled) &&
+        owner->desktop_handled[keycode]) {
+      continue;
+    }
+    keycodes[count++] = keycode;
+  }
+  wlr_seat_keyboard_notify_enter(server->seat, surface, keycodes, count,
+                                 &keyboard->modifiers);
 }
 
 void leme_input_keyboard_add(struct leme_server *server,

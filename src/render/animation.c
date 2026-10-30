@@ -181,6 +181,34 @@ void leme_animation_crop_buffer(
   wlr_scene_buffer_set_dest_size(buffer, width, height);
 }
 
+struct leme_animation_gate {
+  struct timespec queued;
+  struct timespec start;
+  size_t references;
+  uint32_t wait_ms;
+  bool started;
+};
+
+struct leme_animation_gate *leme_animation_gate_create(uint32_t wait_ms) {
+  struct leme_animation_gate *gate = calloc(1, sizeof(*gate));
+  if (gate == NULL) {
+    return NULL;
+  }
+  if (clock_gettime(CLOCK_MONOTONIC, &gate->queued) != 0) {
+    free(gate);
+    return NULL;
+  }
+  gate->references = 1;
+  gate->wait_ms = wait_ms;
+  return gate;
+}
+
+void leme_animation_gate_destroy(struct leme_animation_gate *gate) {
+  if (gate != NULL && --gate->references == 0) {
+    free(gate);
+  }
+}
+
 struct leme_animation {
   struct wl_list link;
   struct wlr_scene_tree *snapshot;
@@ -196,6 +224,7 @@ static void leme_animation_release(struct leme_animation *animation) {
   if (animation->subject.done != NULL) {
     animation->subject.done(animation->subject.data);
   }
+  leme_animation_gate_destroy(animation->subject.gate);
   free(animation);
 }
 
@@ -218,6 +247,21 @@ static int leme_animation_mix_extent(int from, int to, double progress) {
   const int mixed = leme_animation_mix(from, to, progress);
 
   return mixed < 0 ? 0 : mixed;
+}
+
+struct leme_animation_spec
+leme_animation_move_spec(const struct leme_animation_settings *settings,
+                         struct leme_box from, struct leme_box to,
+                         double from_opacity, double to_opacity) {
+  return (struct leme_animation_spec){.from = from,
+                                      .to = to,
+                                      .from_opacity = from_opacity,
+                                      .to_opacity = to_opacity,
+                                      .duration_ms = settings->duration_ms,
+                                      .curve = settings->curve,
+                                      .opacity_curve = settings->curve,
+                                      .kind = settings->kind,
+                                      .spring = settings->spring};
 }
 
 struct leme_animation_frame
@@ -517,6 +561,24 @@ void leme_animation_manager_finish_all(struct leme_animation_manager *manager) {
   leme_animation_manager_drain(manager);
 }
 
+void leme_animation_manager_set_gate(struct leme_animation_manager *manager,
+                                     const void *data,
+                                     struct leme_animation_gate *gate) {
+  if (!leme_animation_manager_ready(manager) || data == NULL) {
+    return;
+  }
+  struct leme_animation *animation = NULL;
+  wl_list_for_each(animation, &manager->animations, link) {
+    if (animation->subject.data == data && animation->subject.gate != gate) {
+      if (gate != NULL) {
+        gate->references++;
+      }
+      leme_animation_gate_destroy(animation->subject.gate);
+      animation->subject.gate = gate;
+    }
+  }
+}
+
 void leme_animation_manager_finish_data(struct leme_animation_manager *manager,
                                         const void *data) {
   struct leme_animation *animation;
@@ -543,6 +605,7 @@ void leme_animation_manager_cancel_data(struct leme_animation_manager *manager,
   wl_list_for_each_safe(animation, temporary, &manager->animations, link) {
     if (animation->subject.data == data) {
       wl_list_remove(&animation->link);
+      leme_animation_gate_destroy(animation->subject.gate);
       free(animation);
     }
   }
@@ -609,6 +672,9 @@ void leme_animation_run(struct leme_animation_manager *manager,
   animation->spec = *spec;
   animation->spec.duration_ms = duration;
   animation->subject = *subject;
+  if (subject->gate != NULL) {
+    subject->gate->references++;
+  }
   clock_gettime(CLOCK_MONOTONIC, &animation->start);
   wl_list_insert(&manager->animations, &animation->link);
   return;
@@ -632,6 +698,79 @@ static bool leme_animation_holds(const struct leme_animation *animation,
          !animation->subject.ready(animation->subject.data);
 }
 
+static int leme_animation_gate_edge(int64_t from, int64_t to, double progress) {
+  const double value =
+      floor((double)from + ((double)to - (double)from) * progress);
+  if (!isfinite(value)) {
+    return 0;
+  }
+  if (value <= INT_MIN) {
+    return INT_MIN;
+  }
+  if (value >= INT_MAX) {
+    return INT_MAX;
+  }
+  return (int)value;
+}
+
+static struct leme_box
+leme_animation_gate_box(const struct leme_animation_spec *spec,
+                        double progress) {
+  const int x = leme_animation_gate_edge(spec->from.x, spec->to.x, progress);
+  const int y = leme_animation_gate_edge(spec->from.y, spec->to.y, progress);
+  const int right =
+      leme_animation_gate_edge((int64_t)spec->from.x + spec->from.width,
+                               (int64_t)spec->to.x + spec->to.width, progress);
+  const int bottom =
+      leme_animation_gate_edge((int64_t)spec->from.y + spec->from.height,
+                               (int64_t)spec->to.y + spec->to.height, progress);
+  const int64_t width = (int64_t)right - x;
+  const int64_t height = (int64_t)bottom - y;
+  return (struct leme_box){.x = x,
+                           .y = y,
+                           .width = width <= 0        ? 0
+                                    : width > INT_MAX ? INT_MAX
+                                                      : (int)width,
+                           .height = height <= 0        ? 0
+                                     : height > INT_MAX ? INT_MAX
+                                                        : (int)height};
+}
+
+static double leme_animation_gate_progress(const struct timespec *start,
+                                           const struct timespec *now,
+                                           uint32_t duration_ms) {
+  time_t seconds = now->tv_sec - start->tv_sec;
+  long nanoseconds = now->tv_nsec - start->tv_nsec;
+  if (nanoseconds < 0) {
+    seconds--;
+    nanoseconds += 1000000000;
+  }
+  const double milliseconds =
+      (double)seconds * 1000.0 + (double)nanoseconds / 1000000.0;
+  return milliseconds <= 0.0 ? 0.0 : milliseconds / (double)duration_ms;
+}
+
+static void leme_animation_gate_start(struct leme_animation_manager *manager,
+                                      struct leme_animation_gate *gate,
+                                      const struct timespec *now) {
+  if (gate == NULL || gate->started) {
+    return;
+  }
+  if (gate->wait_ms > 0 &&
+      leme_animation_gate_progress(&gate->queued, now, gate->wait_ms) < 1.0) {
+    const struct leme_animation *animation = NULL;
+    wl_list_for_each(animation, &manager->animations, link) {
+      if (!animation->finishing && animation->subject.gate == gate &&
+          animation->subject.ready != NULL &&
+          !animation->subject.ready(animation->subject.data)) {
+        return;
+      }
+    }
+  }
+  gate->started = true;
+  gate->start = *now;
+}
+
 void leme_animation_manager_tick(struct leme_animation_manager *manager,
                                  const struct timespec *now) {
   struct leme_animation *animation;
@@ -642,19 +781,29 @@ void leme_animation_manager_tick(struct leme_animation_manager *manager,
     return;
   }
   manager->dispatching = true;
+  wl_list_for_each(animation, &manager->animations, link) {
+    if (!animation->finishing) {
+      leme_animation_gate_start(manager, animation->subject.gate, now);
+    }
+  }
   wl_list_for_each_safe(animation, next, &manager->animations, link) {
     double linear;
     struct leme_animation_frame frame;
-    double geometry;
+    double geometry = 0.0;
     double opacity;
 
     if (animation->finishing) {
       continue;
     }
-    linear = leme_animation_elapsed(&animation->start, now,
-                                    animation->spec.duration_ms);
+    const struct leme_animation_gate *gate = animation->subject.gate;
+    linear = gate == NULL ? leme_animation_elapsed(&animation->start, now,
+                                                   animation->spec.duration_ms)
+             : !gate->started
+                 ? 0.0
+                 : leme_animation_gate_progress(&gate->start, now,
+                                                animation->spec.duration_ms);
     if (linear >= 1.0) {
-      if (leme_animation_holds(animation, now)) {
+      if (gate == NULL && leme_animation_holds(animation, now)) {
         frame = leme_animation_frame_at(&animation->spec, 1.0, 1.0);
         if (animation->subject.apply != NULL) {
           animation->subject.apply(animation->subject.data, &frame);
@@ -693,7 +842,11 @@ void leme_animation_manager_tick(struct leme_animation_manager *manager,
     } else {
       geometry = leme_animation_curve_at(&animation->spec.curve, linear);
       opacity = leme_animation_curve_at(&animation->spec.opacity_curve, linear);
+      opacity = opacity < 0.0 ? 0.0 : (opacity > 1.0 ? 1.0 : opacity);
       frame = leme_animation_frame_at(&animation->spec, geometry, opacity);
+    }
+    if (gate != NULL) {
+      frame.box = leme_animation_gate_box(&animation->spec, geometry);
     }
     if (animation->subject.apply != NULL) {
       animation->subject.apply(animation->subject.data, &frame);

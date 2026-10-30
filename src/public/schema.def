@@ -39,7 +39,7 @@ PUBLIC_ENUM(INPUT_KIND, "keyboard", "pointer")
 PUBLIC_ENUM(TRANSFORM, "normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270")
 PUBLIC_ENUM(CONFIG_TRANSFORM, "normal", "90", "180", "270")
 PUBLIC_ENUM(PROFILE, "adaptive", "flat")
-PUBLIC_ENUM(LAYOUT, "dwindle", "master_stack", "accordion")
+PUBLIC_ENUM(LAYOUT, "dwindle", "master_stack", "accordion", "desktop")
 PUBLIC_ENUM(DROP_MODE, "simple", "edges")
 PUBLIC_ENUM(COVERS, "none", "top", "overlay")
 PUBLIC_ENUM(SECONDARY_GPU, "on_demand", "always")
@@ -106,6 +106,10 @@ PUBLIC_SCHEMA(VIEW, "view", false,
       "Presented by Leme; not a pixel-occlusion measurement"),
   PUBLIC_FIELD("focused", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Has compositor keyboard focus; a focused layer may leave all views false"),
+  PUBLIC_FIELD("minimized", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Effective desktop minimized state, including parent inheritance"),
+  PUBLIC_FIELD("maximized", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Desktop maximized state, retained while fullscreen or minimized"),
   PUBLIC_FIELD("floating", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Current logical floating state"),
   PUBLIC_FIELD("fullscreen", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
@@ -124,6 +128,8 @@ PUBLIC_SCHEMA(VIEW, "view", false,
       "Direct owner tag; sticky and scratchpad views have none"),
   PUBLIC_FIELD("parent", REF_VIEW, true, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Managed parent when present"),
+  PUBLIC_FIELD("container", STRING, true, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Opaque container lifetime ID; null for standalone views"),
   PUBLIC_FIELD("owner", OWNER, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Explicit domain ownership")
 )

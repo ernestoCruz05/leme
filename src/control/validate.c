@@ -272,10 +272,15 @@ bool leme_control_is_valid_action_target(
 
   switch (op->opcode) {
   case LEME_CONTROL_OP_FOCUS:
+  case LEME_CONTROL_OP_SET_MINIMIZED:
   case LEME_CONTROL_OP_SET_FLOATING:
   case LEME_CONTROL_OP_SET_FULLSCREEN:
   case LEME_CONTROL_OP_SET_STICKY:
   case LEME_CONTROL_OP_RESIZE:
+  case LEME_CONTROL_OP_CONTAINER_LAYOUT:
+  case LEME_CONTROL_OP_CONTAINER_DETACH:
+  case LEME_CONTROL_OP_CONTAINER_DISSOLVE:
+  case LEME_CONTROL_OP_CONTAINER_JOIN:
   case LEME_CONTROL_OP_CLOSE:
     if (arg_index == 0) {
       is_target_arg = true;

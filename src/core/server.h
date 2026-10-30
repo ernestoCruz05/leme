@@ -3,6 +3,7 @@
 
 #include "core/leme.h"
 #include "config/config.h"
+#include "desktop/owner.h"
 #include "shell/scratchpad.h"
 #include "shell/sticky.h"
 #include "input/swipe_tracker.h"
@@ -22,6 +23,10 @@ struct leme_capture;
 struct leme_ipc;
 struct leme_data;
 struct leme_desktop;
+struct leme_desk;
+struct leme_desk_strip;
+struct leme_desk_icons;
+struct leme_desk_drag;
 struct leme_gpu;
 struct leme_xwayland;
 struct leme_input_protocols;
@@ -75,6 +80,12 @@ struct wlr_ext_workspace_manager_v1;
 struct wlr_ext_foreign_toplevel_list_v1;
 struct wlr_foreign_toplevel_manager_v1;
 
+struct leme_view_refresh {
+  size_t depth;
+  bool reconciled;
+  bool desktop_synced;
+};
+
 struct leme_server {
   struct wl_display *display;
   struct wlr_backend *backend;
@@ -84,6 +95,8 @@ struct leme_server {
   struct wlr_renderer *renderer;
   uint32_t render_timing_seconds;
   bool arrange_instant;
+  struct leme_view_refresh view_refresh;
+  uint64_t minimize_order;
   struct wlr_allocator *allocator;
   struct wlr_compositor *compositor;
   struct wlr_linux_dmabuf_v1 *linux_dmabuf;
@@ -95,9 +108,11 @@ struct leme_server {
   struct wlr_scene *scene;
   struct wlr_scene_output_layout *scene_output_layout;
   struct wlr_scene_tree *scene_background;
+  struct wlr_scene_tree *scene_desktop;
   struct wlr_scene_tree *scene_bottom;
   struct wlr_scene_tree *scene_tiled;
   struct wlr_scene_tree *scene_floating;
+  struct wlr_scene_tree *scene_minimized;
   struct wlr_scene_tree *scene_durable;
   struct wlr_scene_tree *scene_top;
   struct wlr_scene_tree *scene_fullscreen;
@@ -134,6 +149,15 @@ struct leme_server {
   struct wl_event_source *public_warm_idle;
   struct leme_data *data;
   struct leme_desktop *desktop;
+  struct leme_desk *desk;
+  struct leme_desk_strip *desk_strip;
+  struct leme_desk_icons *desk_chrome_icons;
+  bool desk_decorations_ready;
+  struct leme_desk_buttons *desk_buttons;
+  struct leme_desk_owner_state desk_owner;
+  struct leme_desk_drag *desk_drag;
+  struct leme_desk_menu *desk_menu;
+  struct leme_desk_prompt *desk_prompt;
   struct leme_xwayland *xwayland;
   struct leme_input_protocols *input_protocols;
   struct leme_pointer_grab *pointer_grab;

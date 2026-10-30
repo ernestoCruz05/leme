@@ -223,6 +223,54 @@ struct leme_workspace_animation_settings {
   struct leme_animation_spring spring;
 };
 
+#define LEME_TITLEBAR_FONT_MAX 128
+
+enum leme_titlebar_align {
+  LEME_TITLEBAR_ALIGN_LEFT,
+  LEME_TITLEBAR_ALIGN_CENTER,
+};
+
+enum leme_titlebar_button {
+  LEME_TITLEBAR_BUTTON_MINIMIZE,
+  LEME_TITLEBAR_BUTTON_MAXIMIZE,
+  LEME_TITLEBAR_BUTTON_CLOSE,
+};
+
+struct leme_desk_style;
+
+#define LEME_DESKTOP_MENU_ENTRIES_MAX 64
+
+enum leme_desktop_menu {
+  LEME_DESKTOP_MENU_BLANK,
+  LEME_DESKTOP_MENU_FILES,
+  LEME_DESKTOP_MENU_COUNT,
+};
+
+struct leme_desktop_menu_entry {
+  char *label;
+  struct leme_command command;
+  int lineno;
+};
+
+struct leme_desktop_menu_list {
+  struct leme_desktop_menu_entry *entries;
+  size_t count;
+};
+
+struct leme_titlebar_style {
+  float background_active[4];
+  float background_inactive[4];
+  float text_active[4];
+  float text_inactive[4];
+  char font[LEME_TITLEBAR_FONT_MAX];
+  enum leme_titlebar_align align;
+  enum leme_titlebar_button buttons[3];
+  size_t button_count;
+  size_t left;
+  int height;
+  int button_width;
+};
+
 struct leme_config {
   size_t refcount;
   bool is_effective_shell;
@@ -233,11 +281,15 @@ struct leme_config {
   int gap;
   struct leme_gaps gap_outer;
   bool smart_gaps;
+  bool desktop_minimized_strip;
+  uint32_t desktop_container_modifier;
   int border_width;
   int corner_radius;
   int blur;
   float border_active[4];
   float border_inactive[4];
+  struct leme_desk_style *desk_style;
+  struct leme_desktop_menu_list desktop_menus[LEME_DESKTOP_MENU_COUNT];
   double opacity_active;
   double opacity_inactive;
   enum leme_fullscreen_coverage fullscreen_covers;

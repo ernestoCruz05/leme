@@ -900,6 +900,106 @@ void leme_layout_finish(struct leme_layout *layout) {
   layout->root = NULL;
 }
 
+static struct leme_layout_node *
+leme_layout_clone(const struct leme_layout_node *source,
+                  struct leme_layout_node *parent) {
+  if (source == NULL) {
+    return NULL;
+  }
+  struct leme_layout_node *node = calloc(1, sizeof(*node));
+  if (node == NULL) {
+    return NULL;
+  }
+  node->parent = parent;
+  node->is_leaf = source->is_leaf;
+  node->arranged = source->arranged;
+  if (node->is_leaf) {
+    node->data.view = source->data.view;
+    return node;
+  }
+  node->data.branch.split = source->data.branch.split;
+  node->data.branch.ratio = source->data.branch.ratio;
+  node->data.branch.axis_length = source->data.branch.axis_length;
+  node->data.branch.first = leme_layout_clone(source->data.branch.first, node);
+  node->data.branch.second =
+      leme_layout_clone(source->data.branch.second, node);
+  if (node->data.branch.first == NULL || node->data.branch.second == NULL) {
+    leme_layout_destroy(node);
+    return NULL;
+  }
+  return node;
+}
+
+bool leme_layout_prepare_insert(const struct leme_layout *current,
+                                struct leme_view *target,
+                                struct leme_view *added,
+                                enum leme_direction direction,
+                                struct leme_layout *out) {
+  if (current == NULL || out == NULL || target == NULL || added == NULL ||
+      target == added || direction < LEME_DIRECTION_LEFT ||
+      direction > LEME_DIRECTION_DOWN || current->kind < LEME_LAYOUT_DWINDLE ||
+      current->kind > LEME_LAYOUT_ACCORDION) {
+    return false;
+  }
+  struct leme_layout prepared = *current;
+  prepared.root = NULL;
+  if (current->kind == LEME_LAYOUT_DWINDLE) {
+    prepared.root = leme_layout_clone(current->root, NULL);
+    struct leme_layout_node *leaf = leme_layout_find(prepared.root, target);
+    if (leaf == NULL || leme_layout_find(prepared.root, added) != NULL) {
+      leme_layout_finish(&prepared);
+      return false;
+    }
+    struct leme_layout_node *retained = leme_layout_leaf(target);
+    struct leme_layout_node *inserted = leme_layout_leaf(added);
+    if (retained == NULL || inserted == NULL) {
+      free(retained);
+      free(inserted);
+      leme_layout_finish(&prepared);
+      return false;
+    }
+    const bool before =
+        direction == LEME_DIRECTION_LEFT || direction == LEME_DIRECTION_UP;
+    leaf->is_leaf = false;
+    leaf->data.branch.first = before ? inserted : retained;
+    leaf->data.branch.second = before ? retained : inserted;
+    leaf->data.branch.split =
+        direction == LEME_DIRECTION_LEFT || direction == LEME_DIRECTION_RIGHT
+            ? LEME_SPLIT_HORIZONTAL
+            : LEME_SPLIT_VERTICAL;
+    leaf->data.branch.ratio = 0.5;
+    retained->parent = leaf;
+    inserted->parent = leaf;
+  }
+  *out = prepared;
+  return true;
+}
+
+bool leme_layout_prepare(const struct leme_layout *current,
+                         enum leme_layout_kind kind,
+                         struct leme_view *const *views, size_t count,
+                         struct leme_layout *out) {
+  if (current == NULL || out == NULL || (count > 0 && views == NULL) ||
+      kind < LEME_LAYOUT_DWINDLE || kind > LEME_LAYOUT_DESKTOP) {
+    return false;
+  }
+  struct leme_layout prepared = *current;
+  prepared.root = NULL;
+  prepared.kind = kind;
+  if (kind == LEME_LAYOUT_DWINDLE) {
+    for (size_t i = 0; i < count; i++) {
+      prepared.root = leme_layout_insert(
+          prepared.root, i == 0 ? NULL : views[i - 1], views[i]);
+      if (leme_layout_find(prepared.root, views[i]) == NULL) {
+        leme_layout_finish(&prepared);
+        return false;
+      }
+    }
+  }
+  *out = prepared;
+  return true;
+}
+
 void leme_layout_add_view(struct leme_layout *layout, struct leme_view *focused,
                           struct leme_view *added) {
   if (layout->kind == LEME_LAYOUT_DWINDLE) {
@@ -1062,6 +1162,8 @@ void leme_layout_arrange_subject(struct leme_layout *layout,
     gap = layout->gap;
   }
   switch (layout->kind) {
+  case LEME_LAYOUT_DESKTOP:
+    return;
   case LEME_LAYOUT_DWINDLE:
     leme_layout_arrange(layout->root, area, gap, apply, data);
     return;
@@ -1082,6 +1184,8 @@ bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
   double step;
 
   switch (layout->kind) {
+  case LEME_LAYOUT_DESKTOP:
+    return false;
   case LEME_LAYOUT_DWINDLE:
     return leme_layout_resize_focused(layout->root, focused, edge, delta);
   case LEME_LAYOUT_MASTER_STACK:
@@ -1115,26 +1219,6 @@ bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
     return true;
   }
   return false;
-}
-
-void leme_layout_set_kind(struct leme_layout *layout,
-                          enum leme_layout_kind kind,
-                          struct leme_view *const *views, size_t count) {
-  size_t index;
-
-  if (layout->kind == kind) {
-    return;
-  }
-  leme_layout_destroy(layout->root);
-  layout->root = NULL;
-  layout->kind = kind;
-  if (kind != LEME_LAYOUT_DWINDLE) {
-    return;
-  }
-  for (index = 0; index < count; index++) {
-    layout->root = leme_layout_insert(
-        layout->root, index == 0 ? NULL : views[index - 1], views[index]);
-  }
 }
 
 bool leme_layout_drag_supported(const struct leme_layout *layout) {

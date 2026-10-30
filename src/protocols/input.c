@@ -3,6 +3,7 @@
 #include "input/input.h"
 #include "render/render.h"
 #include "core/server.h"
+#include "desktop/owner.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -112,6 +113,7 @@ static void leme_input_protocols_activate_constraint(
   }
   leme_input_protocols_deactivate_constraint(protocols);
   protocols->active_constraint = constraint;
+  leme_desk_owner_cancel(protocols->server);
   wlr_pointer_constraint_v1_send_activated(constraint);
   if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
     wlr_cursor_unset_image(protocols->server->cursor);
@@ -251,6 +253,7 @@ void leme_input_protocols_update_keyboard_focus(struct leme_server *server) {
         protocols->active_inhibitor->inhibitor);
   }
   protocols->active_inhibitor = target;
+  leme_desk_owner_cancel(server);
   if (target != NULL) {
     wlr_keyboard_shortcuts_inhibitor_v1_activate(target->inhibitor);
     leme_input_set_mode(server, "common");
@@ -278,6 +281,7 @@ bool leme_input_protocols_toggle_shortcuts_inhibit(struct leme_server *server) {
     return false;
   }
   inhibitor = protocols->active_inhibitor->inhibitor;
+  leme_desk_owner_cancel(server);
   if (inhibitor->active) {
     wlr_keyboard_shortcuts_inhibitor_v1_deactivate(inhibitor);
   } else {

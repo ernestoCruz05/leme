@@ -82,7 +82,8 @@ the session locks. An animation never delays a window from opening or closing.
 Use `move` to animate tiled windows that change place or size when the layout
 rearranges: a window opens or closes on the tag, windows swap or move, the
 layout switches, a split is resized with a command, or a dragged window is
-dropped into a new slot.
+dropped into a new slot. On desktop tags, `move` also controls window placement,
+container reflows, minimize/restore and drag previews.
 
 ```scfg
 animation {
@@ -131,6 +132,33 @@ final position and size from the start, as they do for `open` and `close`.
 
 When the layout changes again during an animation, the next one starts from
 where the window is shown at that moment.
+
+### Desktop animations
+
+Maximize, restore, halves and quarters animate for standalone desktop windows and
+containers. Container creation, insertion, member removal, layout switches,
+keyboard split resizing and accordion focus changes use the same settings. The
+frame and moving members wait for native clients to acknowledge their new size,
+up to 200 ms, then start together. Borders keep their configured thickness.
+Members can run the configured `close` animation without an individual titlebar;
+windows opening directly into a container do not run `open`.
+
+Minimizing scales and fades a snapshot toward the unit's strip cell. A unit on
+another page uses the arrow cell pointing toward that page. Restoring reverses
+the motion, including restoration through focus or a foreign shell. Without an
+available strip cell, the small endpoint is 60% of the window's size, centered
+on its position. Container members and their frame share the strip endpoint.
+Restored clients remain enabled and transparent while the snapshot is visible,
+so they can keep drawing.
+
+Desktop snap and grouping previews grow from a 32px square at the cursor.
+Changing targets continues from the preview's current position. Dismissing a
+preview removes it immediately.
+
+Pointer moves, edge and split resizing, and restore-on-drag remain instant.
+Output transfers and geometry reconciliation also remain instant. None of these
+desktop animations runs without a `move` block. Desktop workspace transitions
+remain instant.
 
 ### When layout changes stay instant
 
@@ -185,8 +213,8 @@ Three combinations are rejected rather than clamped, each with a diagnostic:
 - `damping_ratio 0`, because an undamped spring never settles and would hold
   an output awake indefinitely.
 - `epsilon` at `1.0` or above, because the amplitude starts below it and the
-  spring would be considered settled before it moved — the animation would
-  simply not run.
+  spring would be considered settled before it moved, so the animation would
+  not run.
 - Parameters that settle slower than the `duration` maximum of 1000 ms. A weak
   spring such as `stiffness 8` takes over three seconds, and the diagnostic
   names the settle time it computed.

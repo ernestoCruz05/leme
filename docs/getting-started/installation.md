@@ -12,7 +12,11 @@ For the standard build, install the development packages for:
 - Wayland server 1.22 or newer;
 - xkbcommon 1.5 or newer;
 - libinput;
-- Pixman.
+- Pixman;
+- librsvg 2.46 or newer (`librsvg-2.0`);
+- Cairo;
+- Pango with PangoCairo;
+- GLib with GIO.
 
 You also need a C17 compiler, Meson, Ninja, Git, pkg-config or pkgconf, and
 `wayland-scanner`. The scanner ships in the Wayland package on many distributions
@@ -107,6 +111,12 @@ list of backends only when it starts.
 Read [minimal configuration](minimal-config.md) before copying a config file.
 Read [first session](first-session.md) before selecting Leme from a display
 manager or launching it from a TTY.
+
+Install the Adwaita icon theme for the experimental desktop layout's file and
+folder icons. SVG files can supply their own artwork without it. Opening files
+and folders from the grid requires `xdg-open` from xdg-utils on the session's
+configured `PATH`, plus the default applications for those file types. Missing
+xdg-utils does not prevent Leme from starting or displaying the grid.
 
 ## NixOS
 

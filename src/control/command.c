@@ -59,6 +59,94 @@ alloc_intents(struct leme_public_budget *account, size_t count) {
   return intents;
 }
 
+static bool minimized_on_tag(const struct leme_public_value *view,
+                             struct leme_public_text tag_id) {
+  bool minimized = false;
+  struct leme_public_text current = {0};
+  const struct leme_public_value *tag =
+      leme_public_get(view, LEME_PUBLIC_TEXT("tag"));
+  return tag_id.length > 0 &&
+         leme_public_as_bool(
+             leme_public_get(view, LEME_PUBLIC_TEXT("minimized")),
+             &minimized) == LEME_PUBLIC_OK &&
+         minimized &&
+         leme_public_as_text(leme_public_get(tag, LEME_PUBLIC_TEXT("id")),
+                             &current) == LEME_PUBLIC_OK &&
+         current.length == tag_id.length &&
+         memcmp(current.data, tag_id.data, current.length) == 0;
+}
+
+static enum leme_control_code
+minimized_targets(struct leme_control_context *context,
+                  const struct leme_public_value *views,
+                  struct leme_public_text tag,
+                  const struct leme_public_value ***out, size_t *count) {
+  *out = NULL;
+  *count = 0;
+  const struct leme_control_limits *limits =
+      leme_control_context_limits(context);
+  const size_t length = views == NULL ? 0 : leme_public_length(views);
+  const size_t capacity = length < limits->targets ? length : limits->targets;
+  if (capacity > SIZE_MAX / sizeof(**out)) {
+    return LEME_CONTROL_RESOURCE_LIMIT;
+  }
+  const struct leme_public_value **selected =
+      capacity == 0 ? NULL
+                    : leme_control_alloc(leme_control_context_account(context),
+                                         capacity * sizeof(*selected));
+  if (capacity > 0 && selected == NULL) {
+    return LEME_CONTROL_OUT_OF_MEMORY;
+  }
+  struct leme_control_meter meter = {
+      .remaining = limits->work_units,
+      .deadline_ns = leme_control_context_deadline(context),
+      .now_ns = leme_control_now_ns,
+      .clock_countdown = LEME_CONTROL_CLOCK_INTERVAL};
+  for (size_t i = 0; i < length; i++) {
+    if (leme_control_charge(&meter, 1) != LEME_CONTROL_OK) {
+      goto limit;
+    }
+    const struct leme_public_value *view = leme_public_at(views, i);
+    if (!minimized_on_tag(view, tag)) {
+      continue;
+    }
+    struct leme_public_text container = {0};
+    bool duplicate = false;
+    if (leme_public_as_text(
+            leme_public_get(view, LEME_PUBLIC_TEXT("container")), &container) ==
+        LEME_PUBLIC_OK) {
+      for (size_t j = 0; j < *count; j++) {
+        if (leme_control_charge(&meter, container.length + 1) !=
+            LEME_CONTROL_OK) {
+          goto limit;
+        }
+        struct leme_public_text previous = {0};
+        if (leme_public_as_text(
+                leme_public_get(selected[j], LEME_PUBLIC_TEXT("container")),
+                &previous) == LEME_PUBLIC_OK &&
+            previous.length == container.length &&
+            memcmp(previous.data, container.data, container.length) == 0) {
+          duplicate = true;
+          break;
+        }
+      }
+    }
+    if (duplicate) {
+      continue;
+    }
+    if (*count >= capacity) {
+      goto limit;
+    }
+    selected[(*count)++] = view;
+  }
+  *out = selected;
+  return LEME_CONTROL_OK;
+limit:
+  leme_control_free(selected);
+  *count = 0;
+  return LEME_CONTROL_RESOURCE_LIMIT;
+}
+
 static const char *layout_kind_name(enum leme_layout_kind kind) {
   switch (kind) {
   case LEME_LAYOUT_DWINDLE:
@@ -67,6 +155,8 @@ static const char *layout_kind_name(enum leme_layout_kind kind) {
     return "master_stack";
   case LEME_LAYOUT_ACCORDION:
     return "accordion";
+  case LEME_LAYOUT_DESKTOP:
+    return "desktop";
   }
   return "dwindle";
 }
@@ -176,6 +266,30 @@ static enum leme_control_code make_cmd_argv(struct leme_public_builder *b,
             b, (struct leme_public_text){words[idx], strlen(words[idx])}, false,
             &word) != LEME_PUBLIC_OK ||
         leme_public_array_set(b, arr, idx, word) != LEME_PUBLIC_OK) {
+      return LEME_CONTROL_OUT_OF_MEMORY;
+    }
+  }
+  *out = arr;
+  return LEME_CONTROL_OK;
+}
+
+static enum leme_control_code forward_argv(struct leme_public_builder *b,
+                                           struct leme_public_text name,
+                                           const struct leme_public_value *argv,
+                                           struct leme_public_value **out) {
+  const size_t count = leme_public_length(argv);
+  struct leme_public_value *arr = NULL;
+  struct leme_public_value *word = NULL;
+  if (leme_public_array(b, count + 1, &arr) != LEME_PUBLIC_OK ||
+      leme_public_string(b, name, false, &word) != LEME_PUBLIC_OK ||
+      leme_public_array_set(b, arr, 0, word) != LEME_PUBLIC_OK) {
+    return LEME_CONTROL_OUT_OF_MEMORY;
+  }
+  for (size_t idx = 0; idx < count; ++idx) {
+    struct leme_public_text text = {0};
+    leme_public_as_text(leme_public_at(argv, idx), &text);
+    if (leme_public_string(b, text, false, &word) != LEME_PUBLIC_OK ||
+        leme_public_array_set(b, arr, idx + 1, word) != LEME_PUBLIC_OK) {
       return LEME_CONTROL_OUT_OF_MEMORY;
     }
   }
@@ -548,6 +662,10 @@ enum leme_control_code leme_control_command_lower(
   }
 
   switch (cmd.type) {
+  case LEME_COMMAND_CONTAINER_LAYOUT:
+  case LEME_COMMAND_CONTAINER_DETACH:
+  case LEME_COMMAND_CONTAINER_DISSOLVE:
+  case LEME_COMMAND_CONTAINER_JOIN:
   case LEME_COMMAND_CLOSE_VIEW: {
     if (!has_focused_view) {
       leme_public_builder_destroy(b);
@@ -560,15 +678,103 @@ enum leme_control_code leme_control_command_lower(
       return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
                                  "out of memory");
     }
-    intents[0].opcode = LEME_CONTROL_OP_CLOSE;
+    intents[0].opcode = cmd.type == LEME_COMMAND_CONTAINER_LAYOUT
+                            ? LEME_CONTROL_OP_CONTAINER_LAYOUT
+                        : cmd.type == LEME_COMMAND_CONTAINER_DETACH
+                            ? LEME_CONTROL_OP_CONTAINER_DETACH
+                        : cmd.type == LEME_COMMAND_CONTAINER_DISSOLVE
+                            ? LEME_CONTROL_OP_CONTAINER_DISSOLVE
+                        : cmd.type == LEME_COMMAND_CONTAINER_JOIN
+                            ? LEME_CONTROL_OP_CONTAINER_JOIN
+                            : LEME_CONTROL_OP_CLOSE;
     set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id, 0,
                   focused_view_id_text);
     out->intents = intents;
     out->count = 1;
     out->builder = b;
+    if (cmd.type == LEME_COMMAND_CONTAINER_LAYOUT ||
+        cmd.type == LEME_COMMAND_CONTAINER_JOIN) {
+      const char *argument = cmd.type == LEME_COMMAND_CONTAINER_JOIN
+                                 ? direction_to_string(cmd.direction)
+                                 : layout_kind_name(cmd.layout);
+      struct leme_public_value *value = NULL;
+      if (leme_public_string(
+              b, (struct leme_public_text){argument, strlen(argument)}, false,
+              &value) != LEME_PUBLIC_OK) {
+        leme_control_intent_batch_destroy(account, out);
+        return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                   "cannot prepare container command");
+      }
+      intents[0].args = value;
+      const struct leme_public_value *roots[] = {value};
+      if (leme_public_builder_seal(b, roots, 1) != LEME_PUBLIC_OK) {
+        leme_control_intent_batch_destroy(account, out);
+        return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                   "cannot prepare container command");
+      }
+    }
     return LEME_CONTROL_OK;
   }
 
+  case LEME_COMMAND_RESTORE_MINIMIZED: {
+    size_t count = 0;
+    const struct leme_public_value **selected = NULL;
+    enum leme_control_code status = minimized_targets(
+        context, views_root, active_tag_id_text, &selected, &count);
+    if (status != LEME_CONTROL_OK ||
+        count > SIZE_MAX / sizeof(struct leme_control_intent)) {
+      leme_control_free(selected);
+      leme_public_builder_destroy(b);
+      return set_preflight_error(
+          error,
+          status == LEME_CONTROL_OK ? LEME_CONTROL_RESOURCE_LIMIT : status,
+          "cannot prepare minimized units");
+    }
+    out->builder = b;
+    if (count == 0) {
+      leme_control_free(selected);
+      return LEME_CONTROL_OK;
+    }
+    out->intents = alloc_intents(account, count);
+    if (out->intents == NULL) {
+      leme_control_free(selected);
+      leme_control_intent_batch_destroy(account, out);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "out of memory");
+    }
+    out->count = count;
+    struct leme_public_value *value = NULL;
+    bool valid = leme_public_boolean(b, false, &value) == LEME_PUBLIC_OK;
+    for (size_t i = 0; valid && i < count; i++) {
+      const struct leme_public_value *view = selected[i];
+      struct leme_public_text text = {0};
+      struct leme_public_id id = {0};
+      uint16_t slot = 0;
+      valid = leme_public_as_text(leme_public_get(view, LEME_PUBLIC_TEXT("id")),
+                                  &text) == LEME_PUBLIC_OK &&
+              leme_public_parse_id(model, LEME_PUBLIC_VIEW, text, &id, &slot);
+      if (!valid) {
+        break;
+      }
+      struct leme_control_intent *intent = &out->intents[i];
+      intent->opcode = LEME_CONTROL_OP_SET_MINIMIZED;
+      intent->args = value;
+      set_target_id(account, intent, LEME_PUBLIC_VIEW, id, 0, text);
+      valid = intent->effective_id.data != NULL &&
+              intent->requested_count == 1 &&
+              intent->requested_targets[0].data != NULL;
+    }
+    leme_control_free(selected);
+    const struct leme_public_value *roots[] = {value};
+    if (!valid || leme_public_builder_seal(b, roots, 1) != LEME_PUBLIC_OK) {
+      leme_control_intent_batch_destroy(account, out);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "cannot prepare minimized targets");
+    }
+    return LEME_CONTROL_OK;
+  }
+
+  case LEME_COMMAND_MINIMIZE_VIEW:
   case LEME_COMMAND_TOGGLE_FLOATING: {
     if (!has_focused_view) {
       leme_public_builder_destroy(b);
@@ -581,17 +787,32 @@ enum leme_control_code leme_control_command_lower(
       return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
                                  "out of memory");
     }
-    intents[0].opcode = LEME_CONTROL_OP_SET_FLOATING;
+    intents[0].opcode = cmd.type == LEME_COMMAND_MINIMIZE_VIEW
+                            ? LEME_CONTROL_OP_SET_MINIMIZED
+                            : LEME_CONTROL_OP_SET_FLOATING;
     set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id, 0,
                   focused_view_id_text);
     struct leme_public_value *val = NULL;
-    leme_public_boolean(b, !focused_view_floating, &val);
-    intents[0].args = val;
-    const struct leme_public_value *roots[1] = {val};
-    leme_public_builder_seal(b, roots, 1);
+    const bool state =
+        cmd.type == LEME_COMMAND_MINIMIZE_VIEW || !focused_view_floating;
     out->intents = intents;
     out->count = 1;
     out->builder = b;
+    if (leme_public_boolean(b, state, &val) != LEME_PUBLIC_OK ||
+        intents[0].effective_id.data == NULL ||
+        intents[0].requested_count != 1 ||
+        intents[0].requested_targets[0].data == NULL) {
+      leme_control_intent_batch_destroy(account, out);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "out of memory");
+    }
+    intents[0].args = val;
+    const struct leme_public_value *roots[1] = {val};
+    if (leme_public_builder_seal(b, roots, 1) != LEME_PUBLIC_OK) {
+      leme_control_intent_batch_destroy(account, out);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "out of memory");
+    }
     return LEME_CONTROL_OK;
   }
 
@@ -1384,6 +1605,51 @@ enum leme_control_code leme_control_command_lower(
     if (cmd.text != NULL) {
       free(cmd.text);
       cmd.text = NULL;
+    }
+    intents[0].args = c_args;
+    const struct leme_public_value *roots[1] = {c_args};
+    leme_public_builder_seal(b, roots, 1);
+    out->intents = intents;
+    out->count = 1;
+    out->builder = b;
+    return LEME_CONTROL_OK;
+  }
+
+  case LEME_COMMAND_SNAP:
+  case LEME_COMMAND_PLACE:
+  case LEME_COMMAND_WINDOW_MENU:
+  case LEME_COMMAND_SHOW_DESKTOP:
+  case LEME_COMMAND_FOCUS_CYCLE:
+  case LEME_COMMAND_FOCUS_DESKTOP:
+  case LEME_COMMAND_DESKTOP_MENU:
+  case LEME_COMMAND_GRID_OPEN:
+  case LEME_COMMAND_GRID_TRASH:
+  case LEME_COMMAND_GRID_RENAME:
+  case LEME_COMMAND_GRID_NEW_FOLDER:
+  case LEME_COMMAND_GRID_SELECT_ALL:
+  case LEME_COMMAND_GRID_CLEAR:
+  case LEME_COMMAND_GRID_SELECT: {
+    const bool needs_view = cmd.type == LEME_COMMAND_SNAP ||
+                            cmd.type == LEME_COMMAND_PLACE ||
+                            cmd.type == LEME_COMMAND_WINDOW_MENU;
+    if (needs_view && !has_focused_view) {
+      leme_public_builder_destroy(b);
+      return set_preflight_error(error, LEME_CONTROL_NOT_FOUND,
+                                 "no focused view");
+    }
+    struct leme_control_intent *intents = alloc_intents(account, 1);
+    struct leme_public_value *c_args = NULL;
+    if (intents == NULL ||
+        forward_argv(b, name, argv, &c_args) != LEME_CONTROL_OK) {
+      leme_control_free(intents);
+      leme_public_builder_destroy(b);
+      return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
+                                 "out of memory");
+    }
+    intents[0].opcode = LEME_CONTROL_OP_COMMAND;
+    if (needs_view) {
+      set_target_id(account, &intents[0], LEME_PUBLIC_VIEW, focused_view_id, 0,
+                    focused_view_id_text);
     }
     intents[0].args = c_args;
     const struct leme_public_value *roots[1] = {c_args};

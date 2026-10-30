@@ -1,13 +1,18 @@
 #include "render/render.h"
+#include "desktop/decoration.h"
+#include "desktop/frame.h"
+#include "desktop/buttons.h"
 #include "public/server.h"
 
 #include "config/config.h"
+#include "config/style.h"
 #include "core/server.h"
 #include "output/output.h"
 #include "protocols/capture.h"
 #include "protocols/session.h"
 #include "shell/rules.h"
 #include "shell/view.h"
+#include "shell/container.h"
 #include "workspace/tag.h"
 #include "render/workspace_transition.h"
 
@@ -18,9 +23,18 @@
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
+#include <wlr/util/edges.h>
 #include <wlr/util/transform.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/xwayland/xwayland.h>
+
+void leme_render_view_identify(struct leme_view *view) {
+  view->render_owner = (struct leme_render_owner){
+      .kind = LEME_RENDER_OWNER_VIEW, .value.view = view};
+  if (view->render_tree != NULL) {
+    view->render_tree->node.data = &view->render_owner;
+  }
+}
 
 static struct wlr_scene_tree *
 leme_render_view_parent(const struct leme_view *view) {
@@ -35,7 +49,8 @@ leme_render_view_parent(const struct leme_view *view) {
                                LEME_FULLSCREEN_COVERS_NONE)) {
     return view->server->scene_fullscreen;
   }
-  return view->floating || view->detached || view->fullscreen
+  return leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
+                 view->detached || view->fullscreen
              ? view->server->scene_floating
              : view->server->scene_tiled;
 }
@@ -78,6 +93,7 @@ struct leme_render_view_state {
   struct leme_view *view;
   struct wl_list roots;
   struct wlr_box clip;
+  struct wlr_box surface_clip;
   bool clip_applied;
 };
 
@@ -88,6 +104,7 @@ struct leme_render_view_content_base {
   int width;
   int height;
   float opacity;
+  float color[4];
   bool enabled;
   int root_x;
   int root_y;
@@ -108,12 +125,14 @@ struct leme_render_view_animation {
   struct wlr_scene_tree *root;
   struct leme_render_view_frame_nodes nodes;
   struct wl_array content_bases;
+  struct wl_array decoration_bases;
   float border_color[4][4];
   int border_width;
   int final_content_width;
   int final_content_height;
   bool restore_on_done;
   bool moving;
+  bool flying;
   struct leme_box current;
   struct leme_render_view_copy redrawn;
 };
@@ -138,7 +157,9 @@ static void leme_render_view_untrack_root(struct leme_view *view,
 static void leme_render_view_tracking_finish(struct leme_view *view);
 static void leme_render_view_apply_surface_effects(struct leme_view *view,
                                                    int corner_radius,
-                                                   int border_width, int blur);
+                                                   int border_width, int blur,
+                                                   struct leme_box content,
+                                                   int titlebar);
 
 void leme_render_view_create(struct leme_view *view) {
   static const float fallback[4] = {0.16f, 0.42f, 0.72f, 1.0f};
@@ -156,7 +177,7 @@ void leme_render_view_create(struct leme_view *view) {
   if (view->render_tree == NULL) {
     return;
   }
-  view->render_tree->node.data = view;
+  leme_render_view_identify(view);
   for (index = 0; index < LEME_ARRAY_LENGTH(view->border); index++) {
     view->border[index] =
         wlr_scene_rect_create(view->render_tree, 1, 1, border_color);
@@ -203,6 +224,7 @@ static bool leme_render_view_animation_allowed(const struct leme_view *view) {
    * pode acrescentar um instantâneo de janela por cima da composição da
    * área de trabalho. */
   return !view->unmanaged && !view->fullscreen &&
+         !leme_view_is_minimized(view) &&
          !leme_render_workspace_transition_hides_view(view) &&
          (view->server->session_protocols == NULL ||
           !view->server->session_protocols->locked);
@@ -216,7 +238,8 @@ static void leme_render_view_start_open(struct leme_view *view) {
   /* O estado pode ter mudado enquanto esperávamos pela confirmação. */
   leme_render_view_sync_presentation(view);
   if (!leme_render_view_animation_allowed(view)) {
-    wlr_scene_node_set_enabled(&view->render_tree->node, true);
+    wlr_scene_node_set_enabled(&view->render_tree->node,
+                               !leme_view_is_minimized(view));
     return;
   }
   wlr_scene_node_set_enabled(&view->render_tree->node, false);
@@ -231,7 +254,8 @@ static int leme_render_view_handle_open_timeout(void *data) {
   leme_render_view_cancel_open_timeout(view);
   if (view->render_tree != NULL) {
     leme_render_view_sync_presentation(view);
-    wlr_scene_node_set_enabled(&view->render_tree->node, true);
+    wlr_scene_node_set_enabled(&view->render_tree->node,
+                               !leme_view_is_minimized(view));
   }
   return 0;
 }
@@ -272,7 +296,8 @@ void leme_render_view_animate(struct leme_view *view,
                                        view->animation_state);
   }
   leme_render_view_cancel_open_timeout(view);
-  if (!leme_render_view_animation_allowed(view) ||
+  if ((event == LEME_ANIMATION_OPEN && leme_container_for_view(view) != NULL) ||
+      !leme_render_view_animation_allowed(view) ||
       !view->render_tree->node.enabled) {
     return;
   }
@@ -327,6 +352,7 @@ void leme_render_view_destroy(struct leme_view *view) {
   }
   leme_render_view_cancel_open_timeout(view);
   leme_capture_invalidate_view(view);
+  leme_desk_decoration_view_finish(view);
   leme_render_view_tracking_finish(view);
   if (view->kind == LEME_VIEW_XDG && view->xdg_toplevel != NULL) {
     view->xdg_toplevel->base->data = NULL;
@@ -435,8 +461,12 @@ void leme_render_view_popup_destroy(struct leme_view_popup *popup) {
 }
 
 void leme_render_set_view_visible(struct leme_view *view, bool visible) {
+  if (!visible || leme_view_is_minimized(view)) {
+    leme_desk_buttons_invalidate_view(view);
+  }
   if (view->render_tree != NULL) {
-    wlr_scene_node_set_enabled(&view->render_tree->node, visible);
+    wlr_scene_node_set_enabled(&view->render_tree->node,
+                               visible && !leme_view_is_minimized(view));
   }
   leme_render_view_sync_presentation(view);
   leme_session_refresh_idle_inhibitors(view->server);
@@ -498,6 +528,30 @@ static int leme_render_view_border_width(const struct leme_view *view,
                                        frame);
 }
 
+uint32_t leme_render_view_resize_edges(const struct leme_view *view, double lx,
+                                       double ly) {
+  if (!leme_desk_decoration_eligible(view) ||
+      !leme_ownership_hit_test_eligible(view) || leme_view_is_maximized(view) ||
+      view->render_tree == NULL || leme_render_view_presentation_hidden(view)) {
+    return WLR_EDGE_NONE;
+  }
+  const struct leme_output *output = leme_view_output(view);
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  int x = 0;
+  int y = 0;
+  if (output == NULL || output->wlr_output == NULL ||
+      !output->wlr_output->enabled || output->tags.focused_is_candidate ||
+      output->tags.focused_id != tag->id ||
+      !wlr_scene_node_coords(&view->render_tree->node, &x, &y)) {
+    return WLR_EDGE_NONE;
+  }
+  struct leme_box frame = view->box;
+  frame.x = x;
+  frame.y = y;
+  return leme_desk_decoration_resize_edges(
+      frame, leme_render_view_border_width(view, frame), lx, ly);
+}
+
 /* A visibilidade da moldura respeita a espessura, regras e efeitos. */
 static bool leme_render_view_border_shown(const struct leme_view *view,
                                           size_t index) {
@@ -543,6 +597,13 @@ void leme_render_view_sync_presentation(struct leme_view *view) {
   leme_render_view_apply_cached_opacity(view);
   if (view == NULL) {
     return;
+  }
+  struct wlr_scene_tree *decoration = leme_desk_decoration_tree(view);
+  if (decoration != NULL) {
+    wlr_scene_node_set_enabled(
+        &decoration->node,
+        !hidden && leme_desk_decoration_eligible(view) &&
+            leme_desk_decoration_height(view, view->box) > 0);
   }
   for (index = 0; index < LEME_ARRAY_LENGTH(view->border); index++) {
     if (view->border[index] != NULL) {
@@ -823,11 +884,238 @@ float leme_render_view_opacity(const struct leme_config *config, bool activated,
   return (float)(activated ? config->opacity_active : config->opacity_inactive);
 }
 
-void leme_render_view_focus(struct leme_view *view) {
+struct leme_render_view_stack_entry {
+  struct leme_view *view;
+  struct leme_render_view_stack_entry *parent;
+  struct leme_render_view_stack_entry *preferred;
+  struct leme_render_view_stack_entry *previous;
+  size_t cursor;
+};
+
+static bool leme_render_view_transient_of(const struct leme_view *child,
+                                          const struct leme_view *parent) {
+  if (child == parent || child->kind != parent->kind) {
+    return false;
+  }
+  if (child->kind == LEME_VIEW_XDG) {
+    return child->xdg_toplevel != NULL && parent->xdg_toplevel != NULL &&
+           child->xdg_toplevel->parent == parent->xdg_toplevel;
+  }
+  return child->xwayland_surface != NULL && parent->xwayland_surface != NULL &&
+         child->xwayland_surface->parent == parent->xwayland_surface;
+}
+
+static bool leme_render_view_stack_eligible(const struct leme_view *candidate,
+                                            const struct leme_view *view) {
+  return candidate->mapped && !candidate->unmanaged &&
+         candidate->render_tree != NULL &&
+         leme_ownership_tag(candidate) == leme_ownership_tag(view) &&
+         candidate->render_tree->node.parent == view->render_tree->node.parent;
+}
+
+static void leme_render_view_stack_node(struct wlr_scene_node *node,
+                                        struct wlr_scene_node **above) {
+  if (*above == NULL) {
+    wlr_scene_node_raise_to_top(node);
+  } else {
+    wlr_scene_node_place_below(node, *above);
+  }
+  *above = node;
+}
+
+static void leme_render_view_stack_place(struct leme_view *view,
+                                         struct wlr_scene_node **above) {
+  const struct leme_render_view_animation *animation = view->animation_state;
+  struct wlr_scene_tree *layer = view->render_tree->node.parent;
+  if (animation != NULL) {
+    if (animation->redrawn.root != NULL &&
+        animation->redrawn.root->node.parent == layer) {
+      leme_render_view_stack_node(&animation->redrawn.root->node, above);
+    }
+    if (animation->root != NULL && animation->root->node.parent == layer) {
+      leme_render_view_stack_node(&animation->root->node, above);
+    }
+  }
+  leme_render_view_stack_node(&view->render_tree->node, above);
+}
+
+struct wlr_scene_node *
+leme_render_view_stack_above(struct leme_view *view,
+                             struct wlr_scene_node *anchor) {
+  const struct leme_render_view_animation *animation = view->animation_state;
+  wlr_scene_node_place_above(&view->render_tree->node, anchor);
+  anchor = &view->render_tree->node;
+  if (animation != NULL) {
+    struct wlr_scene_tree *copies[] = {animation->root,
+                                       animation->redrawn.root};
+    for (size_t i = 0; i < LEME_ARRAY_LENGTH(copies); i++) {
+      if (copies[i] != NULL && copies[i]->node.parent == anchor->parent) {
+        wlr_scene_node_place_above(&copies[i]->node, anchor);
+        anchor = &copies[i]->node;
+      }
+    }
+  }
+  return anchor;
+}
+
+bool leme_render_view_owns_node(const struct leme_view *view,
+                                const struct wlr_scene_node *node) {
+  const struct leme_render_view_animation *animation = view->animation_state;
+  return node == &view->render_tree->node ||
+         (animation != NULL &&
+          ((animation->root != NULL && node == &animation->root->node) ||
+           (animation->redrawn.root != NULL &&
+            node == &animation->redrawn.root->node)));
+}
+
+static void leme_render_view_stack(struct leme_view *view, bool raise) {
   if (view == NULL || view->render_tree == NULL) {
     return;
   }
-  wlr_scene_node_raise_to_top(&view->render_tree->node);
+  struct leme_container *container = leme_container_for_view(view);
+  if (container != NULL) {
+    leme_render_container_restack(container, raise);
+    return;
+  }
+  struct wlr_scene_node *above = NULL;
+  if (view->server == NULL || view->server->views.next == NULL ||
+      !view->mapped || view->unmanaged || leme_ownership_tag(view) == NULL) {
+    if (raise) {
+      leme_render_view_stack_place(view, &above);
+    }
+    return;
+  }
+  size_t capacity = 0;
+  bool related = false;
+  struct leme_view *candidate;
+  wl_list_for_each(candidate, &view->server->views, link) {
+    if (leme_render_view_stack_eligible(candidate, view)) {
+      capacity++;
+      related = related || leme_render_view_transient_of(candidate, view) ||
+                leme_render_view_transient_of(view, candidate);
+    }
+  }
+  if (!related) {
+    if (raise) {
+      leme_render_view_stack_place(view, &above);
+    }
+    return;
+  }
+  if (capacity > SIZE_MAX / sizeof(struct leme_render_view_stack_entry)) {
+    return;
+  }
+  struct leme_render_view_stack_entry *entries =
+      calloc(capacity, sizeof(*entries));
+  if (entries == NULL) {
+    wlr_log(WLR_ERROR, "%s",
+            "leme: could not allocate transient stacking order");
+    return;
+  }
+  struct leme_render_view_stack_entry *root = NULL;
+  struct leme_render_view_stack_entry *focused = NULL;
+  struct wlr_scene_node *node;
+  size_t count = 0;
+  wl_list_for_each(node, &view->render_tree->node.parent->children, link) {
+    wl_list_for_each(candidate, &view->server->views, link) {
+      if (leme_render_view_stack_eligible(candidate, view) &&
+          node == &candidate->render_tree->node && count < capacity) {
+        entries[count].view = candidate;
+        if (candidate == view) {
+          root = &entries[count];
+        }
+        if (candidate == view->server->focused_view) {
+          focused = &entries[count];
+        }
+        count++;
+        break;
+      }
+    }
+  }
+  if (root == NULL) {
+    free(entries);
+    return;
+  }
+  for (size_t i = 0; i < count; i++) {
+    for (size_t j = 0; j < count; j++) {
+      if (leme_render_view_transient_of(entries[i].view, entries[j].view)) {
+        entries[i].parent = &entries[j];
+        break;
+      }
+    }
+  }
+  for (size_t depth = 0; root->parent != NULL && depth < count; depth++) {
+    if (raise) {
+      root->parent->preferred = root;
+    }
+    root = root->parent;
+  }
+  if (root->parent != NULL) {
+    free(entries);
+    return;
+  }
+  if (!raise && focused != NULL) {
+    struct leme_render_view_stack_entry *ancestor = focused;
+    for (size_t depth = 0; ancestor->parent != NULL && depth < count; depth++) {
+      ancestor = ancestor->parent;
+    }
+    if (ancestor == root) {
+      while (focused->parent != NULL) {
+        focused->parent->preferred = focused;
+        focused = focused->parent;
+      }
+    }
+  }
+  struct leme_render_view_stack_entry *current = root;
+  struct leme_render_view_stack_entry *last = root;
+  while (current != NULL) {
+    struct leme_render_view_stack_entry *child = NULL;
+    while (current->cursor < count) {
+      struct leme_render_view_stack_entry *next = &entries[current->cursor++];
+      if (next->parent == current && next != current->preferred) {
+        child = next;
+        break;
+      }
+    }
+    if (child == NULL && current->preferred != NULL) {
+      child = current->preferred;
+      current->preferred = NULL;
+    }
+    if (child == NULL) {
+      current = current->parent;
+    } else {
+      child->previous = last;
+      last = child;
+      current = child;
+    }
+  }
+  if (!raise) {
+    wl_list_for_each_reverse(node, &view->render_tree->node.parent->children,
+                             link) {
+      bool member = false;
+      for (current = last; current != NULL; current = current->previous) {
+        if (leme_render_view_owns_node(current->view, node)) {
+          member = true;
+          break;
+        }
+      }
+      if (member) {
+        break;
+      }
+      above = node;
+    }
+  }
+  for (current = last; current != NULL; current = current->previous) {
+    leme_render_view_stack_place(current->view, &above);
+  }
+  free(entries);
+}
+
+void leme_render_view_focus(struct leme_view *view) {
+  leme_render_view_stack(view, true);
+}
+
+void leme_render_view_restack(struct leme_view *view) {
+  leme_render_view_stack(view, false);
 }
 
 void leme_render_view_update_layer(struct leme_view *view) {
@@ -835,6 +1123,7 @@ void leme_render_view_update_layer(struct leme_view *view) {
 
   if (view->render_tree != NULL && view->render_tree->node.parent != parent) {
     wlr_scene_node_reparent(&view->render_tree->node, parent);
+    leme_render_view_focus(view);
   }
   leme_render_sync_durable(view->server);
 }
@@ -873,13 +1162,38 @@ void leme_render_apply_fullscreen_coverage(struct leme_server *server) {
  * O raio nunca passa de metade do lado mais curto: acima disso a caixa com
  * sinal inverte-se e o canto deixa de fechar.
  */
+static const struct leme_titlebar_style *
+leme_render_view_titlebar(const struct leme_view *view,
+                          struct leme_titlebar_style *style) {
+  if (view == NULL || view->server == NULL || view->server->config == NULL) {
+    return NULL;
+  }
+  leme_desk_style_titlebar(view->server->config, style);
+  return style;
+}
+
+static const struct leme_titlebar_style *leme_render_view_animation_titlebar(
+    const struct leme_render_view_animation *state,
+    struct leme_titlebar_style *style) {
+  const struct leme_server *server = state->view != NULL ? state->view->server
+                                     : state->output != NULL
+                                         ? state->output->server
+                                         : NULL;
+  if (server == NULL || server->config == NULL) {
+    return NULL;
+  }
+  leme_desk_style_titlebar(server->config, style);
+  return style;
+}
+
 int leme_render_view_corner_radius(const struct leme_view *view,
                                    struct leme_box frame) {
   int limit;
 
   /* A animação de fecho sobrevive à vista e continua a pedir o raio. */
   if (view == NULL || view->fullscreen || view->unmanaged ||
-      view->server == NULL || view->server->config == NULL) {
+      view->server == NULL || view->server->config == NULL ||
+      view->container != NULL || leme_view_is_maximized(view)) {
     return 0;
   }
   limit = frame.width < frame.height ? frame.width : frame.height;
@@ -904,14 +1218,44 @@ int leme_render_view_blur(const struct leme_view *view) {
   return view->server->config->blur;
 }
 
+struct leme_box
+leme_render_view_content_box_for_state(const struct leme_view *view,
+                                       struct leme_box frame, bool fullscreen) {
+  if (view == NULL || view->server == NULL || view->server->config == NULL ||
+      view->unmanaged || fullscreen || frame.width <= 0 || frame.height <= 0) {
+    return frame;
+  }
+  const int border =
+      leme_render_view_clamp_border(view->server->config->border_width, frame);
+  struct leme_desk_decoration_boxes boxes = {0};
+  if (view->server->desk_decorations_ready && view->desk_decoration != NULL &&
+      leme_desk_decoration_eligible_for_state(view, fullscreen) &&
+      leme_desk_decoration_geometry(
+          frame, border, leme_desk_style_titlebar_height(view->server->config),
+          leme_desk_style_button_width(view->server->config), &boxes)) {
+    return boxes.content;
+  }
+  frame.x = leme_render_saturate_coordinate((int64_t)frame.x + border);
+  frame.y = leme_render_saturate_coordinate((int64_t)frame.y + border);
+  frame.width -= border * 2;
+  frame.height -= border * 2;
+  return frame;
+}
+
 struct leme_box leme_render_view_content_box(const struct leme_view *view,
                                              struct leme_box frame) {
-  int border_width = leme_render_view_border_width(view, frame);
-
-  frame.x += border_width;
-  frame.y += border_width;
+  if (frame.width < 1 || frame.height < 1) {
+    frame.width = 0;
+    frame.height = 0;
+    return frame;
+  }
+  const int border_width = leme_render_view_border_width(view, frame);
+  const int titlebar_height = leme_desk_decoration_height(view, frame);
+  frame.x = leme_render_saturate_coordinate((int64_t)frame.x + border_width);
+  frame.y = leme_render_saturate_coordinate((int64_t)frame.y + border_width +
+                                            titlebar_height);
   frame.width -= border_width * 2;
-  frame.height -= border_width * 2;
+  frame.height -= border_width * 2 + titlebar_height;
   return frame;
 }
 
@@ -941,9 +1285,9 @@ leme_render_view_buffer_geometry(const struct wlr_scene_buffer *buffer) {
   return geometry;
 }
 
-static bool leme_render_view_collect_content(struct wl_array *bases,
-                                             struct wlr_scene_tree *tree,
-                                             int origin_x, int origin_y) {
+bool leme_render_view_collect_content(struct wl_array *bases,
+                                      struct wlr_scene_tree *tree, int origin_x,
+                                      int origin_y) {
   struct wlr_scene_node *node;
 
   if (tree == NULL) {
@@ -972,6 +1316,10 @@ static bool leme_render_view_collect_content(struct wl_array *bases,
 
       base->width = rect->width;
       base->height = rect->height;
+      for (size_t component = 0; component < LEME_ARRAY_LENGTH(base->color);
+           component++) {
+        base->color[component] = rect->color[component];
+      }
     } else if (node->type == WLR_SCENE_NODE_BUFFER) {
       struct wlr_scene_buffer *buffer = wl_container_of(node, buffer, node);
 
@@ -1032,13 +1380,10 @@ leme_render_view_apply_content(struct leme_render_view_animation *state,
 }
 
 /* wlr_render_color é pré-multiplicada: o alfa entra nos quatro canais. */
-static void
-leme_render_view_animation_fade(struct leme_render_view_animation *state,
-                                float alpha) {
+void leme_render_view_fade_nodes(struct wl_array *bases, float alpha) {
   struct leme_render_view_content_base *base;
-  size_t index;
 
-  wl_array_for_each(base, &state->content_bases) {
+  wl_array_for_each(base, bases) {
     if (base->node->type == WLR_SCENE_NODE_BUFFER) {
       struct wlr_scene_buffer *buffer =
           wl_container_of(base->node, buffer, node);
@@ -1048,9 +1393,25 @@ leme_render_view_animation_fade(struct leme_render_view_animation *state,
       wlr_scene_buffer_set_backdrop_blur_alpha(
           buffer, alpha > 0.0f ? (alpha < 1.0f ? alpha : 1.0f) : 0.0f);
 #endif
+    } else if (base->node->type == WLR_SCENE_NODE_RECT) {
+      struct wlr_scene_rect *rect = wl_container_of(base->node, rect, node);
+      float color[4] = {0};
+      for (size_t component = 0; component < LEME_ARRAY_LENGTH(color);
+           component++) {
+        color[component] = base->color[component] * alpha;
+      }
+      wlr_scene_rect_set_color(rect, color);
     }
   }
-  for (index = 0; index < LEME_ARRAY_LENGTH(state->nodes.border); index++) {
+}
+
+static void
+leme_render_view_animation_fade(struct leme_render_view_animation *state,
+                                float alpha) {
+  leme_render_view_fade_nodes(&state->content_bases, alpha);
+  leme_render_view_fade_nodes(&state->decoration_bases, alpha);
+  for (size_t index = 0; index < LEME_ARRAY_LENGTH(state->nodes.border);
+       index++) {
     const float color[4] = {
         state->border_color[index][0] * alpha,
         state->border_color[index][1] * alpha,
@@ -1065,6 +1426,50 @@ leme_render_view_animation_fade(struct leme_render_view_animation *state,
   }
 }
 
+static int leme_render_view_frame_titlebar(
+    const struct leme_render_view_frame_nodes *nodes, struct leme_box box,
+    int border_width) {
+  struct leme_desk_decoration_boxes boxes = {0};
+  return nodes->decoration != NULL && nodes->titlebar_height > 0 &&
+                 leme_desk_decoration_geometry(box, border_width,
+                                               nodes->titlebar_height,
+                                               nodes->button_width, &boxes)
+             ? nodes->titlebar_height
+             : 0;
+}
+
+static void leme_render_view_round_content(struct wl_array *bases,
+                                           double ratio_x, double ratio_y,
+                                           struct leme_box content,
+                                           int titlebar) {
+#ifdef LEME_HAVE_EFFECTS
+  struct leme_render_view_content_base *base;
+
+  wl_array_for_each(base, bases) {
+    if (base->node->type != WLR_SCENE_NODE_BUFFER) {
+      continue;
+    }
+    struct wlr_scene_buffer *buffer = wl_container_of(base->node, buffer, node);
+    if (buffer->corner_radius <= 0.0f) {
+      continue;
+    }
+    const struct wlr_box rounded = {
+        .x = -(int)((double)base->root_x * ratio_x),
+        .y = -(int)((double)base->root_y * ratio_y) - titlebar,
+        .width = content.width,
+        .height = content.height + titlebar,
+    };
+    wlr_scene_buffer_set_corner_box(buffer, titlebar > 0 ? &rounded : NULL);
+  }
+#else
+  (void)bases;
+  (void)ratio_x;
+  (void)ratio_y;
+  (void)content;
+  (void)titlebar;
+#endif
+}
+
 static void
 leme_render_view_animation_apply(void *data,
                                  const struct leme_animation_frame *frame) {
@@ -1077,21 +1482,34 @@ leme_render_view_animation_apply(void *data,
   state->current = box;
 
   wlr_scene_node_set_position(&state->root->node, box.x, box.y);
+  struct leme_titlebar_style titlebar_style = {0};
   leme_render_view_layout_frame(
       &state->nodes, box, border_width,
-      leme_render_view_corner_radius(state->view, box));
-  leme_render_view_apply_surface_effects(
-      state->view, leme_render_view_corner_radius(state->view, box),
-      border_width, leme_render_view_blur(state->view));
+      leme_render_view_corner_radius(state->view, box),
+      leme_render_view_animation_titlebar(state, &titlebar_style));
+  const int titlebar =
+      leme_render_view_frame_titlebar(&state->nodes, box, border_width);
+  const struct leme_box content = {
+      .width = box.width - border_width * 2,
+      .height = box.height - border_width * 2 - titlebar,
+  };
+  if (state->view != NULL) {
+    const struct leme_box live = state->view->box;
+    leme_render_view_apply_surface_effects(
+        state->view, leme_render_view_corner_radius(state->view, box),
+        border_width, leme_render_view_blur(state->view),
+        leme_render_view_content_box(state->view, live),
+        leme_desk_decoration_height(state->view, live));
+  }
   if (state->final_content_width > 0) {
-    ratio_x = (double)(box.width - border_width * 2) /
-              (double)state->final_content_width;
+    ratio_x = (double)content.width / (double)state->final_content_width;
   }
   if (state->final_content_height > 0) {
-    ratio_y = (double)(box.height - border_width * 2) /
-              (double)state->final_content_height;
+    ratio_y = (double)content.height / (double)state->final_content_height;
   }
   leme_render_view_apply_content(state, ratio_x, ratio_y);
+  leme_render_view_round_content(&state->content_bases, ratio_x, ratio_y,
+                                 content, titlebar);
   leme_render_view_animation_fade(state, (float)frame->opacity);
 }
 
@@ -1099,9 +1517,11 @@ static void leme_render_view_animation_done(void *data) {
   struct leme_render_view_animation *state = data;
 
   wl_array_release(&state->content_bases);
+  wl_array_release(&state->decoration_bases);
   if (state->view != NULL) {
     if (state->restore_on_done && state->view->render_tree != NULL) {
-      wlr_scene_node_set_enabled(&state->view->render_tree->node, true);
+      wlr_scene_node_set_enabled(&state->view->render_tree->node,
+                                 !leme_view_is_minimized(state->view));
     }
     state->view->animation_state = NULL;
   }
@@ -1112,13 +1532,17 @@ static void leme_render_view_animation_done(void *data) {
  * A cópia preserva a ordem dos filhos: as quatro molduras vêm primeiro e a
  * árvore do conteúdo a seguir.
  */
-static void leme_render_view_frame_from_snapshot(
-    struct wlr_scene_tree *snapshot,
-    struct leme_render_view_frame_nodes *nodes) {
+static void
+leme_render_view_frame_from_snapshot(struct wlr_scene_tree *snapshot,
+                                     struct leme_render_view_frame_nodes *nodes,
+                                     const struct leme_view *view) {
   struct wlr_scene_node *node;
   size_t borders = 0;
 
-  *nodes = (struct leme_render_view_frame_nodes){0};
+  *nodes = (struct leme_render_view_frame_nodes){
+      .titlebar_height = leme_desk_decoration_height(view, view->box),
+      .button_width = leme_desk_style_button_width(view->server->config),
+  };
   wl_list_for_each(node, &snapshot->children, link) {
     if (node->type == WLR_SCENE_NODE_RECT &&
         borders < LEME_ARRAY_LENGTH(nodes->border)) {
@@ -1129,6 +1553,19 @@ static void leme_render_view_frame_from_snapshot(
       struct wlr_scene_tree *tree = wl_container_of(node, tree, node);
 
       nodes->content = tree;
+    } else if (node->type == WLR_SCENE_NODE_TREE && nodes->decoration == NULL &&
+               nodes->titlebar_height > 0) {
+      struct wlr_scene_tree *tree = wl_container_of(node, tree, node);
+      nodes->decoration = tree;
+      struct wlr_scene_node *child = NULL;
+      wl_list_for_each(child, &tree->children, link) {
+        if (child->type == WLR_SCENE_NODE_RECT) {
+          const struct wlr_scene_rect *background =
+              wl_container_of(child, background, node);
+          nodes->titlebar_width = background->width;
+          break;
+        }
+      }
     }
   }
 }
@@ -1155,10 +1592,11 @@ void leme_render_view_apply_snapshot(const struct leme_view *view,
   } else {
     opacity = view->render_opacity;
   }
-  wlr_scene_node_for_each_buffer(&snapshot->node,
-                                 leme_render_view_apply_opacity, &opacity);
-
-  leme_render_view_frame_from_snapshot(snapshot, &nodes);
+  leme_render_view_frame_from_snapshot(snapshot, &nodes, view);
+  if (nodes.content != NULL) {
+    wlr_scene_node_for_each_buffer(&nodes.content->node,
+                                   leme_render_view_apply_opacity, &opacity);
+  }
   for (index = 0; index < LEME_ARRAY_LENGTH(nodes.border); index++) {
     if (nodes.border[index] != NULL && view->border[index] != NULL) {
       bool shown = leme_render_view_border_shown(view, index);
@@ -1213,25 +1651,16 @@ leme_render_view_animation_spec(struct leme_box final,
   };
 }
 
-static void
-leme_render_view_animation_begin(struct leme_view *view,
-                                 const struct leme_animation_settings *settings,
-                                 bool opening) {
-  struct leme_render_view_animation *state;
-  struct leme_animation_spec spec;
-  struct leme_animation_subject subject;
-  struct leme_box content;
-  size_t index;
-
-  if (settings->effects == 0) {
-    goto abandon;
-  }
-  state = calloc(1, sizeof(*state));
+static struct leme_render_view_animation *
+leme_render_view_animation_capture(struct leme_view *view) {
+  struct leme_render_view_animation *state = calloc(1, sizeof(*state));
   if (state == NULL) {
-    goto abandon;
+    return NULL;
   }
-  content = leme_render_view_content_box(view, view->box);
+  const struct leme_box content = leme_render_view_content_box(view, view->box);
+  size_t index;
   wl_array_init(&state->content_bases);
+  wl_array_init(&state->decoration_bases);
   state->view = view;
   state->output = leme_view_is_shown_scratchpad(view) &&
                           view->server->scratchpads.shown == view
@@ -1240,16 +1669,17 @@ leme_render_view_animation_begin(struct leme_view *view,
                                  leme_ownership_tag(view)->owner == NULL
                              ? NULL
                              : leme_ownership_tag(view)->owner->output);
-  state->restore_on_done = opening;
   state->border_width = leme_render_view_border_width(view, view->box);
   state->final_content_width = content.width;
   state->final_content_height = content.height;
   state->root =
       leme_animation_snapshot(view->render_tree, leme_render_view_parent(view));
   if (state->root != NULL) {
-    leme_render_view_frame_from_snapshot(state->root, &state->nodes);
+    leme_render_view_frame_from_snapshot(state->root, &state->nodes, view);
     if (leme_render_view_collect_content(&state->content_bases,
-                                         state->nodes.content, 0, 0)) {
+                                         state->nodes.content, 0, 0) &&
+        leme_render_view_collect_content(&state->decoration_bases,
+                                         state->nodes.decoration, 0, 0)) {
       for (index = 0; index < LEME_ARRAY_LENGTH(state->nodes.border); index++) {
         if (state->nodes.border[index] != NULL) {
           for (size_t component = 0;
@@ -1265,9 +1695,26 @@ leme_render_view_animation_begin(struct leme_view *view,
       state->root = NULL;
     }
   }
+  return state;
+}
+
+static void
+leme_render_view_animation_begin(struct leme_view *view,
+                                 const struct leme_animation_settings *settings,
+                                 bool opening) {
+  if (settings->effects == 0) {
+    goto abandon;
+  }
+  struct leme_render_view_animation *state =
+      leme_render_view_animation_capture(view);
+  if (state == NULL) {
+    goto abandon;
+  }
+  state->restore_on_done = opening;
   view->animation_state = state;
-  spec = leme_render_view_animation_spec(view->box, settings, opening);
-  subject = (struct leme_animation_subject){
+  const struct leme_animation_spec spec =
+      leme_render_view_animation_spec(view->box, settings, opening);
+  const struct leme_animation_subject subject = {
       .data = state,
       .owner = state->output,
       .apply = leme_render_view_animation_apply,
@@ -1279,7 +1726,8 @@ leme_render_view_animation_begin(struct leme_view *view,
 
 abandon:
   if (opening && view->render_tree != NULL) {
-    wlr_scene_node_set_enabled(&view->render_tree->node, true);
+    wlr_scene_node_set_enabled(&view->render_tree->node,
+                               !leme_view_is_minimized(view));
   }
 }
 
@@ -1305,20 +1753,25 @@ leme_render_view_committed_content(const struct leme_view *view,
   return content;
 }
 
-static bool leme_render_view_move_ready(void *data) {
-  const struct leme_render_view_animation *state = data;
-  const struct leme_view *view = state->view;
+bool leme_render_view_move_settled(const struct leme_view *view) {
   const struct wlr_xdg_surface *base;
 
+  if (view != NULL && view->configure_dirty) {
+    return false;
+  }
   if (view == NULL || view->kind != LEME_VIEW_XDG ||
       view->xdg_toplevel == NULL || view->xdg_toplevel->base == NULL) {
     return true;
   }
-  if (view->configure_dirty) {
-    return false;
-  }
   base = view->xdg_toplevel->base;
   return base->current.configure_serial >= base->scheduled_serial;
+}
+
+static bool leme_render_view_move_ready(void *data) {
+  const struct leme_render_view_animation *state = data;
+  return state->view != NULL && state->view->container != NULL
+             ? leme_render_container_ready(state->view->container)
+             : leme_render_view_move_settled(state->view);
 }
 
 static void leme_render_view_copy_crop(struct leme_render_view_copy *copy,
@@ -1355,11 +1808,12 @@ static void leme_render_view_copy_crop(struct leme_render_view_copy *copy,
                                  top - base->root_y, visible_width,
                                  visible_height);
 #ifdef LEME_HAVE_EFFECTS
+      const int titlebar = copy->nodes.titlebar_height;
       wlr_scene_buffer_set_corner_box(buffer, &(struct wlr_box){
                                                   .x = -left,
-                                                  .y = -top,
+                                                  .y = -top - titlebar,
                                                   .width = width,
-                                                  .height = height,
+                                                  .height = height + titlebar,
                                               });
 #endif
     }
@@ -1388,7 +1842,7 @@ leme_render_view_move_capture(struct leme_render_view_animation *state) {
   }
   leme_render_view_apply_snapshot(view, copy->root,
                                   view == view->server->focused_view);
-  leme_render_view_frame_from_snapshot(copy->root, &copy->nodes);
+  leme_render_view_frame_from_snapshot(copy->root, &copy->nodes, view);
   if (!leme_render_view_collect_content(&copy->content_bases,
                                         copy->nodes.content, 0, 0)) {
     leme_animation_snapshot_destroy(copy->root);
@@ -1407,7 +1861,9 @@ leme_render_view_move_apply(void *data,
   const int border_width =
       leme_render_view_clamp_border(state->border_width, box);
   const int width = box.width - border_width * 2;
-  const int height = box.height - border_width * 2;
+  const int height =
+      box.height - border_width * 2 -
+      leme_render_view_frame_titlebar(&state->nodes, box, border_width);
   struct leme_render_view_copy original = {
       .root = state->root,
       .nodes = state->nodes,
@@ -1444,9 +1900,11 @@ leme_render_view_move_apply(void *data,
   }
   wlr_scene_node_set_enabled(&shown->root->node, true);
   wlr_scene_node_set_position(&shown->root->node, box.x, box.y);
+  struct leme_titlebar_style titlebar_style = {0};
   leme_render_view_layout_frame(
       &shown->nodes, box, border_width,
-      leme_render_view_corner_radius(state->view, box));
+      leme_render_view_corner_radius(state->view, box),
+      leme_render_view_animation_titlebar(state, &titlebar_style));
   leme_render_view_copy_crop(shown, width, height);
 }
 
@@ -1459,6 +1917,7 @@ static void leme_render_view_move_done(void *data) {
     wl_array_release(&state->redrawn.content_bases);
   }
   wl_array_release(&state->content_bases);
+  wl_array_release(&state->decoration_bases);
   if (view != NULL) {
     view->animation_state = NULL;
     leme_render_view_sync_presentation(view);
@@ -1466,19 +1925,37 @@ static void leme_render_view_move_done(void *data) {
         leme_render_view_content_box(view, view->box);
     leme_render_view_apply_surface_effects(
         view, leme_render_view_corner_radius(view, view->box),
-        content.x - view->box.x, leme_render_view_blur(view));
+        content.x - view->box.x, leme_render_view_blur(view), content,
+        leme_desk_decoration_height(view, view->box));
   }
   free(state);
 }
 
 static bool leme_render_view_move_allowed(const struct leme_view *view,
                                           struct leme_box from) {
+  const enum leme_view_geometry_owner owner = leme_view_geometry_owner(view);
+  const struct leme_tag *tag = leme_ownership_tag(view);
   return view->server->config != NULL &&
          view->server->config->animation[LEME_ANIMATION_MOVE].configured &&
          view->mapped && view->render_tree != NULL &&
-         view->render_tree->node.enabled && !view->floating &&
+         view->render_tree->node.enabled &&
+         (owner == LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
+          owner == LEME_VIEW_GEOMETRY_CONTAINER ||
+          (owner == LEME_VIEW_GEOMETRY_FLOATING && tag != NULL &&
+           tag->layout.kind == LEME_LAYOUT_DESKTOP)) &&
          !view->detached && from.width > 0 && from.height > 0 &&
          leme_render_view_animation_allowed(view);
+}
+
+bool leme_render_view_animation_box(const struct leme_view *view,
+                                    struct leme_box *out) {
+  const struct leme_render_view_animation *state =
+      view == NULL ? NULL : view->animation_state;
+  if (state == NULL || !state->moving || out == NULL) {
+    return false;
+  }
+  *out = state->current;
+  return true;
 }
 
 void leme_render_view_finish_move(struct leme_view *view) {
@@ -1532,7 +2009,7 @@ void leme_render_view_move(struct leme_view *view, struct leme_box from,
   if (state->root != NULL) {
     leme_render_view_apply_snapshot(view, state->root,
                                     view == view->server->focused_view);
-    leme_render_view_frame_from_snapshot(state->root, &state->nodes);
+    leme_render_view_frame_from_snapshot(state->root, &state->nodes, view);
     if (leme_render_view_collect_content(&state->content_bases,
                                          state->nodes.content, 0, 0)) {
       for (index = 0; index < LEME_ARRAY_LENGTH(state->nodes.border); index++) {
@@ -1555,19 +2032,11 @@ void leme_render_view_move(struct leme_view *view, struct leme_box from,
 
   const struct leme_animation_settings *settings =
       &view->server->config->animation[LEME_ANIMATION_MOVE];
-  const struct leme_animation_spec spec = {
-      .from = start,
-      .to = to,
-      .from_opacity = 1.0,
-      .to_opacity = 1.0,
-      .duration_ms = settings->duration_ms,
-      .curve = settings->curve,
-      .opacity_curve = settings->curve,
-      .kind = settings->kind,
-      .spring = settings->spring,
-      .hold_max_ms = LEME_ANIMATION_OPEN_TIMEOUT_MS,
-  };
+  struct leme_animation_spec spec =
+      leme_animation_move_spec(settings, start, to, 1.0, 1.0);
+  spec.hold_max_ms = LEME_ANIMATION_OPEN_TIMEOUT_MS;
   const struct leme_animation_subject subject = {
+      .gate = view->container == NULL ? NULL : view->container->animation_gate,
       .data = state,
       .owner = state->output,
       .apply = leme_render_view_move_apply,
@@ -1577,18 +2046,110 @@ void leme_render_view_move(struct leme_view *view, struct leme_box from,
   leme_animation_run(&view->server->animations, state->root, &spec, &subject);
 }
 
+bool leme_render_view_flying(const struct leme_view *view) {
+  const struct leme_render_view_animation *state =
+      view == NULL ? NULL : view->animation_state;
+  return state != NULL && state->flying;
+}
+
+void leme_render_view_fly(struct leme_view *view, struct leme_box from,
+                          struct leme_box to, bool appearing) {
+  if (view == NULL || view->server == NULL || view->render_tree == NULL ||
+      !view->mapped || view->fullscreen || view->unmanaged ||
+      view->server->config == NULL ||
+      !view->server->config->animation[LEME_ANIMATION_MOVE].configured ||
+      leme_render_workspace_transition_hides_view(view) ||
+      (view->server->session_protocols != NULL &&
+       view->server->session_protocols->locked)) {
+    return;
+  }
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  if (tag == NULL || tag->owner == NULL || tag->owner->focused_is_candidate ||
+      tag->id != tag->owner->focused_id) {
+    return;
+  }
+  leme_render_view_finish_animation(view);
+  struct leme_animation_gate *gate = view->container == NULL
+                                         ? leme_animation_gate_create(200)
+                                         : view->container->animation_gate;
+  if (gate == NULL) {
+    return;
+  }
+  struct leme_render_view_animation *state =
+      leme_render_view_animation_capture(view);
+  if (state == NULL) {
+    if (view->container == NULL) {
+      leme_animation_gate_destroy(gate);
+    }
+    return;
+  }
+  state->moving = true;
+  state->flying = true;
+  state->current = from;
+  view->animation_state = state;
+  leme_render_view_sync_presentation(view);
+  const struct leme_animation_settings *settings =
+      &view->server->config->animation[LEME_ANIMATION_MOVE];
+  const struct leme_animation_spec spec = leme_animation_move_spec(
+      settings, from, to, appearing ? 0.0 : 1.0, appearing ? 1.0 : 0.0);
+  const struct leme_animation_subject subject = {
+      .gate = gate,
+      .data = state,
+      .owner = state->output,
+      .apply = leme_render_view_animation_apply,
+      .done = leme_render_view_move_done,
+      .ready = appearing ? leme_render_view_move_ready : NULL};
+  if (state->root != NULL) {
+    const struct leme_animation_frame initial =
+        leme_animation_frame_at(&spec, 0.0, 0.0);
+    leme_render_view_animation_apply(state, &initial);
+  }
+  leme_animation_run(&view->server->animations, state->root, &spec, &subject);
+  if (view->container == NULL) {
+    leme_animation_gate_destroy(gate);
+  }
+}
+
 struct leme_box leme_render_view_frame_box(const struct leme_view *view,
                                            struct leme_box content) {
+  return leme_render_view_frame_box_for_state(view, content,
+                                              view != NULL && view->fullscreen);
+}
+
+struct leme_box
+leme_render_view_frame_box_for_state(const struct leme_view *view,
+                                     struct leme_box content, bool fullscreen) {
   int border_width;
 
-  if (view->fullscreen || view->unmanaged || view->server->config == NULL) {
+  if (view == NULL || view->server == NULL || fullscreen || view->unmanaged ||
+      view->server->config == NULL) {
     return content;
   }
   border_width = view->server->config->border_width;
-  content.x -= border_width;
-  content.y -= border_width;
-  content.width += border_width * 2;
-  content.height += border_width * 2;
+  const bool decorated =
+      view->server->desk_decorations_ready && view->desk_decoration != NULL &&
+      leme_desk_decoration_eligible_for_state(view, fullscreen);
+  content.x =
+      leme_render_saturate_coordinate((int64_t)content.x - border_width);
+  content.y =
+      leme_render_saturate_coordinate((int64_t)content.y - border_width);
+  content.width = leme_render_saturate_coordinate((int64_t)content.width +
+                                                  (int64_t)border_width * 2);
+  content.height = leme_render_saturate_coordinate((int64_t)content.height +
+                                                   (int64_t)border_width * 2);
+  const int titlebar = leme_desk_style_titlebar_height(view->server->config);
+  if (decorated && content.height <= INT_MAX - titlebar &&
+      content.y >= INT_MIN + titlebar) {
+    struct leme_box frame = content;
+    frame.y -= titlebar;
+    frame.height += titlebar;
+    struct leme_desk_decoration_boxes boxes = {0};
+    if (leme_desk_decoration_geometry(
+            frame, border_width, titlebar,
+            leme_desk_style_button_width(view->server->config), &boxes)) {
+      return frame;
+    }
+  }
   return content;
 }
 
@@ -1638,6 +2199,11 @@ struct leme_render_surface_effects {
   struct wlr_surface *surface;
   float radius;
   float blur;
+  int origin_x;
+  int origin_y;
+  int width;
+  int height;
+  int titlebar;
 };
 
 static void leme_render_view_apply_surface_effects_to_buffer(
@@ -1646,8 +2212,6 @@ static void leme_render_view_apply_surface_effects_to_buffer(
   struct wlr_scene_surface *scene_surface =
       wlr_scene_surface_try_from_buffer(buffer);
 
-  (void)sx;
-  (void)sy;
   /*
    * Só a superfície de topo. Arredondar cada subsuperfície recortava-as
    * uma a uma, em vez de arredondar a janela. O desfoque segue a mesma
@@ -1656,6 +2220,14 @@ static void leme_render_view_apply_surface_effects_to_buffer(
   if (scene_surface != NULL && scene_surface->surface == target->surface) {
     wlr_scene_buffer_set_corner_radius(buffer, target->radius);
     wlr_scene_buffer_set_backdrop_blur(buffer, target->blur);
+    const struct wlr_box rounded = {
+        .x = target->origin_x - sx,
+        .y = target->origin_y - sy - target->titlebar,
+        .width = target->width,
+        .height = target->height + target->titlebar,
+    };
+    wlr_scene_buffer_set_corner_box(buffer,
+                                    target->titlebar > 0 ? &rounded : NULL);
   }
 }
 #endif
@@ -1668,7 +2240,7 @@ static void leme_render_view_apply_surface_effects_to_buffer(
 static void leme_render_view_apply_surface_effects(
     struct leme_view *view,
     int corner_radius, // NOLINT(bugprone-easily-swappable-parameters)
-    int border_width, int blur) {
+    int border_width, int blur, struct leme_box content, int titlebar) {
 #ifdef LEME_HAVE_EFFECTS
   int inner = corner_radius - border_width;
 
@@ -1691,6 +2263,11 @@ static void leme_render_view_apply_surface_effects(
       .surface = surface,
       .radius = (float)(inner > 0 ? inner : 0),
       .blur = (float)(blur > 0 ? blur : 0),
+      .origin_x = view->scene_tree == NULL ? 0 : view->scene_tree->node.x,
+      .origin_y = view->scene_tree == NULL ? 0 : view->scene_tree->node.y,
+      .width = content.width,
+      .height = content.height,
+      .titlebar = titlebar > 0 ? titlebar : 0,
   };
 
   if (view->scene_tree != NULL && target.surface != NULL) {
@@ -1703,6 +2280,8 @@ static void leme_render_view_apply_surface_effects(
   (void)corner_radius;
   (void)border_width;
   (void)blur;
+  (void)content;
+  (void)titlebar;
 #endif
 }
 
@@ -1710,16 +2289,20 @@ static void leme_render_view_apply_surface_effects(
 void leme_render_view_layout_frame(
     const struct leme_render_view_frame_nodes *nodes, struct leme_box box,
     int border_width, // NOLINT(bugprone-easily-swappable-parameters)
-    int corner_radius) {
+    int corner_radius, const struct leme_titlebar_style *titlebar) {
   size_t index;
 
 #ifndef LEME_HAVE_EFFECTS
   (void)corner_radius;
 #endif
 
+  const int titlebar_height =
+      leme_render_view_frame_titlebar(nodes, box, border_width);
+  leme_desk_frame_layout(nodes->decoration, box, border_width, titlebar_height,
+                         nodes->titlebar_width, titlebar, corner_radius);
   if (nodes->content != NULL) {
     wlr_scene_node_set_position(&nodes->content->node, border_width,
-                                border_width);
+                                border_width + titlebar_height);
   }
   for (index = 0; index < LEME_ARRAY_LENGTH(nodes->border); index++) {
     if (nodes->border[index] == NULL) {
@@ -1763,6 +2346,25 @@ void leme_render_view_layout_frame(
   }
 }
 
+static struct wlr_box leme_render_view_slot_clip(const struct leme_view *view,
+                                                 struct wlr_box clip,
+                                                 struct wlr_box geometry) {
+  if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING) {
+    return clip;
+  }
+  const struct leme_box slot = leme_render_view_content_box(view, view->box);
+  if (slot.width < 1 || slot.height < 1 ||
+      (geometry.width <= slot.width && geometry.height <= slot.height)) {
+    return clip;
+  }
+  return (struct wlr_box){
+      .x = geometry.x,
+      .y = geometry.y,
+      .width = geometry.width < slot.width ? geometry.width : slot.width,
+      .height = geometry.height < slot.height ? geometry.height : slot.height,
+  };
+}
+
 /*
  * Uma janela com margens invisíveis compromete uma superfície maior do que a
  * sua geometria, e é essa superfície que leva o desfoque e os cantos. Sem este
@@ -1785,27 +2387,47 @@ void leme_render_view_clip_to_geometry(struct leme_view *view) {
                             geometry.height >= surface->current.height);
 
   const struct wlr_box clip = needs_clip ? geometry : (struct wlr_box){0};
+  const struct wlr_box surface_clip =
+      leme_render_view_slot_clip(view, clip, geometry);
   struct leme_render_view_state *state = view->render_state;
 
   if (state != NULL && state->clip_applied &&
-      wlr_box_equal(&state->clip, &clip)) {
+      wlr_box_equal(&state->clip, &clip) &&
+      wlr_box_equal(&state->surface_clip, &surface_clip)) {
     return;
   }
   wlr_scene_subsurface_tree_set_clip(&view->scene_tree->node,
                                      needs_clip ? &geometry : NULL);
+  if (!wlr_box_equal(&surface_clip, &clip) &&
+      !wl_list_empty(&view->scene_tree->children)) {
+    struct wlr_scene_node *surface_node =
+        wl_container_of(view->scene_tree->children.next, surface_node, link);
+    wlr_scene_subsurface_tree_set_clip(surface_node, &surface_clip);
+  }
   leme_render_view_apply_cached_opacity(view);
   if (state != NULL) {
     state->clip = clip;
+    state->surface_clip = surface_clip;
     state->clip_applied = true;
   }
 }
 
 void leme_render_view_set_box(struct leme_view *view, struct leme_box box) {
-  struct leme_render_view_frame_nodes nodes;
+  struct leme_render_view_frame_nodes nodes = {0};
   struct leme_box content;
   int border_width;
   size_t index;
 
+  const struct leme_box previous_content =
+      leme_render_view_content_box(view, box);
+  const bool current = box.x == view->box.x && box.y == view->box.y &&
+                       box.width == view->box.width &&
+                       box.height == view->box.height;
+  (void)leme_desk_decoration_sync(view);
+  if (current) {
+    box = view->box;
+  }
+  leme_view_remember_desktop_box(view, box);
   leme_public_server_invalidate(view->server);
   if (view->render_tree == NULL || view->scene_tree == NULL) {
     return;
@@ -1818,16 +2440,26 @@ void leme_render_view_set_box(struct leme_view *view, struct leme_box box) {
     nodes.border[index] = view->border[index];
   }
   nodes.content = view->scene_tree;
-  leme_render_view_layout_frame(&nodes, box, border_width,
-                                leme_render_view_corner_radius(view, box));
+  nodes.decoration = leme_desk_decoration_tree(view);
+  nodes.titlebar_height = leme_desk_decoration_height(view, box);
+  nodes.button_width = leme_desk_style_button_width(view->server->config);
+  nodes.titlebar_width = content.width;
+  struct leme_titlebar_style titlebar_style = {0};
+  leme_render_view_layout_frame(
+      &nodes, box, border_width, leme_render_view_corner_radius(view, box),
+      leme_render_view_titlebar(view, &titlebar_style));
+  leme_render_view_sync_presentation(view);
   leme_render_view_apply_surface_effects(
       view, leme_render_view_corner_radius(view, box), border_width,
-      leme_render_view_blur(view));
+      leme_render_view_blur(view), content, nodes.titlebar_height);
   if (view->kind == LEME_VIEW_XWAYLAND) {
     leme_render_xwayland_set_geometry(view);
   }
-  if ((!view->floating && !view->detached) || view->fullscreen ||
-      view->kind == LEME_VIEW_XWAYLAND) {
+  if ((leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING &&
+       !view->detached) ||
+      view->fullscreen || view->kind == LEME_VIEW_XWAYLAND ||
+      content.width != previous_content.width ||
+      content.height != previous_content.height) {
     if (view->configure_deferred) {
       view->deferred_configure_box = content;
       view->configure_dirty = true;

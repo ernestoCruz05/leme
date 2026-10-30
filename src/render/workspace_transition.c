@@ -159,7 +159,11 @@ static bool leme_workspace_collect_parent(
   struct wlr_scene_node *node;
 
   wl_list_for_each(node, &collection->source->children, link) {
-    struct leme_view *view = node->data;
+    const struct leme_render_owner *owner = node->data;
+    struct leme_view *view =
+        owner != NULL && owner->kind == LEME_RENDER_OWNER_VIEW
+            ? owner->value.view
+            : NULL;
     struct wlr_scene_tree *copy;
 
     if (!leme_workspace_view_is_participant(view, output, tag_id) ||
@@ -232,6 +236,23 @@ leme_workspace_finish_live_view_animations(struct leme_output *output) {
   }
 }
 
+static bool leme_workspace_tag_is_desktop(const struct leme_output *output,
+                                          uint16_t id) {
+  if (output == NULL || output->tags.table == NULL || id == 0 ||
+      id > output->tags.max_tags) {
+    return false;
+  }
+  const struct leme_tag *tag = output->tags.table[id];
+  if (tag != NULL) {
+    return tag->layout.kind == LEME_LAYOUT_DESKTOP;
+  }
+  struct leme_tag_settings settings = {.layout = LEME_LAYOUT_DWINDLE};
+  if (output->server != NULL && output->server->config != NULL) {
+    leme_config_tag_settings(output->server->config, id, &settings);
+  }
+  return settings.layout == LEME_LAYOUT_DESKTOP;
+}
+
 static bool leme_workspace_transition_is_eligible(
     struct leme_output *output, uint16_t source_id, uint16_t destination_id,
     enum leme_tag_change_direction direction) {
@@ -250,6 +271,8 @@ static bool leme_workspace_transition_is_eligible(
          source_id != destination_id && output->tags.table != NULL &&
          source_id > 0 && source_id <= output->tags.max_tags &&
          destination_id > 0 && destination_id <= output->tags.max_tags &&
+         !leme_workspace_tag_is_desktop(output, source_id) &&
+         !leme_workspace_tag_is_desktop(output, destination_id) &&
          !leme_workspace_tag_has_fullscreen(output, source_id) &&
          !leme_workspace_tag_has_fullscreen(output, destination_id) &&
          (direction == LEME_TAG_CHANGE_FORWARD ||
@@ -418,6 +441,14 @@ struct leme_workspace_transition *
 leme_render_workspace_transition_prepare_gesture(
     struct leme_output *output, uint16_t source_id, uint16_t destination_id,
     enum leme_tag_change_direction direction) {
+  uint16_t ring[LEME_TAGS_RING_MAX];
+  const size_t count = leme_tags_ring(leme_output_tags(output), direction, ring,
+                                      LEME_ARRAY_LENGTH(ring));
+  for (size_t i = 0; i < count; i++) {
+    if (leme_workspace_tag_is_desktop(output, ring[i])) {
+      return NULL;
+    }
+  }
   return leme_workspace_transition_prepare_with_ops(
       output, source_id, destination_id, direction, &leme_workspace_default_ops,
       true);

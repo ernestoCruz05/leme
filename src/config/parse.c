@@ -19,13 +19,6 @@
 #include <strings.h>
 #include <wlr/types/wlr_keyboard.h>
 
-struct leme_reject_extra {
-  const char *label;
-  const char *help;
-  const struct leme_scfg_directive *secondary;
-  const char *secondary_label;
-};
-
 #define LEME_KEY_MAX 64U
 
 static size_t leme_config_edit_distance(const char *left, const char *right) {
@@ -61,9 +54,8 @@ static size_t leme_config_edit_distance(const char *left, const char *right) {
   return row[right_length];
 }
 
-static const char *leme_config_nearest_key(const char *written,
-                                           const char *const *keys,
-                                           size_t count) {
+const char *leme_config_nearest_key(const char *written,
+                                    const char *const *keys, size_t count) {
   const char *best = NULL;
   size_t best_distance = 0;
   size_t written_length = strnlen(written, LEME_KEY_MAX);
@@ -87,9 +79,11 @@ static const char *leme_config_nearest_key(const char *written,
   return best;
 }
 
-static bool leme_config_reject_detailed(
-    struct leme_config *config, const struct leme_scfg_directive *directive,
-    int param, const struct leme_reject_extra *extra, const char *format, ...) {
+bool leme_config_reject_detailed(struct leme_config *config,
+                                 const struct leme_scfg_directive *directive,
+                                 int param,
+                                 const struct leme_reject_extra *extra,
+                                 const char *format, ...) {
   struct leme_diagnostic_detail detail = {
       .severity = LEME_DIAGNOSTIC_WARNING,
       .line = directive->lineno,
@@ -126,9 +120,9 @@ static bool leme_config_reject_detailed(
                                        message);
 }
 
-static bool leme_config_reject(struct leme_config *config,
-                               const struct leme_scfg_directive *directive,
-                               int param, const char *format, ...) {
+bool leme_config_reject(struct leme_config *config,
+                        const struct leme_scfg_directive *directive, int param,
+                        const char *format, ...) {
   va_list arguments;
   char message[256];
   int written;
@@ -207,6 +201,8 @@ static bool leme_config_parse_layout_kind(const char *text,
     *kind = LEME_LAYOUT_MASTER_STACK;
   } else if (strcmp(text, "accordion") == 0) {
     *kind = LEME_LAYOUT_ACCORDION;
+  } else if (strcmp(text, "desktop") == 0) {
+    *kind = LEME_LAYOUT_DESKTOP;
   } else {
     return false;
   }
@@ -228,11 +224,7 @@ leme_config_parse_scratchpad(struct leme_config *config,
                              const struct leme_scfg_directive *directive,
                              const char *path, char **error);
 
-static bool leme_config_parse_boolean(const char *text, bool *value);
-
-static bool leme_config_parse_decimal(const char *text, double *value);
-
-static bool leme_config_parse_nonnegative(const char *text, int *value) {
+bool leme_config_parse_nonnegative(const char *text, int *value) {
   char *end;
   long parsed;
 
@@ -420,7 +412,7 @@ static bool leme_config_parse_tags(struct leme_config *config,
   return true;
 }
 
-static bool leme_config_parse_color(const char *text, float value[4]) {
+bool leme_config_parse_color(const char *text, float value[4]) {
   unsigned int channel[4] = {0, 0, 0, 255};
   size_t length;
   size_t index;
@@ -944,7 +936,7 @@ leme_config_parse_window_rule(struct leme_config *config,
 
 #define LEME_ANIMATION_DURATION_MAX 1000u
 
-static bool leme_config_parse_decimal(const char *text, double *value) {
+bool leme_config_parse_decimal(const char *text, double *value) {
   char *end;
   double parsed;
 
@@ -2625,6 +2617,96 @@ leme_config_parse_gestures(struct leme_config *config,
   return true;
 }
 
+static bool leme_config_parse_modifier_name(const char *text,
+                                            uint32_t *modifier) {
+  static const struct {
+    const char *name;
+    uint32_t modifier;
+  } names[] = {{"shift", WLR_MODIFIER_SHIFT},
+               {"ctrl", WLR_MODIFIER_CTRL},
+               {"control", WLR_MODIFIER_CTRL},
+               {"alt", WLR_MODIFIER_ALT},
+               {"super", WLR_MODIFIER_LOGO}};
+  for (size_t index = 0; index < LEME_ARRAY_LENGTH(names); index++) {
+    if (strcasecmp(text, names[index].name) == 0) {
+      *modifier = names[index].modifier;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool
+leme_config_parse_desktop(struct leme_config *config,
+                          const struct leme_scfg_directive *directive,
+                          const char *path, char **error) {
+  const struct leme_scfg_directive *previous_strip = NULL;
+  const struct leme_scfg_directive *previous_modifier = NULL;
+  if (directive->params_len != 0) {
+    leme_config_set_error(error, "%s:%d: desktop block takes no parameters",
+                          path, directive->lineno);
+    return false;
+  }
+  for (size_t index = 0; index < directive->children.directives_len; index++) {
+    const struct leme_scfg_directive *entry =
+        &directive->children.directives[index];
+    if (entry->params_len != 1 || entry->children.directives_len != 0) {
+      if (!leme_config_reject(config, entry, -1,
+                              "desktop property requires one value")) {
+        return false;
+      }
+      continue;
+    }
+    const bool strip = strcmp(entry->name, "minimized_strip") == 0;
+    if (!strip && strcmp(entry->name, "container_modifier") != 0) {
+      if (!leme_config_reject(config, entry, -1, "unknown desktop property %s",
+                              entry->name)) {
+        return false;
+      }
+      continue;
+    }
+    const struct leme_scfg_directive *previous =
+        strip ? previous_strip : previous_modifier;
+    if (previous != NULL) {
+      const struct leme_reject_extra extra = {
+          .secondary = previous,
+          .secondary_label = "first defined here",
+      };
+      if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                       "duplicate desktop property %s",
+                                       entry->name)) {
+        return false;
+      }
+      continue;
+    }
+    if (strip) {
+      bool value = false;
+      if (!leme_config_parse_boolean(entry->params[0], &value)) {
+        if (!leme_config_reject(config, entry, 0,
+                                "minimized_strip must be true or false")) {
+          return false;
+        }
+        continue;
+      }
+      config->desktop_minimized_strip = value;
+      previous_strip = entry;
+      continue;
+    }
+    uint32_t modifier = 0;
+    if (!leme_config_parse_modifier_name(entry->params[0], &modifier)) {
+      if (!leme_config_reject(
+              config, entry, 0,
+              "container_modifier must be shift, ctrl, alt or super")) {
+        return false;
+      }
+      continue;
+    }
+    config->desktop_container_modifier = modifier;
+    previous_modifier = entry;
+  }
+  return true;
+}
+
 static bool
 leme_config_parse_publication(struct leme_config *config,
                               const struct leme_scfg_directive *directive,
@@ -3063,7 +3145,7 @@ leme_config_parse_output(struct leme_config *config,
   return true;
 }
 
-static bool leme_config_parse_boolean(const char *text, bool *value) {
+bool leme_config_parse_boolean(const char *text, bool *value) {
   if (strcmp(text, "true") == 0) {
     *value = true;
     return true;
@@ -4374,7 +4456,7 @@ static const char *const leme_config_block_names[] = {
     "tags",       "animation", "style",       "keyboard",      "output",
     "cursor",     "gestures",  "publication", "pointer",       "window",
     "scratchpad", "binds",     "bind_group",  "config_errors", "env",
-    "exec",       "vars",      "lists",
+    "exec",       "vars",      "lists",       "desktop",       "desktop_menu",
 };
 
 static void leme_config_block_error(char **error, const char *path,
@@ -4418,6 +4500,9 @@ struct leme_config *leme_config_load(const char *path, char **error) {
   bool have_cursor = false;
   bool have_gestures = false;
   bool have_publication = false;
+  bool have_desktop = false;
+  const struct leme_scfg_directive *desktop_menus[LEME_DESKTOP_MENU_COUNT] = {
+      0};
   bool have_config_errors = false;
   bool have_global_pointer = false;
   bool have_env = false;
@@ -4436,6 +4521,13 @@ struct leme_config *leme_config_load(const char *path, char **error) {
     return NULL;
   }
   config->initial_tags = 3;
+  config->desktop_minimized_strip = true;
+  config->desktop_container_modifier = WLR_MODIFIER_SHIFT;
+  if (!leme_config_desktop_menu_defaults(config)) {
+    leme_config_set_error(error, "%s:1: out of memory", path);
+    leme_config_destroy(config);
+    return NULL;
+  }
   config->max_tags = 9;
   config->config_errors = (struct leme_config_errors){
       .show = true,
@@ -4506,6 +4598,9 @@ struct leme_config *leme_config_load(const char *path, char **error) {
     } else if (strcmp(directive->name, "animation") == 0 && !have_animation) {
       have_animation = true;
       valid = leme_config_parse_animation(config, directive, path, error);
+    } else if (strcmp(directive->name, "style") == 0 &&
+               directive->params_len != 0) {
+      valid = leme_config_parse_style_rule(config, directive, path, error);
     } else if (strcmp(directive->name, "style") == 0 && !have_style) {
       have_style = true;
       valid = leme_config_parse_style(config, directive, path, error);
@@ -4521,6 +4616,15 @@ struct leme_config *leme_config_load(const char *path, char **error) {
     } else if (strcmp(directive->name, "gestures") == 0 && !have_gestures) {
       have_gestures = true;
       valid = leme_config_parse_gestures(config, directive, path, error);
+    } else if (strcmp(directive->name, "desktop") == 0 && !have_desktop) {
+      have_desktop = true;
+      valid = leme_config_parse_desktop(config, directive, path, error);
+    } else if (strcmp(directive->name, "desktop_menu") == 0) {
+      valid = leme_config_parse_desktop_menu(config, directive, desktop_menus);
+      if (!valid) {
+        leme_config_set_error(error, "%s:%d: out of memory", path,
+                              directive->lineno);
+      }
     } else if (strcmp(directive->name, "publication") == 0 &&
                !have_publication) {
       have_publication = true;
@@ -4570,7 +4674,8 @@ struct leme_config *leme_config_load(const char *path, char **error) {
   leme_bind_scope_finish(&scope);
   leme_scfg_block_finish(&expanded);
   leme_scfg_result_finish(&parsed);
-  if (!leme_config_drop_invalid_binds(config)) {
+  if (!leme_config_drop_invalid_binds(config) ||
+      !leme_config_drop_invalid_desktop_menu(config)) {
     leme_config_set_error(error, "%s:1: out of memory", path);
     leme_config_destroy(config);
     return NULL;

@@ -20,8 +20,7 @@ struct leme_xwayland {
   bool is_ready;
 };
 
-const struct leme_view *
-leme_xwayland_public_parent(const struct leme_view *view);
+struct leme_view *leme_xwayland_public_parent(const struct leme_view *view);
 void leme_xwayland_init(struct leme_server *server);
 bool leme_xwayland_start(struct leme_server *server);
 void leme_xwayland_finish(struct leme_server *server);

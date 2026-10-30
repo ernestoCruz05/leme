@@ -12,6 +12,8 @@
 #include "output/output.h"
 #include "render/render.h"
 #include "core/server.h"
+#include "desktop/desktop.h"
+#include "desktop/owner.h"
 #include "shell/view.h"
 
 #include <stdlib.h>
@@ -69,7 +71,7 @@ void leme_session_restore_focus(struct leme_server *server) {
   if (server->focused_layer == NULL && server->focused_view != NULL &&
       server->focused_view->mapped) {
     leme_view_set_activated(server->focused_view, true);
-    leme_view_focus(server->focused_view);
+    leme_view_focus_ex(server->focused_view, false);
   }
   leme_input_refresh_pointer_focus(server, 0);
 }
@@ -232,6 +234,8 @@ static void leme_session_handle_lock_destroy(struct wl_listener *listener,
     return;
   }
   session->locked = true;
+  leme_desk_owner_cancel(session->server);
+  leme_desk_unfocus(session->server);
   leme_public_server_lock_changed(session->server, true);
   leme_capture_invalidate_all(session->server);
   leme_input_pointer_grab_finish(session->server);
@@ -255,6 +259,8 @@ static void leme_session_handle_new_lock(struct wl_listener *listener,
   }
   session->lock = lock;
   session->locked = true;
+  leme_desk_owner_cancel(server);
+  leme_desk_unfocus(server);
   leme_public_server_lock_changed(server, true);
   leme_capture_invalidate_all(server);
   leme_input_pointer_grab_finish(server);

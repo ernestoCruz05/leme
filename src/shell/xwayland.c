@@ -6,12 +6,16 @@
 #include "input/input.h"
 #include "core/server.h"
 #include "protocols/toplevel.h"
+#include "protocols/publication.h"
 #include "workspace/tag.h"
 #include "shell/policy.h"
 #include "shell/rules.h"
 #include "shell/scratchpad.h"
 #include "shell/sticky.h"
 #include "shell/view.h"
+#include "shell/container.h"
+#include "desktop/decoration.h"
+#include "desktop/buttons.h"
 
 #include <stddef.h>
 #include <time.h>
@@ -49,6 +53,11 @@ struct leme_xwayland_view {
   struct wl_listener set_geometry;
   struct wl_listener set_title;
   struct wl_listener set_app_id;
+  struct wl_listener set_parent;
+  struct wl_listener set_window_type;
+  struct wl_listener set_override_redirect;
+  struct wl_listener set_decorations;
+  struct wl_listener set_size_hints;
   bool associated;
 };
 
@@ -129,6 +138,8 @@ leme_xwayland_initial_floating(struct wlr_xwayland_surface *surface) {
 
 static void leme_xwayland_surface_map(struct leme_xwayland_view *wrapper) {
   struct leme_view *view = wrapper->view;
+  const bool requested_maximized =
+      wrapper->xsurface->maximized_horz && wrapper->xsurface->maximized_vert;
   const enum leme_scratchpad_map_result scratchpad_map =
       leme_scratchpad_try_adopt_map(view);
   struct leme_xwayland_view *parent_wrapper =
@@ -193,6 +204,10 @@ static void leme_xwayland_surface_map(struct leme_xwayland_view *wrapper) {
         false);
     leme_sticky_commit_transient(&adoption);
   }
+  if (requested_maximized) {
+    (void)leme_view_set_maximized(view, true);
+  }
+  leme_view_sync_wm_state(view);
   if (wrapper->xsurface->fullscreen ||
       ((rules.fields & LEME_WINDOW_RULE_FULLSCREEN) != 0 && rules.fullscreen)) {
     leme_view_set_fullscreen(view, true);
@@ -277,7 +292,8 @@ static void leme_xwayland_handle_request_configure(struct wl_listener *listener,
   if (!view->mapped) {
     view->box = leme_xwayland_requested_box(wrapper, requested);
     leme_view_configure(view, view->box);
-  } else if (view->floating) {
+  } else if (leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_FLOATING &&
+             !leme_view_is_placed(view)) {
     view->box = leme_xwayland_requested_box(
         wrapper, leme_render_view_frame_box(view, requested));
     leme_render_view_set_box(view, view->box);
@@ -358,8 +374,12 @@ static void leme_xwayland_handle_request_minimize(struct wl_listener *listener,
   struct leme_xwayland_view *wrapper =
       wl_container_of(listener, wrapper, request_minimize);
 
-  (void)data;
-  wlr_xwayland_surface_set_minimized(wrapper->xsurface, false);
+  const struct wlr_xwayland_minimize_event *event = data;
+  if (event != NULL && wrapper->view->mapped) {
+    (void)leme_view_set_minimized(wrapper->view, event->minimize);
+  }
+  wlr_xwayland_surface_set_minimized(wrapper->xsurface,
+                                     leme_view_is_minimized(wrapper->view));
 }
 
 static void leme_xwayland_handle_request_maximize(struct wl_listener *listener,
@@ -368,7 +388,27 @@ static void leme_xwayland_handle_request_maximize(struct wl_listener *listener,
       wl_container_of(listener, wrapper, request_maximize);
 
   (void)data;
-  leme_view_refuse_maximize(wrapper->view);
+  if (!wrapper->view->mapped) {
+    return;
+  }
+  if (wrapper->xsurface->maximized_horz == wrapper->xsurface->maximized_vert) {
+    (void)leme_view_set_maximized(wrapper->view,
+                                  wrapper->xsurface->maximized_horz);
+  }
+  leme_view_sync_wm_state(wrapper->view);
+}
+
+static void leme_xwayland_handle_set_size_hints(struct wl_listener *listener,
+                                                void *data) {
+  struct leme_xwayland_view *wrapper =
+      wl_container_of(listener, wrapper, set_size_hints);
+  (void)data;
+  if (wrapper->view->mapped) {
+    leme_desk_buttons_invalidate_view(wrapper->view);
+    leme_view_reconcile_placement(wrapper->view->server);
+    leme_view_sync_wm_state(wrapper->view);
+    leme_desk_decoration_refresh(wrapper->view);
+  }
 }
 
 static bool
@@ -434,7 +474,13 @@ static void leme_xwayland_handle_set_geometry(struct wl_listener *listener,
   if (leme_xwayland_geometry_storm(wrapper)) {
     return;
   }
-  if (wrapper->view->mapped && wrapper->view->floating) {
+  if (wrapper->view->mapped &&
+      leme_view_geometry_owner(wrapper->view) == LEME_VIEW_GEOMETRY_CONTAINER) {
+    leme_xwayland_reassert_geometry(wrapper);
+    return;
+  }
+  if (wrapper->view->mapped && (leme_view_geometry_owner(wrapper->view) ==
+                                LEME_VIEW_GEOMETRY_FLOATING)) {
     wrapper->view->box = leme_xwayland_requested_box(
         wrapper, leme_render_view_frame_box(
                      wrapper->view, (struct leme_box){
@@ -454,6 +500,7 @@ static void leme_xwayland_handle_set_title(struct wl_listener *listener,
 
   (void)data;
   leme_public_server_invalidate(wrapper->view->server);
+  leme_desk_decoration_refresh(wrapper->view);
   leme_render_view_set_activated(
       wrapper->view, wrapper->view == wrapper->view->server->focused_view);
 }
@@ -465,9 +512,63 @@ static void leme_xwayland_handle_set_class(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(wrapper->view);
+  if (wrapper->view->mapped) {
+    leme_view_arrange_instant(wrapper->view->server);
+  }
   leme_public_server_invalidate(wrapper->view->server);
   leme_render_view_set_activated(
       wrapper->view, wrapper->view == wrapper->view->server->focused_view);
+}
+
+static void leme_xwayland_handle_set_parent(struct wl_listener *listener,
+                                            void *data) {
+  struct leme_xwayland_view *wrapper =
+      wl_container_of(listener, wrapper, set_parent);
+  (void)data;
+  struct leme_view *view = wrapper->view;
+  leme_container_reconcile_view(view);
+  leme_public_server_invalidate(view->server);
+  if (view->mapped && !view->unmanaged) {
+    const bool refocus = leme_view_is_minimized(view->server->focused_view);
+    leme_view_refresh_begin(view->server);
+    leme_view_refresh_reconcile(view->server);
+    const struct leme_tag *tag = leme_ownership_tag(view);
+    if (refocus) {
+      leme_view_refresh_tag_focus(view->server);
+    }
+    if (tag != NULL) {
+      leme_tags_refresh_visibility_passive(tag->owner);
+    }
+    leme_view_refresh_end(view->server);
+    leme_publication_invalidate(view->server);
+  }
+}
+
+static void leme_xwayland_handle_set_window_type(struct wl_listener *listener,
+                                                 void *data) {
+  struct leme_xwayland_view *wrapper =
+      wl_container_of(listener, wrapper, set_window_type);
+  (void)data;
+  leme_container_reconcile_view(wrapper->view);
+}
+
+static void
+leme_xwayland_handle_set_override_redirect(struct wl_listener *listener,
+                                           void *data) {
+  struct leme_xwayland_view *wrapper =
+      wl_container_of(listener, wrapper, set_override_redirect);
+  (void)data;
+  leme_container_reconcile_view(wrapper->view);
+}
+
+static void leme_xwayland_handle_set_decorations(struct wl_listener *listener,
+                                                 void *data) {
+  struct leme_xwayland_view *wrapper =
+      wl_container_of(listener, wrapper, set_decorations);
+  (void)data;
+  if (wrapper->view->mapped) {
+    leme_view_arrange_instant(wrapper->view->server);
+  }
 }
 
 static void leme_xwayland_handle_view_destroy(struct wl_listener *listener,
@@ -491,6 +592,11 @@ static void leme_xwayland_handle_view_destroy(struct wl_listener *listener,
   wl_list_remove(&wrapper->set_geometry.link);
   wl_list_remove(&wrapper->set_title.link);
   wl_list_remove(&wrapper->set_app_id.link);
+  wl_list_remove(&wrapper->set_parent.link);
+  wl_list_remove(&wrapper->set_window_type.link);
+  wl_list_remove(&wrapper->set_override_redirect.link);
+  wl_list_remove(&wrapper->set_decorations.link);
+  wl_list_remove(&wrapper->set_size_hints.link);
   wl_list_remove(&wrapper->link);
   wrapper->xsurface->data = NULL;
   free(wrapper->view);
@@ -556,6 +662,18 @@ static void leme_xwayland_handle_new_surface(struct wl_listener *listener,
   wl_signal_add(&xsurface->events.set_title, &wrapper->set_title);
   wrapper->set_app_id.notify = leme_xwayland_handle_set_class;
   wl_signal_add(&xsurface->events.set_class, &wrapper->set_app_id);
+  wrapper->set_parent.notify = leme_xwayland_handle_set_parent;
+  wl_signal_add(&xsurface->events.set_parent, &wrapper->set_parent);
+  wrapper->set_window_type.notify = leme_xwayland_handle_set_window_type;
+  wl_signal_add(&xsurface->events.set_window_type, &wrapper->set_window_type);
+  wrapper->set_override_redirect.notify =
+      leme_xwayland_handle_set_override_redirect;
+  wl_signal_add(&xsurface->events.set_override_redirect,
+                &wrapper->set_override_redirect);
+  wrapper->set_decorations.notify = leme_xwayland_handle_set_decorations;
+  wl_signal_add(&xsurface->events.set_decorations, &wrapper->set_decorations);
+  wrapper->set_size_hints.notify = leme_xwayland_handle_set_size_hints;
+  wl_signal_add(&xsurface->events.set_size_hints, &wrapper->set_size_hints);
 }
 
 static void leme_xwayland_handle_destroy(struct wl_listener *listener,
@@ -570,8 +688,7 @@ static void leme_xwayland_handle_destroy(struct wl_listener *listener,
   xwayland->is_ready = false;
 }
 
-const struct leme_view *
-leme_xwayland_public_parent(const struct leme_view *view) {
+struct leme_view *leme_xwayland_public_parent(const struct leme_view *view) {
   if (view == NULL || view->kind != LEME_VIEW_XWAYLAND ||
       view->xwayland_surface == NULL || view->xwayland_surface->parent == NULL)
     return NULL;

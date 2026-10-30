@@ -4,9 +4,19 @@ This page lists the protocol behavior that matters to clients. Leme advertises o
 
 ## Windows and shell surfaces
 
-Leme supports XDG shell toplevels and recursive popups. Parented transients keep their parent's output and tag, float above tiled views, and center over the parent. Fixed-size unparented prompts start floating; ordinary resizable windows tile.
+Leme supports XDG shell toplevels and recursive popups. Transients parented before mapping inherit their parent's output and tag, start floating unless a window rule overrides that preference, and center over the parent when freely placed. Fixed-size unparented prompts start floating; ordinary resizable windows tile.
 
-Leme advertises XDG shell version 6. It tells clients that fullscreen is the only window-management capability, so toolkits can hide maximize and minimize buttons, and it answers maximize requests with an unmaximized configure. A new window receives the usable area of the focused output as its bounds. A window that is not on an enabled output, for example on a hidden tag, in a hidden scratchpad, or on a powered-off output, is marked suspended so its client can stop rendering.
+Leme advertises XDG shell version 6. Fullscreen is available generally. Eligible
+mapped desktop windows also advertise maximize and, with a usable recovery route,
+minimize. Client size limits can disable maximize. Initial maximize requests are
+applied after eligible mapping; fullscreen takes placement precedence. Later
+maximize requests during fullscreen are refused. Native minimize requests before
+mapping are ignored.
+
+A new window receives the usable area of the focused output as its bounds. A
+window that is not on an enabled output, for example on a hidden tag, in a hidden
+scratchpad, or on a powered-off output, is marked suspended so its client can stop
+rendering.
 
 Layer-shell v5 supports wallpaper, panels, launchers, notifications, overlays, drag surfaces, and lock surfaces. Leme honors exclusive zones and keyboard interactivity. Viewporter and fractional-scale protocols are available to current layer-shell clients.
 
@@ -63,6 +73,27 @@ Leme supports XDG activation, `xdg-dialog-v1`, XDG decoration, legacy KDE
 server decoration, and cursor shape. Clients can publish the XDG dialog hint;
 window placement still follows the parent and size rules described under
 Windows and shell surfaces. Both decoration protocols select server-side mode.
+Desktop titlebars follow the committed XDG decoration mode, falling back to legacy
+metadata when there is no XDG decoration object. Native client-side decorations
+are not duplicated. Eligible windows get a draggable title and separate Minimize,
+Maximize/Restore and Close controls; fullscreen hides them. See
+[desktop titlebars](../concepts/layouts.md#titlebars-and-window-placement).
+`xdg_toplevel.show_window_menu` remains unsupported.
+
+XDG foreign v1 and v2 let cooperating Wayland clients establish parent
+relationships across client connections. Both versions share an export
+registry, so a handle exported through one version can be imported through
+the other. This supports out-of-process dialogs such as portal file pickers;
+both the application and the dialog service must exchange a valid handle.
+
+Parent relationships established after mapping update stacking within the
+existing tag and scene layer. They do not move or recenter windows, change
+floating preferences, or transfer keyboard focus. Unrelated windows above
+the whole family remain above it until that family is focused. Destroying an
+import or export removes its relationship without restoring earlier geometry.
+Parenting does not enforce modality or grant activation. Separate fullscreen
+layers and durable ownership keep their existing policies; late parenting
+does not move windows between them.
 
 Activation requires a one-use token tied to Leme's seat and a valid input
 serial. A window on the focused tag is focused directly. A window on another
@@ -95,6 +126,16 @@ and enter on the same handle. Override-redirect X11
 surfaces and layer-shell clients are not. XWayland windows publish their title
 and class as the app id.
 
+Minimized windows remain published with their output association. The wlr handle
+reports effective minimized state, including same-tag parent inheritance. Accepted
+activation restores before focusing; ignored or urgent off-tag activation alone
+does not restore. An explicit unminimize request is separate from activation.
+The wlr handle also reports maximized state. Maximize and restore requests do not
+activate or unminimize a window. Native, XWayland and foreign requests share the
+desktop policy. XWayland supports full two-axis maximize; partial-axis requests
+are rejected and the actual state is reasserted. External-shell interoperability,
+including DMS, still needs live verification.
+
 ### Request policy
 
 | Request | Policy |
@@ -106,7 +147,8 @@ and class as the app id.
 | toplevel `close` | honored |
 | toplevel `set_fullscreen`, `unset_fullscreen` | honored through the normal fullscreen path for tagged windows; rejected for pool scratchpads, which remain non-fullscreen |
 | toplevel `activate` | tagged windows follow the configured activation policy; shown scratchpads focus directly; presented sticky windows focus their owner output then the view; hidden or stale durable views are rejected |
-| toplevel `set_maximized`, `set_minimized` | dropped; Leme has no maximized or minimized state |
+| toplevel `set_maximized`, `unset_maximized` | maximizes eligible desktop windows or restores normal geometry without activation; refused during fullscreen |
+| toplevel `set_minimized` | minimizes eligible desktop windows or explicitly restores them without activation |
 | toplevel `set_rectangle` | ignored |
 
 While locked, the published set freezes, handles persist, and requests are refused. Unlocking rebuilds the set. Hidden stale toplevel requests remain rejected after the set is rebuilt.

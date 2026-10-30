@@ -59,6 +59,10 @@ struct leme_animation_settings {
 };
 
 struct wlr_scene_tree;
+struct leme_animation_gate;
+
+struct leme_animation_gate *leme_animation_gate_create(uint32_t wait_ms);
+void leme_animation_gate_destroy(struct leme_animation_gate *gate);
 
 struct leme_animation_manager {
   struct wl_list animations;
@@ -72,6 +76,7 @@ struct leme_animation_frame {
 };
 
 struct leme_animation_subject {
+  struct leme_animation_gate *gate;
   void *data;
   const void *owner;
   void (*apply)(void *data, const struct leme_animation_frame *frame);
@@ -96,6 +101,11 @@ struct leme_animation_spec {
   double scalar_initial_velocity;
   uint32_t hold_max_ms;
 };
+
+struct leme_animation_spec
+leme_animation_move_spec(const struct leme_animation_settings *settings,
+                         struct leme_box from, struct leme_box to,
+                         double from_opacity, double to_opacity);
 
 struct leme_animation_buffer_geometry {
   int width;
@@ -128,6 +138,9 @@ bool leme_animation_manager_active(
 bool leme_animation_manager_active_for_owner(
     struct leme_animation_manager *manager, const void *owner);
 void leme_animation_manager_finish_all(struct leme_animation_manager *manager);
+void leme_animation_manager_set_gate(struct leme_animation_manager *manager,
+                                     const void *data,
+                                     struct leme_animation_gate *gate);
 void leme_animation_manager_finish_data(struct leme_animation_manager *manager,
                                         const void *data);
 void leme_animation_manager_cancel_data(struct leme_animation_manager *manager,

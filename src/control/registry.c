@@ -84,6 +84,14 @@ static const struct leme_public_argument args_describe[] = {
 static const struct leme_public_argument args_focus_view[] = {
     {STATIC_TEXT("view"), STATIC_TEXT("outer")}};
 
+static const struct leme_public_argument args_container_layout[] = {
+    {STATIC_TEXT("view"), STATIC_TEXT("outer")},
+    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
+
+static const struct leme_public_argument args_container_join[] = {
+    {STATIC_TEXT("view"), STATIC_TEXT("outer")},
+    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
+
 static const struct leme_public_argument args_focus_tag[] = {
     {STATIC_TEXT("tag"), STATIC_TEXT("outer")}};
 
@@ -221,10 +229,15 @@ leme_control_operator_roots(const struct leme_control_operator *op,
   case LEME_CONTROL_OP_VIEWS:
   case LEME_CONTROL_OP_VIEW:
   case LEME_CONTROL_OP_FOCUS:
+  case LEME_CONTROL_OP_SET_MINIMIZED:
   case LEME_CONTROL_OP_SET_FLOATING:
   case LEME_CONTROL_OP_SET_FULLSCREEN:
   case LEME_CONTROL_OP_SET_STICKY:
   case LEME_CONTROL_OP_RESIZE:
+  case LEME_CONTROL_OP_CONTAINER_LAYOUT:
+  case LEME_CONTROL_OP_CONTAINER_DETACH:
+  case LEME_CONTROL_OP_CONTAINER_DISSOLVE:
+  case LEME_CONTROL_OP_CONTAINER_JOIN:
   case LEME_CONTROL_OP_CLOSE:
     return LEME_PUBLIC_ROOT_BIT(LEME_PUBLIC_VIEWS);
   case LEME_CONTROL_OP_TAGS:

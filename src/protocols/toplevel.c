@@ -3,6 +3,8 @@
 
 #include "config/config.h"
 #include "core/server.h"
+#include "input/input.h"
+#include "shell/layer.h"
 #include "output/output.h"
 #include "protocols/publication.h"
 #include "protocols/session.h"
@@ -109,10 +111,26 @@ leme_toplevel_handle_request_fullscreen(struct wl_listener *listener,
   }
 }
 
-static void leme_toplevel_handle_request_ignored(struct wl_listener *listener,
-                                                 void *data) {
-  (void)listener;
-  (void)data;
+static void leme_toplevel_handle_request_minimize(struct wl_listener *listener,
+                                                  void *data) {
+  struct leme_publication_toplevel *toplevel =
+      wl_container_of(listener, toplevel, request_minimize);
+  const struct wlr_foreign_toplevel_handle_v1_minimized_event *event = data;
+  if (event != NULL && leme_toplevel_eligible(toplevel->view)) {
+    (void)leme_view_set_minimized(toplevel->view, event->minimized);
+  }
+}
+
+static void leme_toplevel_handle_request_maximize(struct wl_listener *listener,
+                                                  void *data) {
+  struct leme_publication_toplevel *toplevel =
+      wl_container_of(listener, toplevel, request_maximize);
+  const struct wlr_foreign_toplevel_handle_v1_maximized_event *event = data;
+  if (event != NULL && leme_toplevel_eligible(toplevel->view)) {
+    (void)leme_view_set_maximized(toplevel->view, event->maximized);
+    wlr_foreign_toplevel_handle_v1_set_maximized(
+        toplevel->wlr_handle, leme_view_is_maximized(toplevel->view));
+  }
 }
 
 void leme_toplevel_activate_view(struct leme_view *view) {
@@ -128,7 +146,8 @@ void leme_toplevel_activate_view(struct leme_view *view) {
   server = view->server;
   output = leme_view_output(view);
   if (leme_session_locked(server) || !leme_toplevel_eligible(view) ||
-      output == NULL) {
+      output == NULL || leme_layer_keyboard_is_exclusive(server) ||
+      leme_input_interacting(server)) {
     return;
   }
   if (leme_view_is_sticky(view)) {
@@ -150,6 +169,9 @@ void leme_toplevel_activate_view(struct leme_view *view) {
   same_tag = output == leme_output_focused(server) &&
              tags->focused_id == leme_ownership_tag(view)->id;
   if (same_tag) {
+    if (!leme_view_set_minimized(view, false)) {
+      return;
+    }
     leme_view_focus(view);
     return;
   }
@@ -160,6 +182,9 @@ void leme_toplevel_activate_view(struct leme_view *view) {
     leme_public_server_view_urgent(view);
     leme_workspace_mark_urgent(server, output, leme_ownership_tag(view)->id);
     leme_publication_invalidate(server);
+    return;
+  }
+  if (!leme_view_set_minimized(view, false)) {
     return;
   }
   if (output != leme_output_focused(server)) {
@@ -246,10 +271,10 @@ leme_toplevel_create(struct leme_server *server, struct leme_view *view) {
   toplevel->request_fullscreen.notify = leme_toplevel_handle_request_fullscreen;
   wl_signal_add(&toplevel->wlr_handle->events.request_fullscreen,
                 &toplevel->request_fullscreen);
-  toplevel->request_maximize.notify = leme_toplevel_handle_request_ignored;
+  toplevel->request_maximize.notify = leme_toplevel_handle_request_maximize;
   wl_signal_add(&toplevel->wlr_handle->events.request_maximize,
                 &toplevel->request_maximize);
-  toplevel->request_minimize.notify = leme_toplevel_handle_request_ignored;
+  toplevel->request_minimize.notify = leme_toplevel_handle_request_minimize;
   wl_signal_add(&toplevel->wlr_handle->events.request_minimize,
                 &toplevel->request_minimize);
   toplevel->request_activate.notify = leme_toplevel_handle_request_activate;
@@ -308,6 +333,10 @@ static void leme_toplevel_sync(struct leme_server *server,
                                                server->focused_view == view);
   wlr_foreign_toplevel_handle_v1_set_fullscreen(toplevel->wlr_handle,
                                                 view->fullscreen);
+  wlr_foreign_toplevel_handle_v1_set_minimized(toplevel->wlr_handle,
+                                               leme_view_is_minimized(view));
+  wlr_foreign_toplevel_handle_v1_set_maximized(toplevel->wlr_handle,
+                                               leme_view_is_maximized(view));
 }
 
 void leme_toplevel_reconcile(struct leme_server *server) {

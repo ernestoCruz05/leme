@@ -4,6 +4,7 @@
 #include "output/output.h"
 #include "render/render.h"
 #include "shell/ownership.h"
+#include "shell/container.h"
 #include "shell/policy.h"
 #include "shell/view.h"
 #include "workspace/tag.h"
@@ -108,9 +109,16 @@ static void leme_output_home_remember(struct leme_output *output) {
 }
 
 static void leme_output_home_reanchor(struct leme_view *view,
-                                      struct leme_box from,
-                                      struct leme_box to) {
-  if (!view->floating || view->fullscreen) {
+                                      struct leme_box from, struct leme_box to,
+                                      enum leme_layout_kind previous) {
+  if (leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_FLOATING ||
+      view->fullscreen) {
+    return;
+  }
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  if (!view->floating && !view->detached && tag != NULL &&
+      tag->layout.kind == LEME_LAYOUT_DESKTOP &&
+      previous != LEME_LAYOUT_DESKTOP) {
     return;
   }
   view->box = leme_view_policy_reanchor_box(view->box, from, to);
@@ -149,6 +157,22 @@ void leme_output_home_evacuate(struct leme_output *from,
   for (uint16_t id = 1; id <= source->max_tags; id++) {
     while (source->table[id] != NULL &&
            !wl_list_empty(&source->table[id]->views)) {
+      if (!wl_list_empty(&source->table[id]->containers)) {
+        struct leme_container *container = wl_container_of(
+            source->table[id]->containers.next, container, link);
+        struct leme_view *member = NULL;
+        wl_list_for_each(member, &source->table[id]->views, tag_link) {
+          if (tracked && member->home_output == NULL &&
+              leme_container_for_view(member) == container) {
+            member->home_output = strdup(from->wlr_output->name);
+            member->home_tag = member->home_output == NULL ? 0 : id;
+          }
+        }
+        if (leme_container_adopt_output(container, to, id)) {
+          continue;
+        }
+        (void)leme_container_dissolve(container);
+      }
       struct leme_view *view =
           wl_container_of(source->table[id]->views.next, view, tag_link);
       char *home = view->home_output;
@@ -160,13 +184,27 @@ void leme_output_home_evacuate(struct leme_output *from,
         home = strdup(from->wlr_output->name);
         home_tag = id;
       }
+      const enum leme_layout_kind previous =
+          leme_ownership_tag(view)->layout.kind;
+      const bool placed = leme_view_is_placed(view);
+      const struct leme_box saved_restore = view->placement.restore_box;
+      if (placed) {
+        view->placement.restore_box = leme_view_policy_reanchor_box(
+            saved_restore, from->usable_box, to->usable_box);
+      }
       adopted = leme_tags_adopt_view(destination, view, id);
+      if (!adopted && placed) {
+        view->placement.restore_box = saved_restore;
+      }
       view->home_output = home;
       view->home_tag = home == NULL ? 0 : home_tag;
       if (!adopted) {
         break;
       }
-      leme_output_home_reanchor(view, from->usable_box, to->usable_box);
+      if (!placed) {
+        leme_output_home_reanchor(view, from->usable_box, to->usable_box,
+                                  previous);
+      }
     }
   }
 }
@@ -190,13 +228,27 @@ bool leme_output_home_restore(struct leme_output *output, const char *name) {
         leme_ownership_tag(view) == NULL) {
       continue;
     }
+    if (view->container != NULL) {
+      (void)leme_container_dissolve(view->container);
+    }
     source = leme_view_output(view);
+    const enum leme_layout_kind previous =
+        leme_ownership_tag(view)->layout.kind;
+    const bool placed = leme_view_is_placed(view);
+    const struct leme_box saved_restore = view->placement.restore_box;
+    if (placed && source != NULL && source != output) {
+      view->placement.restore_box = leme_view_policy_reanchor_box(
+          saved_restore, source->usable_box, output->usable_box);
+    }
     view->home_output = NULL;
     if (source != output && leme_tags_adopt_view(tags, view, view->home_tag)) {
-      if (source != NULL) {
-        leme_output_home_reanchor(view, source->usable_box, output->usable_box);
+      if (source != NULL && !placed) {
+        leme_output_home_reanchor(view, source->usable_box, output->usable_box,
+                                  previous);
       }
       restored = true;
+    } else if (placed) {
+      view->placement.restore_box = saved_restore;
     }
     view->home_tag = 0;
     free(view_home);

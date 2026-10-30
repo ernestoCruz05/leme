@@ -26,6 +26,28 @@ Expressions use explicit forms such as `{"literal": VALUE}`, `{"call": NAME, "ar
 
 Project only the data needed. Large whole roots and deeply nested/materialized values can exceed clone, work or response limits; a small query of a field may fit when its entire root does not.
 
+## Container membership
+
+Each view record contains `container`, a nullable opaque text value. Attached
+members share it for the container's lifetime. Standalone views and dialogs have
+null. Membership changes and output transfers publish committed records; view
+IDs do not change. Containers add no entity kind, root or typed reference, and
+these values cannot be traversed or passed to `by-id`.
+
+`container-layout` takes one view target and one of `dwindle`, `master_stack` or
+`accordion`. `container-detach` and `container-dissolve` each take one view target.
+The view must currently be an eligible member. `container-join` takes one view
+target and one of `left`, `right`, `up` or `down`; the view must be an eligible
+standalone desktop window. The ordinary command adapter also accepts
+`container_layout`, `container_detach` and `container_dissolve` for the focused
+member, and `container_join` for the focused window.
+
+`set-minimized` on a member operates on its container. Effective `minimized`
+values include hiding inherited by dialogs; dialogs remain separate view records.
+Restore-all lowering groups captured member records by equal non-null `container`
+values. These fields and actions follow the existing sensitive-data locking and
+resource limits. No foreign-toplevel object is published for the frame.
+
 ## WATCH and UNWATCH
 
 `watch` takes an expression without side effects and returns a subscription owned by the connection. Its acknowledgement precedes the initial snapshot, though both records may arrive in one read. `unwatch` takes that subscription's native token. Another connection cannot cancel it.

@@ -2,6 +2,7 @@
 
 #include "config/config.h"
 #include "core/server.h"
+#include "desktop/owner.h"
 #include "input/input.h"
 #include "output/output.h"
 #include "protocols/input.h"
@@ -9,6 +10,7 @@
 #include "protocols/toplevel.h"
 #include "shell/layer.h"
 #include "shell/view.h"
+#include "shell/container.h"
 #include "shell/xwayland.h"
 
 #include <stdlib.h>
@@ -23,10 +25,25 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_dialog_v1.h>
+#include <wlr/types/wlr_xdg_foreign_registry.h>
+#include <wlr/types/wlr_xdg_foreign_v1.h>
+#include <wlr/types/wlr_xdg_foreign_v2.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland/xwayland.h>
+
+struct leme_legacy_decoration {
+  struct leme_desktop *desktop;
+  struct wlr_server_decoration *decoration;
+  struct wl_listener mode;
+  struct wl_listener destroy;
+  struct wl_list link;
+};
 
 struct leme_xdg_decoration {
+  struct leme_desktop *desktop;
   struct wlr_xdg_toplevel_decoration_v1 *decoration;
+  enum wlr_xdg_toplevel_decoration_v1_mode committed_mode;
+  struct wl_listener commit;
   struct wl_listener request_mode;
   struct wl_listener destroy;
   struct wl_list link;
@@ -35,6 +52,9 @@ struct leme_xdg_decoration {
 struct leme_desktop {
   struct leme_server *server;
   struct wlr_xdg_activation_v1 *activation;
+  struct wlr_xdg_foreign_registry *foreign_registry;
+  struct wlr_xdg_foreign_v1 *foreign_v1;
+  struct wlr_xdg_foreign_v2 *foreign_v2;
   struct wlr_xdg_decoration_manager_v1 *xdg_decoration_manager;
   struct wlr_server_decoration_manager *server_decoration_manager;
   struct wlr_cursor_shape_manager_v1 *cursor_shape;
@@ -47,10 +67,73 @@ struct leme_desktop {
   struct wlr_seat_client *cursor_client;
   struct wl_listener cursor_client_destroy;
   struct wl_list xdg_decorations;
+  struct wl_list legacy_decorations;
   struct wl_listener request_activate;
   struct wl_listener new_xdg_decoration;
+  struct wl_listener new_dialog;
+  struct wl_listener new_legacy_decoration;
   struct wl_listener request_set_shape;
 };
+
+bool leme_desktop_view_server_decorated(const struct leme_view *view) {
+  if (view == NULL || view->server == NULL) {
+    return false;
+  }
+  if (view->kind == LEME_VIEW_XWAYLAND) {
+    const uint32_t no_title = WLR_XWAYLAND_SURFACE_DECORATIONS_NO_TITLE;
+    return view->xwayland_surface != NULL &&
+           (view->xwayland_surface->decorations & no_title) == 0;
+  }
+  return view->server_decorated;
+}
+
+static bool leme_desktop_native_decoration(const struct leme_view *view) {
+  const struct leme_desktop *desktop = view->server->desktop;
+  if (desktop == NULL || view->xdg_toplevel == NULL) {
+    return false;
+  }
+  const struct leme_xdg_decoration *xdg = NULL;
+  wl_list_for_each(xdg, &desktop->xdg_decorations, link) {
+    if (xdg->decoration->toplevel == view->xdg_toplevel) {
+      return xdg->committed_mode ==
+             WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+    }
+  }
+  const struct wlr_surface *surface = leme_view_surface(view);
+  const struct leme_legacy_decoration *legacy = NULL;
+  wl_list_for_each(legacy, &desktop->legacy_decorations, link) {
+    if (legacy->decoration->surface == surface) {
+      return legacy->decoration->mode ==
+             WLR_SERVER_DECORATION_MANAGER_MODE_SERVER;
+    }
+  }
+  return false;
+}
+
+void leme_desktop_sync_view_decoration(struct leme_view *view) {
+  if (view == NULL || view->kind != LEME_VIEW_XDG) {
+    return;
+  }
+  view->server_decorated =
+      view->server != NULL && leme_desktop_native_decoration(view);
+}
+
+static void leme_desktop_decoration_changed(struct leme_desktop *desktop,
+                                            const struct wlr_surface *surface) {
+  struct leme_view *view = NULL;
+  if (surface == NULL || desktop->server->views.next == NULL) {
+    return;
+  }
+  wl_list_for_each(view, &desktop->server->views, link) {
+    if (leme_view_surface(view) == surface) {
+      leme_desktop_sync_view_decoration(view);
+      if (view->mapped) {
+        leme_view_arrange_instant(desktop->server);
+      }
+      return;
+    }
+  }
+}
 
 static bool leme_desktop_same_root(struct wlr_surface *left,
                                    struct wlr_surface *right) {
@@ -99,9 +182,24 @@ static void leme_desktop_handle_activate(struct wl_listener *listener,
 static void
 leme_desktop_xdg_decoration_finish(struct leme_xdg_decoration *wrapper) {
   wl_list_remove(&wrapper->request_mode.link);
+  wl_list_remove(&wrapper->commit.link);
   wl_list_remove(&wrapper->destroy.link);
   wl_list_remove(&wrapper->link);
   free(wrapper);
+}
+
+static void
+leme_desktop_handle_xdg_decoration_commit(struct wl_listener *listener,
+                                          void *data) {
+  struct leme_xdg_decoration *wrapper =
+      wl_container_of(listener, wrapper, commit);
+  (void)data;
+  if (wrapper->committed_mode == wrapper->decoration->current.mode) {
+    return;
+  }
+  wrapper->committed_mode = wrapper->decoration->current.mode;
+  leme_desktop_decoration_changed(wrapper->desktop,
+                                  wrapper->decoration->toplevel->base->surface);
 }
 
 static void leme_desktop_set_xdg_decoration_mode(
@@ -132,7 +230,24 @@ leme_desktop_handle_xdg_decoration_destroy(struct wl_listener *listener,
       wl_container_of(listener, wrapper, destroy);
 
   (void)data;
+  struct leme_desktop *desktop = wrapper->desktop;
+  struct wlr_surface *surface = wrapper->decoration->toplevel->base->surface;
   leme_desktop_xdg_decoration_finish(wrapper);
+  leme_desktop_decoration_changed(desktop, surface);
+}
+
+static void leme_desktop_handle_new_dialog(struct wl_listener *listener,
+                                           void *data) {
+  struct leme_desktop *desktop = wl_container_of(listener, desktop, new_dialog);
+  const struct wlr_xdg_dialog_v1 *dialog = data;
+  struct leme_view *view = NULL;
+  wl_list_for_each(view, &desktop->server->views, link) {
+    if (view->kind == LEME_VIEW_XDG &&
+        view->xdg_toplevel == dialog->xdg_toplevel) {
+      leme_container_remove_view(view);
+      break;
+    }
+  }
 }
 
 static void leme_desktop_handle_new_xdg_decoration(struct wl_listener *listener,
@@ -147,12 +262,69 @@ static void leme_desktop_handle_new_xdg_decoration(struct wl_listener *listener,
     wlr_log(WLR_ERROR, "%s", "leme: failed to track XDG decoration");
     return;
   }
+  wrapper->desktop = desktop;
   wrapper->decoration = decoration;
+  wrapper->committed_mode = decoration->current.mode;
+  wrapper->commit.notify = leme_desktop_handle_xdg_decoration_commit;
+  wl_signal_add(&decoration->toplevel->base->surface->events.commit,
+                &wrapper->commit);
   wrapper->request_mode.notify = leme_desktop_handle_xdg_decoration_mode;
   wl_signal_add(&decoration->events.request_mode, &wrapper->request_mode);
   wrapper->destroy.notify = leme_desktop_handle_xdg_decoration_destroy;
   wl_signal_add(&decoration->events.destroy, &wrapper->destroy);
   wl_list_insert(&desktop->xdg_decorations, &wrapper->link);
+  leme_desktop_decoration_changed(desktop, decoration->toplevel->base->surface);
+}
+
+static void
+leme_desktop_legacy_decoration_finish(struct leme_legacy_decoration *wrapper) {
+  wl_list_remove(&wrapper->mode.link);
+  wl_list_remove(&wrapper->destroy.link);
+  wl_list_remove(&wrapper->link);
+  free(wrapper);
+}
+
+static void
+leme_desktop_handle_legacy_decoration_mode(struct wl_listener *listener,
+                                           void *data) {
+  struct leme_legacy_decoration *wrapper =
+      wl_container_of(listener, wrapper, mode);
+  (void)data;
+  leme_desktop_decoration_changed(wrapper->desktop,
+                                  wrapper->decoration->surface);
+}
+
+static void
+leme_desktop_handle_legacy_decoration_destroy(struct wl_listener *listener,
+                                              void *data) {
+  struct leme_legacy_decoration *wrapper =
+      wl_container_of(listener, wrapper, destroy);
+  (void)data;
+  struct leme_desktop *desktop = wrapper->desktop;
+  struct wlr_surface *surface = wrapper->decoration->surface;
+  leme_desktop_legacy_decoration_finish(wrapper);
+  leme_desktop_decoration_changed(desktop, surface);
+}
+
+static void
+leme_desktop_handle_new_legacy_decoration(struct wl_listener *listener,
+                                          void *data) {
+  struct leme_desktop *desktop =
+      wl_container_of(listener, desktop, new_legacy_decoration);
+  struct wlr_server_decoration *decoration = data;
+  struct leme_legacy_decoration *wrapper = calloc(1, sizeof(*wrapper));
+  if (wrapper == NULL) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to track legacy decoration");
+    return;
+  }
+  wrapper->desktop = desktop;
+  wrapper->decoration = decoration;
+  wrapper->mode.notify = leme_desktop_handle_legacy_decoration_mode;
+  wrapper->destroy.notify = leme_desktop_handle_legacy_decoration_destroy;
+  wl_signal_add(&decoration->events.mode, &wrapper->mode);
+  wl_signal_add(&decoration->events.destroy, &wrapper->destroy);
+  wl_list_insert(&desktop->legacy_decorations, &wrapper->link);
+  leme_desktop_decoration_changed(desktop, decoration->surface);
 }
 
 static void
@@ -306,6 +478,7 @@ static bool leme_desktop_load_cursor_scales(struct leme_server *server) {
 }
 
 void leme_desktop_output_changed(struct leme_server *server) {
+  leme_desk_owner_cancel(server);
   struct leme_desktop *desktop;
   float scale;
 
@@ -349,8 +522,16 @@ bool leme_desktop_init(struct leme_server *server) {
   }
   desktop->server = server;
   wl_list_init(&desktop->xdg_decorations);
+  wl_list_init(&desktop->legacy_decorations);
   wl_list_init(&desktop->cursor_client_destroy.link);
   server->desktop = desktop;
+  desktop->foreign_registry = wlr_xdg_foreign_registry_create(server->display);
+  if (desktop->foreign_registry != NULL) {
+    desktop->foreign_v1 =
+        wlr_xdg_foreign_v1_create(server->display, desktop->foreign_registry);
+    desktop->foreign_v2 =
+        wlr_xdg_foreign_v2_create(server->display, desktop->foreign_registry);
+  }
   desktop->activation = wlr_xdg_activation_v1_create(server->display);
   server->xdg_dialog_manager = wlr_xdg_wm_dialog_v1_create(server->display, 1);
   desktop->xdg_decoration_manager =
@@ -363,7 +544,9 @@ bool leme_desktop_init(struct leme_server *server) {
       server->config == NULL ? NULL : server->config->cursor.theme,
       server->config == NULL ? LEME_CURSOR_SIZE_DEFAULT
                              : (uint32_t)server->config->cursor.size);
-  if (desktop->activation == NULL || server->xdg_dialog_manager == NULL ||
+  if (desktop->foreign_registry == NULL || desktop->foreign_v1 == NULL ||
+      desktop->foreign_v2 == NULL || desktop->activation == NULL ||
+      server->xdg_dialog_manager == NULL ||
       desktop->xdg_decoration_manager == NULL ||
       desktop->server_decoration_manager == NULL ||
       desktop->cursor_shape == NULL || desktop->xcursor == NULL ||
@@ -380,10 +563,17 @@ bool leme_desktop_init(struct leme_server *server) {
   desktop->request_activate.notify = leme_desktop_handle_activate;
   wl_signal_add(&desktop->activation->events.request_activate,
                 &desktop->request_activate);
+  desktop->new_dialog.notify = leme_desktop_handle_new_dialog;
+  wl_signal_add(&server->xdg_dialog_manager->events.new_dialog,
+                &desktop->new_dialog);
   desktop->new_xdg_decoration.notify = leme_desktop_handle_new_xdg_decoration;
   wl_signal_add(
       &desktop->xdg_decoration_manager->events.new_toplevel_decoration,
       &desktop->new_xdg_decoration);
+  desktop->new_legacy_decoration.notify =
+      leme_desktop_handle_new_legacy_decoration;
+  wl_signal_add(&desktop->server_decoration_manager->events.new_decoration,
+                &desktop->new_legacy_decoration);
   desktop->request_set_shape.notify = leme_desktop_handle_cursor_shape;
   wl_signal_add(&desktop->cursor_shape->events.request_set_shape,
                 &desktop->request_set_shape);
@@ -473,8 +663,20 @@ void leme_desktop_finish(struct leme_server *server) {
   wl_list_for_each_safe(xdg, xdg_next, &desktop->xdg_decorations, link) {
     leme_desktop_xdg_decoration_finish(xdg);
   }
+  struct leme_legacy_decoration *legacy = NULL;
+  struct leme_legacy_decoration *legacy_next = NULL;
+  wl_list_for_each_safe(legacy, legacy_next, &desktop->legacy_decorations,
+                        link) {
+    leme_desktop_legacy_decoration_finish(legacy);
+  }
+  if (desktop->new_legacy_decoration.link.next != NULL) {
+    wl_list_remove(&desktop->new_legacy_decoration.link);
+  }
   if (desktop->request_activate.link.next != NULL) {
     wl_list_remove(&desktop->request_activate.link);
+  }
+  if (desktop->new_dialog.link.next != NULL) {
+    wl_list_remove(&desktop->new_dialog.link);
   }
   if (desktop->new_xdg_decoration.link.next != NULL) {
     wl_list_remove(&desktop->new_xdg_decoration.link);
@@ -491,5 +693,11 @@ void leme_desktop_finish(struct leme_server *server) {
   }
   free(desktop);
   server->desktop = NULL;
+  if (server->views.next != NULL) {
+    struct leme_view *view = NULL;
+    wl_list_for_each(view, &server->views, link) {
+      leme_desktop_sync_view_decoration(view);
+    }
+  }
   server->xdg_dialog_manager = NULL;
 }

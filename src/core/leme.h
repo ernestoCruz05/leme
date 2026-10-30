@@ -23,4 +23,13 @@ struct leme_box {
   int height;
 };
 
+static inline bool leme_box_equal(struct leme_box a, struct leme_box b) {
+  return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
+}
+
+static inline bool leme_box_contains(struct leme_box box, double x, double y) {
+  return x >= box.x && y >= box.y && x < (double)box.x + box.width &&
+         y < (double)box.y + box.height;
+}
+
 #endif

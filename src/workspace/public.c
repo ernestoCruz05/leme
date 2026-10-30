@@ -17,6 +17,8 @@ const char *leme_layout_public_name(enum leme_layout_kind kind) {
     return "master_stack";
   case LEME_LAYOUT_ACCORDION:
     return "accordion";
+  case LEME_LAYOUT_DESKTOP:
+    return "desktop";
   }
   return NULL;
 }

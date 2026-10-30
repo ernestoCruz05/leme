@@ -78,6 +78,9 @@ enum leme_control_code leme_workspace_control_prepare(
     } else if (layout_text.length == 9 &&
                memcmp(layout_text.data, "accordion", 9) == 0) {
       parsed_layout = LEME_LAYOUT_ACCORDION;
+    } else if (layout_text.length == 7 &&
+               memcmp(layout_text.data, "desktop", 7) == 0) {
+      parsed_layout = LEME_LAYOUT_DESKTOP;
     } else {
       return set_preflight_error(error, LEME_CONTROL_INVALID_ARGUMENT,
                                  "invalid layout name");
@@ -224,8 +227,10 @@ enum leme_control_code leme_workspace_control_execute_one(
       *outcome = LEME_CONTROL_FAILED;
       return LEME_CONTROL_ACTION_FAILED;
     }
+    leme_view_refresh_begin(server);
     leme_view_arrange(server);
     leme_tags_refresh_visibility(&output->tags);
+    leme_view_refresh_end(server);
     *outcome = LEME_CONTROL_APPLIED;
     return LEME_CONTROL_OK;
   }

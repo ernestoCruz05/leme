@@ -70,13 +70,18 @@ unsupported. A successful reload clears live overrides.
 
 ## Borders and effects
 
-The active and inactive border colors follow keyboard focus. Leme draws the border as its complete server-side decoration. It does not draw titlebars or buttons.
+The active and inactive border colors follow keyboard focus. Eligible windows in
+[desktop layout](../concepts/layouts.md#titlebars-and-window-placement) also have a
+titlebar with window controls, styled with [named `style` blocks](#desktop-styling).
+Other layouts use borders only.
 
 `corner_radius` rounds the window, frame and content together. Like
 `border_width`, it is in logical pixels, so both grow with the output scale. The
 value is clamped to half the shorter side, so a small window keeps the largest
 radius that fits. Fullscreen windows are never rounded, because a window covering the
-output has nothing to show through its corners.
+output has nothing to show through its corners. A window with a titlebar is
+rounded as a whole: the titlebar's top corners and the content's bottom corners.
+Maximized desktop windows and desktop containers stay square.
 
 Rounding requires a build configured with `-Deffects=true`, which compiles
 against a patched wlroots. Other builds accept the key and ignore it.
@@ -102,6 +107,200 @@ do nothing useful says so instead of being silently reduced.
 
 A matching window-rule `opacity` replaces the active or inactive style opacity;
 the values are not multiplied.
+
+## Desktop styling
+
+Leme draws the desktop titlebars and their buttons, the window and desktop
+menus, the rename and error prompts, the minimized strip, desktop icons and the
+selection box. A `style` block with a name styles one of them:
+
+```scfg
+style "titlebar" {
+    background "#2a2e32"
+    color      "#fcfcfc"
+}
+
+style "close:hover" {
+    background "#da4453"
+}
+```
+
+The name is an element, optionally followed by `:` and a state. The unnamed
+`style { }` block keeps the settings above, and named blocks never change them.
+Each element and state takes one block; a second one is reported and ignored.
+Unknown elements, states and properties are reported with the closest valid
+name.
+
+These blocks are not live settings. `reload_config` applies them to open
+windows and redraws the desktop.
+
+### How values combine
+
+Leme starts from an element's defaults and its block without a state, then
+applies the blocks for each state it is in, in this order: `inactive`,
+`maximized`, `hover`, `pressed`, `focus`, `selected`, `drop`, `disabled`. A
+later state wins, so a hovered button on an unfocused window uses `:inactive`
+first and `:hover` on top of it. A pressed button is also hovered.
+
+`minimize`, `maximize` and `close` start from `button`: `style "button:hover"`
+styles all three, and `style "close:hover"` overrides it for close only.
+`color` and `font` come from the containing element when they are not set.
+Buttons take the titlebar's, menu items and separators take the menu's, and
+prompt fields and buttons take the prompt's.
+
+Sizes, `align` and `layout` can only be set without a state, because they
+decide the layout and Leme computes it once.
+
+Anything that is not set keeps its default, so a config without `style`
+blocks looks the same as one that sets every default below.
+
+### Elements
+
+| Element | What it draws | States | Properties |
+| --- | --- | --- | --- |
+| `titlebar` | titlebars of windows and containers | `inactive` | `background` `color` `font` `height` `align` `layout` |
+| `button` | all titlebar buttons | `inactive` `hover` `pressed` `disabled` | `background` `color` `radius` `width` `size` `opacity` `icon` |
+| `minimize`, `close` | one titlebar button | as `button` | as `button`, without `width` |
+| `maximize` | the maximize button | as `button`, and `maximized` | as `button`, without `width` |
+| `menu` | window and desktop menus | | `background` `color` `font` `radius` `border_color` |
+| `menu_item` | menu rows | `hover` `disabled` | `background` `color` `border_color` |
+| `menu_separator` | lines between groups of rows | | `color` |
+| `prompt` | rename, new folder and error prompts | | `background` `color` `font` `radius` `border_color` |
+| `prompt_field` | the name field | `focus` | `background` `color` `border_color` |
+| `prompt_button` | prompt buttons | `focus` | `background` `color` `border_color` |
+| `strip` | the minimized-window strip and its arrows | `disabled` | `background` `color` |
+| `icon` | desktop icons and their labels | `selected` `drop` | `background` `border_color` `color` `font` `shadow` `size` `spacing` `padding` `width` `gap` `theme` |
+| `selection` | the selection box and selected prompt text | | `background` `border_color` |
+
+`maximize:maximized` is the button while its window is maximized, where the
+built-in glyph turns into the restore diamond. `icon:drop` is a folder or cell
+under a drag. `strip:disabled` is a page arrow with nothing more to show.
+
+### Properties
+
+| Property | Values |
+| --- | --- |
+| `background`, `color`, `border_color` | `#RRGGBB` or `#RRGGBBAA` |
+| `font` | Pango font description, such as `"Inter Semi-Bold 10"`, up to 127 bytes |
+| `radius` | `0` to `64` logical pixels |
+| `width` | `16` to `512` logical pixels |
+| `height` | `16` to `96` logical pixels |
+| `size`, `padding` | `8` to `256` and `0` to `256` logical pixels |
+| `spacing` | `32` to `512` logical pixels |
+| `gap` | `0` to `64` logical pixels |
+| `opacity` | decimal from `0.0` to `1.0` |
+| `align` | `left` or `center` |
+| `layout` | `title` and up to three of `minimize`, `maximize`, `close`, each once |
+| `shadow` | `true` or `false` |
+| `icon` | path to a `.svg` or `.png` file |
+| `theme` | icon theme name, such as `Papirus` |
+
+On titlebars, `height` is the titlebar height and `layout` lists the buttons
+around the title: buttons before `title` sit on the left, buttons after it on
+the right. `align center` centers the title on the whole titlebar and moves it
+only to keep it clear of the buttons. A window narrower than three buttons has
+no titlebar, even when fewer buttons are shown.
+
+On buttons, `width` is the button width and `size` the square the glyph or
+image is drawn in, centered in the button. `background` fills the whole button
+and `radius` rounds it. `opacity` applies to the glyph or image. `icon` replaces
+the built-in glyph with an image, which keeps its own colors; `color` only
+tints the built-in glyphs. A path starting with `~/` is in your home directory,
+and a relative path is relative to the config file. A missing or unreadable
+file is reported when the config loads, and the built-in glyph is drawn.
+
+On desktop icons, `size` is the icon size, `spacing` the size of each grid
+cell, `padding` the margin around the grid, `width` the label width and `gap`
+the space between icon and label. If `spacing` is not set, cells grow to fit
+the icon and the label; a `spacing` smaller than either is reported. `theme`
+picks the icon theme for desktop icons and the minimized strip. A theme that is
+not installed is reported and Adwaita is used instead. Desktop icons the theme
+lacks also come from Adwaita.
+
+### Defaults
+
+The defaults follow KDE Plasma's Breeze Dark:
+
+```scfg
+style "titlebar" {
+    background "#2a2e32"
+    color      "#fcfcfc"
+    font       "Sans 10"
+    height     32
+    align      center
+    layout     title minimize maximize close
+}
+
+style "titlebar:inactive" {
+    background "#202326"
+    color      "#a1a9b1"
+}
+
+style "button" {
+    width 32
+    size  32
+}
+
+style "button:disabled" {
+    opacity 0.35
+}
+
+style "icon" {
+    color   "#ffffff"
+    font    "Sans 10"
+    shadow  true
+    size    48
+    spacing 96
+    padding 16
+    width   88
+    gap     8
+    theme   Adwaita
+}
+
+style "strip" {
+    background "#000000"
+    color      "#cccccc"
+}
+
+style "strip:disabled" {
+    color "#4d4d4d"
+}
+```
+
+Menus and prompts use `#2a2e32` and `#fcfcfc` with `Sans 10`, and their
+`radius` is `corner_radius` up to 6. Disabled menu rows use `#a1a9b1`. Some
+defaults follow other settings, so changing those settings changes them too:
+
+- the hovered menu row and the selection box are `border_active` at 45%,
+  outlined with `border_active` at 80%;
+- focused prompt fields and buttons, and selected desktop icons, are outlined
+  with `border_active`; a drop target is filled like the selection box;
+- menu and prompt borders, prompt field and button borders, and menu
+  separators are the inactive titlebar `color` at 30%.
+
+Menu and prompt sizes, and the minimized strip's size, cannot be changed.
+
+### Example: buttons on the left
+
+This titlebar puts round buttons on the left, using an image per button and
+state:
+
+```scfg
+style "titlebar" {
+    layout close minimize maximize title
+}
+
+style "button" {
+    width 24
+    size  14
+}
+
+style "close"       { icon "~/.config/leme/theme/close.svg" }
+style "close:hover" { icon "~/.config/leme/theme/close-hover.svg" }
+style "minimize"    { icon "~/.config/leme/theme/minimize.svg" }
+style "maximize"    { icon "~/.config/leme/theme/maximize.svg" }
+style "button:inactive" { opacity 0.5 }
+```
 
 ## Fullscreen stacking
 

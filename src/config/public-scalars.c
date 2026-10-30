@@ -1,10 +1,12 @@
 #include "config/public-internal.h"
 #include "config/config.h"
+#include "config/style.h"
 #include "public/value-internal.h"
 #include "public/schema.h"
 #include "workspace/public.h"
 
 #include <math.h>
+#include <wlr/types/wlr_keyboard.h>
 
 const char *leme_config_public_drop_mode(enum leme_drop_mode mode) {
   switch (mode) {
@@ -83,6 +85,21 @@ static const char *banner_name(enum leme_banner_position position) {
   return NULL;
 }
 
+static const char *container_modifier_name(uint32_t modifier) {
+  switch (modifier) {
+  case WLR_MODIFIER_SHIFT:
+    return "shift";
+  case WLR_MODIFIER_CTRL:
+    return "ctrl";
+  case WLR_MODIFIER_ALT:
+    return "alt";
+  case WLR_MODIFIER_LOGO:
+    return "super";
+  default:
+    return NULL;
+  }
+}
+
 static enum leme_public_status put_enum(struct leme_public_builder *b,
                                         struct leme_public_value *record,
                                         struct leme_public_text key,
@@ -128,12 +145,56 @@ outer_gaps_value(struct leme_public_builder *b, const struct leme_gaps *gaps,
   return LEME_PUBLIC_OK;
 }
 
+static enum leme_public_status
+titlebar_value(struct leme_public_builder *b,
+               const struct leme_titlebar_style *style,
+               struct leme_public_value **out) {
+  static const char *const button_names[] = {"minimize", "maximize", "close"};
+  struct leme_public_value *titlebar = NULL, *buttons = NULL;
+  if (style->button_count > LEME_ARRAY_LENGTH(style->buttons))
+    return leme_public_fail(b, LEME_PUBLIC_INVALID);
+  if (leme_public_array(b, style->button_count, &buttons) != LEME_PUBLIC_OK)
+    return leme_public_builder_status(b);
+  for (size_t i = 0; i < style->button_count; ++i) {
+    struct leme_public_value *name = NULL;
+    if ((size_t)style->buttons[i] >= LEME_ARRAY_LENGTH(button_names))
+      return leme_public_fail(b, LEME_PUBLIC_INVALID);
+    if (leme_config_public_text(b, button_names[style->buttons[i]], &name) !=
+            LEME_PUBLIC_OK ||
+        leme_public_array_set(b, buttons, i, name) != LEME_PUBLIC_OK)
+      return leme_public_builder_status(b);
+  }
+  if (leme_public_object(b, 7, &titlebar) != LEME_PUBLIC_OK ||
+      put_color(b, titlebar, LEME_PUBLIC_TEXT("background_active"),
+                style->background_active) != LEME_PUBLIC_OK ||
+      put_color(b, titlebar, LEME_PUBLIC_TEXT("background_inactive"),
+                style->background_inactive) != LEME_PUBLIC_OK ||
+      put_color(b, titlebar, LEME_PUBLIC_TEXT("text_active"),
+                style->text_active) != LEME_PUBLIC_OK ||
+      put_color(b, titlebar, LEME_PUBLIC_TEXT("text_inactive"),
+                style->text_inactive) != LEME_PUBLIC_OK ||
+      leme_public_put_cstr(b, titlebar, LEME_PUBLIC_TEXT("font"),
+                           style->font) != LEME_PUBLIC_OK ||
+      put_enum(b, titlebar, LEME_PUBLIC_TEXT("align"),
+               style->align == LEME_TITLEBAR_ALIGN_CENTER
+                   ? "center"
+                   : "left") != LEME_PUBLIC_OK ||
+      leme_public_object_set(b, titlebar, LEME_PUBLIC_TEXT("buttons"),
+                             buttons) != LEME_PUBLIC_OK)
+    return leme_public_builder_status(b);
+  *out = titlebar;
+  return LEME_PUBLIC_OK;
+}
+
 static enum leme_public_status style_value(struct leme_public_builder *b,
                                            const struct leme_config *config,
                                            struct leme_public_value **out) {
-  struct leme_public_value *style = NULL, *outer = NULL;
+  struct leme_public_value *style = NULL, *outer = NULL, *titlebar = NULL;
+  struct leme_titlebar_style titlebar_style = {0};
+  leme_desk_style_titlebar(config, &titlebar_style);
   if (outer_gaps_value(b, &config->gap_outer, &outer) != LEME_PUBLIC_OK ||
-      leme_public_object(b, 11, &style) != LEME_PUBLIC_OK ||
+      titlebar_value(b, &titlebar_style, &titlebar) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 12, &style) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, style, LEME_PUBLIC_TEXT("gap"), config->gap) !=
           LEME_PUBLIC_OK ||
       leme_public_object_set(b, style, LEME_PUBLIC_TEXT("gap_outer"), outer) !=
@@ -155,7 +216,9 @@ static enum leme_public_status style_value(struct leme_public_builder *b,
       leme_public_put_number(b, style, LEME_PUBLIC_TEXT("opacity_inactive"),
                              config->opacity_inactive) != LEME_PUBLIC_OK ||
       put_enum(b, style, LEME_PUBLIC_TEXT("fullscreen_covers"),
-               coverage_name(config->fullscreen_covers)) != LEME_PUBLIC_OK)
+               coverage_name(config->fullscreen_covers)) != LEME_PUBLIC_OK ||
+      leme_public_object_set(b, style, LEME_PUBLIC_TEXT("titlebar"),
+                             titlebar) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = style;
   return LEME_PUBLIC_OK;
@@ -284,8 +347,16 @@ leme_config_public_scalars(struct leme_public_builder *b,
   struct leme_public_value *settings = NULL, *style = NULL, *tags = NULL,
                            *policy = NULL;
   struct leme_public_value *cursor = NULL, *pointer = NULL, *gestures = NULL,
-                           *publication = NULL, *errors = NULL;
-  if (leme_public_object(b, 8, &settings) != LEME_PUBLIC_OK ||
+                           *publication = NULL, *errors = NULL, *desktop = NULL;
+  if (leme_public_object(b, 9, &settings) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 2, &desktop) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, desktop, LEME_PUBLIC_TEXT("minimized_strip"),
+                           config->desktop_minimized_strip) != LEME_PUBLIC_OK ||
+      put_enum(b, desktop, LEME_PUBLIC_TEXT("container_modifier"),
+               container_modifier_name(config->desktop_container_modifier)) !=
+          LEME_PUBLIC_OK ||
+      leme_public_object_set(b, settings, LEME_PUBLIC_TEXT("desktop"),
+                             desktop) != LEME_PUBLIC_OK ||
       style_value(b, config, &style) != LEME_PUBLIC_OK ||
       tags_value(b, config, &tags) != LEME_PUBLIC_OK ||
       output_policy_value(b, config, &policy) != LEME_PUBLIC_OK ||

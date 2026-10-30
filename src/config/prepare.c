@@ -6,7 +6,12 @@
 #include "config/live.h"
 #include "control/memory.h"
 #include "core/server.h"
+#include "desktop/owner.h"
+#include "desktop/decoration.h"
 #include "core/session_environment.h"
+#include "desktop/desktop.h"
+#include "desktop/menu.h"
+#include "desktop/strip.h"
 #include "input/input.h"
 #include "input/public.h"
 #include "output/output.h"
@@ -285,6 +290,7 @@ void leme_config_reload_commit(struct leme_server *server,
     return;
   }
 
+  leme_desk_owner_cancel(server);
   struct leme_config *old = server->config;
   struct leme_config *old_baseline = NULL;
   struct leme_config *next = plan->next;
@@ -346,11 +352,21 @@ void leme_config_reload_commit(struct leme_server *server,
   leme_input_replace_modes(server, next->modes, next->mode_count);
   leme_render_apply_fullscreen_coverage(server);
   leme_view_refresh_fullscreen(server);
+  leme_desk_menu_close(server);
+  leme_desk_frames_restyle(server);
 
+  leme_view_refresh_begin(server);
   leme_view_arrange_instant(server);
   if (leme_output_focused(server) != NULL) {
     leme_render_refresh_views(server);
     leme_tags_refresh_visibility(leme_focused_tags(server));
+  }
+  leme_view_refresh_end(server);
+
+  leme_desk_strip_refresh(server);
+  if (!leme_desk_refresh(server)) {
+    wlr_log(WLR_ERROR, "%s",
+            "leme: configuration reloaded, but desktop refresh failed");
   }
 
   if (old_baseline != NULL && old_baseline != old) {
