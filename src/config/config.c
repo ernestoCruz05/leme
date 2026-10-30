@@ -345,6 +345,11 @@ struct leme_config *leme_config_defaults(void) {
   struct leme_config *config = calloc(1, sizeof(*config));
   struct leme_mode *common;
   size_t index;
+  char shell_flag[] = "-c";
+  char terminal_script[] =
+      "for t in \"$TERMINAL\" foot alacritty kitty wezterm ghostty xterm; do "
+      "command -v \"$t\" >/dev/null 2>&1 && exec \"$t\"; done";
+  char *terminal_params[] = {shell_flag, terminal_script};
 
   if (config == NULL) {
     return NULL;
@@ -398,7 +403,8 @@ struct leme_config *leme_config_defaults(void) {
   common->bindings[0].command.text = strdup("common");
   leme_config_default_binding(common, 1, WLR_MODIFIER_LOGO, XKB_KEY_Return,
                               LEME_COMMAND_SPAWN);
-  common->bindings[1].command.argv = leme_config_copy_argv("foot", NULL, 0);
+  common->bindings[1].command.argv =
+      leme_config_copy_argv("/bin/sh", terminal_params, 2);
   leme_config_default_binding(common, 2, WLR_MODIFIER_LOGO, XKB_KEY_r,
                               LEME_COMMAND_RELOAD_CONFIG);
   leme_config_default_binding(common, 3, WLR_MODIFIER_LOGO, XKB_KEY_q,

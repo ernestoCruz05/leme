@@ -155,6 +155,9 @@ static void leme_view_handle_map(struct wl_listener *listener, void *data) {
 
   leme_view_policy_apply_rules(view->server, &rules, &destination, &floating,
                                parent != NULL);
+  view->rule_fields =
+      rules.fields |
+      (parent != NULL ? LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT : 0);
 
   const bool sticky_parent = parent != NULL && leme_view_is_sticky(parent);
   const struct leme_view_map_options options = {
@@ -262,6 +265,7 @@ static void leme_view_handle_set_title(struct wl_listener *listener,
   struct leme_view *view = wl_container_of(listener, view, set_title);
 
   (void)data;
+  leme_view_apply_late_rules(view);
   leme_public_server_invalidate(view->server);
   leme_render_view_set_activated(view, view == view->server->focused_view);
 }
@@ -272,6 +276,7 @@ static void leme_view_handle_set_app_id(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(view);
+  leme_view_apply_late_rules(view);
   leme_public_server_invalidate(view->server);
   leme_render_view_set_activated(view, view == view->server->focused_view);
 }

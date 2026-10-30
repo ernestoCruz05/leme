@@ -153,6 +153,9 @@ static void leme_xwayland_surface_map(struct leme_xwayland_view *wrapper) {
 
   leme_view_policy_apply_rules(view->server, &rules, &destination, &floating,
                                parent != NULL);
+  view->rule_fields =
+      rules.fields |
+      (parent != NULL ? LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT : 0);
 
   const bool sticky_parent = parent != NULL && leme_view_is_sticky(parent) &&
                              !wrapper->xsurface->override_redirect;
@@ -453,6 +456,7 @@ static void leme_xwayland_handle_set_title(struct wl_listener *listener,
       wl_container_of(listener, wrapper, set_title);
 
   (void)data;
+  leme_view_apply_late_rules(wrapper->view);
   leme_public_server_invalidate(wrapper->view->server);
   leme_render_view_set_activated(
       wrapper->view, wrapper->view == wrapper->view->server->focused_view);
@@ -465,6 +469,7 @@ static void leme_xwayland_handle_set_class(struct wl_listener *listener,
 
   (void)data;
   leme_scratchpad_handle_identity_change(wrapper->view);
+  leme_view_apply_late_rules(wrapper->view);
   leme_public_server_invalidate(wrapper->view->server);
   leme_render_view_set_activated(
       wrapper->view, wrapper->view == wrapper->view->server->focused_view);

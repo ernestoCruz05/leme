@@ -104,6 +104,7 @@ struct leme_view {
   bool fullscreen;
   bool open_animation_pending;
   uint32_t open_animation_serial;
+  uint32_t rule_fields;
   struct wl_event_source *open_animation_timeout;
   float render_opacity;
   void *animation_state;
@@ -160,6 +161,7 @@ void leme_view_arrange_instant(struct leme_server *server);
 void leme_view_refresh_tag_focus(struct leme_server *server);
 bool leme_view_move_to_output(struct leme_view *view,
                               struct leme_output *output, bool follow);
+void leme_view_apply_late_rules(struct leme_view *view);
 bool leme_view_drop_to_output(struct leme_view *view,
                               struct leme_layout_detach **detach,
                               struct leme_output *output,

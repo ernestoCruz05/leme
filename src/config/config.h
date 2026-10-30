@@ -28,6 +28,7 @@ struct leme_scratchpad_config {
   char **spawn;
   double width;
   double height;
+  int spawn_timeout_ms;
   int line;
 };
 

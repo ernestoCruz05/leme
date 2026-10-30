@@ -20,8 +20,6 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland/xwayland.h>
 
-#define LEME_SCRATCHPAD_PENDING_TIMEOUT_MS 10000
-
 struct leme_scratchpad_pending {
   struct wl_list link;
   struct leme_scratchpad_manager *manager;
@@ -91,13 +89,13 @@ leme_scratchpad_pending_spawn(struct leme_scratchpad_manager *manager,
 }
 
 static int leme_scratchpad_pending_arm(struct leme_scratchpad_manager *manager,
-                                       struct wl_event_source *timer) {
+                                       struct wl_event_source *timer,
+                                       int timeout_ms) {
   if (manager->timer_arm_observer != NULL) {
-    return manager->timer_arm_observer(LEME_SCRATCHPAD_PENDING_TIMEOUT_MS,
+    return manager->timer_arm_observer(timeout_ms,
                                        manager->timer_arm_observer_data);
   }
-  return wl_event_source_timer_update(timer,
-                                      LEME_SCRATCHPAD_PENDING_TIMEOUT_MS);
+  return wl_event_source_timer_update(timer, timeout_ms);
 }
 
 static bool
@@ -129,7 +127,8 @@ leme_scratchpad_pending_create(struct leme_scratchpad_manager *manager,
     return false;
   }
   pending->destination = destination;
-  if (leme_scratchpad_pending_arm(manager, pending->timer) < 0 ||
+  if (leme_scratchpad_pending_arm(manager, pending->timer,
+                                  scratchpad->spawn_timeout_ms) < 0 ||
       !leme_scratchpad_pending_spawn(manager, scratchpad->spawn)) {
     leme_scratchpad_pending_destroy(pending);
     return false;

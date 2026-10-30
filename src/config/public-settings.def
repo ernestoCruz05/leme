@@ -293,6 +293,8 @@ PUBLIC_SCHEMA(SCRATCHPAD, "scratchpad", false,
       "Requested output-relative width"),
   PUBLIC_FIELD("height", SCRATCH_SIZE, false, true, "ratio", SENSITIVE, ALWAYS, NULL,
       "Requested output-relative height"),
+  PUBLIC_FIELD("spawn_timeout", SPAWN_TIMEOUT, false, true, "ms", SENSITIVE, ALWAYS, NULL,
+      "How long a spawned app has to map before it opens as a normal window"),
   PUBLIC_FIELD("spawn", REDACTED, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Launch argv is never constructed into public values")
 )

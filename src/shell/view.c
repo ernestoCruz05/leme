@@ -7,6 +7,7 @@
 #include "protocols/toplevel.h"
 #include "shell/layer.h"
 #include "shell/policy.h"
+#include "shell/rules.h"
 #include "shell/xwayland.h"
 #include "output/output.h"
 #include "render/render.h"
@@ -389,6 +390,49 @@ bool leme_view_move_to_output(struct leme_view *view,
   warp = view->server->config == NULL ||
          view->server->config->output_policy.warp_cursor;
   return leme_view_adopt_to_output(view, output, follow, warp);
+}
+
+void leme_view_apply_late_rules(struct leme_view *view) {
+  if (!view->mapped || view->unmanaged || leme_view_is_scratchpad(view) ||
+      leme_view_is_sticky(view)) {
+    return;
+  }
+  const struct leme_view_rules rules = leme_view_rules_match(
+      view->server->config, leme_view_identity(view), leme_view_title(view));
+  const uint32_t late =
+      rules.fields & ~view->rule_fields &
+      (LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT |
+       LEME_WINDOW_RULE_FLOATING | LEME_WINDOW_RULE_FULLSCREEN);
+
+  if (late == 0) {
+    return;
+  }
+  view->rule_fields |= late;
+  if ((late & (LEME_WINDOW_RULE_TAG | LEME_WINDOW_RULE_OUTPUT)) != 0) {
+    leme_input_pointer_grab_cancel_tiled(view->server);
+  }
+  if ((late & LEME_WINDOW_RULE_OUTPUT) != 0) {
+    struct leme_output *output =
+        leme_output_by_name(view->server, rules.output);
+
+    if (output != NULL && output != leme_view_output(view)) {
+      (void)leme_view_move_to_output(view, output, false);
+    }
+  }
+  if ((late & LEME_WINDOW_RULE_TAG) != 0 && leme_view_output(view) != NULL) {
+    struct leme_tags *tags = leme_output_tags(leme_view_output(view));
+
+    if (leme_tags_move_view(tags, view, rules.tag_id)) {
+      leme_tags_refresh_visibility(tags);
+    }
+  }
+  if ((late & LEME_WINDOW_RULE_FLOATING) != 0) {
+    (void)leme_view_set_floating(view, rules.floating);
+  }
+  if ((late & LEME_WINDOW_RULE_FULLSCREEN) != 0 && rules.fullscreen) {
+    (void)leme_view_set_fullscreen(view, true);
+  }
+  leme_view_refresh_tag_focus(view->server);
 }
 
 bool leme_view_drop_to_output(struct leme_view *view,

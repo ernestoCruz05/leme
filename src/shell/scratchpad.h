@@ -31,7 +31,7 @@ struct leme_scratchpad_manager {
   size_t *render_configure_count;
   bool (*spawn_observer)(const struct leme_server *, char *const *, void *);
   void *spawn_observer_data;
-  int (*timer_arm_observer)(unsigned int, void *);
+  int (*timer_arm_observer)(int, void *);
   void *timer_arm_observer_data;
   bool (*direct_prepare_observer)(const struct leme_view *, void *);
   void *direct_prepare_observer_data;

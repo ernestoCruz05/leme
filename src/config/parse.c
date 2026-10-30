@@ -494,20 +494,19 @@ leme_config_parse_scratchpad(struct leme_config *config,
                              const struct leme_scfg_directive *directive,
                              const char *path, char **error) {
   static const char *const scratchpad_keys[] = {
-      "identity",
-      "spawn",
-      "width",
-      "height",
+      "identity", "spawn", "width", "height", "spawn_timeout",
   };
   struct leme_scratchpad_config scratchpad = {
       .width = 0.6,
       .height = 0.6,
+      .spawn_timeout_ms = 10000,
       .line = directive->lineno,
   };
   const struct leme_scfg_directive *dir_identity = NULL;
   const struct leme_scfg_directive *dir_spawn = NULL;
   const struct leme_scfg_directive *dir_width = NULL;
   const struct leme_scfg_directive *dir_height = NULL;
+  const struct leme_scfg_directive *dir_spawn_timeout = NULL;
   bool complete = true;
   size_t index;
 
@@ -636,6 +635,38 @@ leme_config_parse_scratchpad(struct leme_config *config,
         scratchpad.height = dimension;
         dir_height = entry;
       }
+    } else if (strcmp(entry->name, "spawn_timeout") == 0) {
+      int timeout;
+
+      if (dir_spawn_timeout != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_spawn_timeout,
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(
+                config, entry, -1, &extra,
+                "duplicate scratchpad property spawn_timeout")) {
+          leme_config_finish_scratchpad(&scratchpad);
+          return false;
+        }
+        complete = false;
+        continue;
+      }
+      if (entry->params_len != 1 || entry->children.directives_len != 0 ||
+          !leme_config_parse_nonnegative(entry->params[0], &timeout) ||
+          timeout < 1000 || timeout > 600000) {
+        if (!leme_config_reject(
+                config, entry, 0,
+                "spawn_timeout requires milliseconds from 1000 through "
+                "600000")) {
+          leme_config_finish_scratchpad(&scratchpad);
+          return false;
+        }
+        complete = false;
+        continue;
+      }
+      scratchpad.spawn_timeout_ms = timeout;
+      dir_spawn_timeout = entry;
     } else {
       const char *nearest = leme_config_nearest_key(
           entry->name, scratchpad_keys,

@@ -21,6 +21,16 @@ cannot suppress lexer or parser syntax errors.
 At startup, a rejected load uses safe defaults. During reload, the running
 configuration remains in place.
 
+The safe defaults bind a few keys so you can fix the file and reload:
+
+| Key | Action |
+| --- | --- |
+| `SUPER+Return` | opens `$TERMINAL`, or else the first of foot, alacritty, kitty, wezterm, ghostty and xterm that is installed |
+| `SUPER+r` | `reload_config` |
+| `SUPER+q` | quit Leme |
+| `CTRL+ALT+F1` to `F12` | switch VT |
+| `CTRL+ALT+space` | next keyboard layout |
+
 ## Check before you reload
 
 ```sh

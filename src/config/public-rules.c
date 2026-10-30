@@ -395,7 +395,7 @@ scratchpads_value(struct leme_public_builder *b,
   for (size_t i = 0; i < config->scratchpad_count; ++i) {
     const struct leme_scratchpad_config *scratchpad = &config->scratchpads[i];
     struct leme_public_value *record = NULL, *redacted = NULL;
-    if (leme_public_object(b, 5, &record) != LEME_PUBLIC_OK ||
+    if (leme_public_object(b, 6, &record) != LEME_PUBLIC_OK ||
         leme_config_public_redacted(b, &redacted) != LEME_PUBLIC_OK ||
         leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("name"),
                              scratchpad->name) != LEME_PUBLIC_OK ||
@@ -405,6 +405,9 @@ scratchpads_value(struct leme_public_builder *b,
                                scratchpad->width) != LEME_PUBLIC_OK ||
         leme_public_put_number(b, record, LEME_PUBLIC_TEXT("height"),
                                scratchpad->height) != LEME_PUBLIC_OK ||
+        leme_public_put_number(b, record, LEME_PUBLIC_TEXT("spawn_timeout"),
+                               scratchpad->spawn_timeout_ms) !=
+            LEME_PUBLIC_OK ||
         leme_public_object_set(b, record, LEME_PUBLIC_TEXT("spawn"),
                                redacted) != LEME_PUBLIC_OK ||
         leme_public_array_set(b, array, i, record) != LEME_PUBLIC_OK)

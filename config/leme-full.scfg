@@ -92,6 +92,7 @@ scratchpad "drop" {
     spawn foot --app-id foot-drop
     width 0.6
     height 0.6
+    # spawn_timeout 10000 # ms to wait for the window before giving up
 }
 
 # A list of scratchpads generated with a loop. Uncomment to use:

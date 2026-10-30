@@ -85,7 +85,8 @@ static bool leme_config_validate_scratchpads(const struct leme_config *config,
         scratchpad->spawn[0][0] == '\0' || !isfinite(scratchpad->width) ||
         !isfinite(scratchpad->height) || scratchpad->width < 0.1 ||
         scratchpad->width > 1.0 || scratchpad->height < 0.1 ||
-        scratchpad->height > 1.0) {
+        scratchpad->height > 1.0 || scratchpad->spawn_timeout_ms < 1000 ||
+        scratchpad->spawn_timeout_ms > 600000) {
       leme_config_set_error(error, "config: invalid scratchpad configuration");
       return false;
     }
