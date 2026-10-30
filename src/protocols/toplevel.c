@@ -40,6 +40,14 @@ static bool leme_toplevel_eligible(const struct leme_view *view) {
   return leme_ownership_publication_eligible(view);
 }
 
+static bool leme_toplevel_shown(const struct leme_view *view,
+                                struct leme_output *output) {
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  const struct leme_tags *tags = leme_output_tags(output);
+
+  return tag == NULL || (tags != NULL && tags->focused_id == tag->id);
+}
+
 static bool leme_toplevel_replace(char **stored, const char *value) {
   char *copy;
 
@@ -300,7 +308,9 @@ static void leme_toplevel_sync(struct leme_server *server,
   struct leme_publication_toplevel *toplevel = view->publication;
   struct wlr_ext_foreign_toplevel_handle_v1_state state = {0};
   struct leme_output *output = leme_view_output(view);
-  struct wlr_output *wlr_output = output == NULL ? NULL : output->wlr_output;
+  struct wlr_output *wlr_output =
+      output == NULL || !leme_toplevel_shown(view, output) ? NULL
+                                                           : output->wlr_output;
   const char *title = leme_view_title(view);
   const char *app_id = leme_view_identity(view);
   bool changed;

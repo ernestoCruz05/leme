@@ -53,7 +53,8 @@ windows, and layer surfaces drawn over it do not appear. XWayland menus are
 separate X11 windows and are not included. While the window is on a hidden
 tag, in a hidden scratchpad, or in a suspended sticky group, the capture shows
 a black frame of the window's size, and live content returns when the window
-is shown again. The capture ends when the window unmaps or the session locks.
+is shown again. A minimized window on the shown tag keeps its last content. The
+capture ends when the window unmaps or the session locks.
 Whole-output capture includes presented sticky windows only on their owner
 output.
 
@@ -122,11 +123,20 @@ A managed mapped window is published. Ordinary tagged windows, shown
 scratchpads, and output-presented sticky windows are published; a hidden mapped
 scratchpad or suspended sticky window is not. A shown scratchpad and a sticky
 window belong only to their displayed/owner output, and output moves send leave
-and enter on the same handle. Override-redirect X11
+and enter on the same handle. A tagged window is on its output only while its
+tag is shown there: switching tags sends `output_leave` for the hidden tag's
+windows and `output_enter` for the shown tag's, so a bar that lists one output's
+windows lists its shown tag. Override-redirect X11
 surfaces and layer-shell clients are not. XWayland windows publish their title
 and class as the app id.
 
-Minimized windows remain published with their output association. The wlr handle
+Leme creates a window's `ext-foreign-toplevel-list-v1` handle and its
+`wlr-foreign-toplevel-management-v1` handle together and destroys them
+together, and both lists announce windows in creation order. A client that
+binds both globals in one registry pass can pair the handles by order, for
+example to capture a window it tracks through the wlr protocol.
+
+Minimized windows remain published, and on the shown tag they keep their output. The wlr handle
 reports effective minimized state, including same-tag parent inheritance. Accepted
 activation restores before focusing; ignored or urgent off-tag activation alone
 does not restore. An explicit unminimize request is separate from activation.

@@ -7,6 +7,7 @@
 #include "protocols/toplevel.h"
 #include "render/render.h"
 #include "shell/view.h"
+#include "workspace/tag.h"
 
 #include <stdlib.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
@@ -28,12 +29,23 @@ struct leme_capture {
 
 static const float leme_capture_blank_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
+static bool leme_capture_minimized_shown(const struct leme_view *view) {
+  const struct leme_tag *tag = leme_ownership_tag(view);
+  struct leme_output *output = leme_view_output(view);
+  const struct leme_tags *tags =
+      output == NULL ? NULL : leme_output_tags(output);
+
+  return leme_view_is_minimized(view) && tag != NULL && tags != NULL &&
+         tags->focused_id == tag->id;
+}
+
 static bool leme_capture_view_visible(const struct leme_view *view) {
   int x = 0;
   int y = 0;
 
   return view->render_tree != NULL &&
-         wlr_scene_node_coords(&view->render_tree->node, &x, &y);
+         (wlr_scene_node_coords(&view->render_tree->node, &x, &y) ||
+          leme_capture_minimized_shown(view));
 }
 
 static void leme_capture_sync_view(struct leme_view *view) {
