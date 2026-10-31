@@ -74,6 +74,7 @@ void leme_server_report_diagnostics(const struct leme_server *server) {
   const struct leme_config *config = server->config;
   size_t index;
 
+  leme_graphics_report_effects(server);
   if (config == NULL || config->diagnostics.count == 0) {
     return;
   }

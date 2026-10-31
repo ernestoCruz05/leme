@@ -1,7 +1,12 @@
 #include "render/graphics.h"
 
+#include "config/config.h"
 #include "core/server.h"
 
+#include <wlr/config.h>
+#if WLR_HAS_GLES2_RENDERER
+#include <wlr/render/gles2.h>
+#endif
 #include <wlr/render/pixman.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
@@ -70,15 +75,44 @@ void leme_graphics_finish(struct leme_server *server) {
   server->content_type_manager = NULL;
 }
 
+#ifdef LEME_HAVE_EFFECTS
+static bool leme_graphics_is_gles2(struct wlr_renderer *renderer) {
+#if WLR_HAS_GLES2_RENDERER
+  return wlr_renderer_is_gles2(renderer);
+#else
+  (void)renderer;
+  return false;
+#endif
+}
+#endif
+
 bool leme_graphics_effects_supported(const struct leme_server *server) {
 #ifdef LEME_HAVE_EFFECTS
-  if (server == NULL || server->renderer == NULL ||
-      wlr_renderer_is_pixman(server->renderer)) {
-    return false;
-  }
-  return true;
+  return server != NULL && server->renderer != NULL &&
+         leme_graphics_is_gles2(server->renderer);
 #else
   (void)server;
   return false;
+#endif
+}
+
+void leme_graphics_report_effects(const struct leme_server *server) {
+  const struct leme_config *config = server->config;
+
+  if (config == NULL || (config->blur <= 0 && config->corner_radius <= 0)) {
+    return;
+  }
+#ifdef LEME_HAVE_EFFECTS
+  if (server->renderer == NULL || leme_graphics_is_gles2(server->renderer) ||
+      wlr_renderer_is_pixman(server->renderer)) {
+    return;
+  }
+  wlr_log(WLR_ERROR, "%s",
+          "leme: style blur and corner_radius do nothing with this renderer; "
+          "they need WLR_RENDERER=gles2 or pixman");
+#else
+  wlr_log(WLR_ERROR, "%s",
+          "leme: style blur and corner_radius do nothing in a build without "
+          "-Deffects=true");
 #endif
 }
