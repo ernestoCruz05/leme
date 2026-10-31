@@ -277,7 +277,6 @@ struct leme_config {
   struct leme_config *baseline;
   uint16_t initial_tags;
   uint16_t max_tags;
-  enum leme_drop_mode drop_mode;
   int gap;
   struct leme_gaps gap_outer;
   bool smart_gaps;

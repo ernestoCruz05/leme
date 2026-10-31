@@ -83,7 +83,6 @@ struct leme_pointer_grab {
   struct leme_layout_resize_drag resize_drag;
   struct leme_view *drop_target;
   enum leme_direction drop_direction;
-  enum leme_drop_mode drop_mode;
   bool preview_failed;
   struct leme_output *destination;
   bool drop_empty;
@@ -537,6 +536,17 @@ static void leme_input_pointer_split_motion(struct leme_pointer_grab *grab) {
   }
 }
 
+static enum leme_drop_mode
+leme_input_pointer_drop_mode(const struct leme_view *target) {
+  const struct leme_tag *tag = leme_ownership_tag(target);
+  struct leme_tag_settings settings = {.drop_mode = LEME_DROP_MODE_SIMPLE};
+
+  if (tag != NULL && target->server->config != NULL) {
+    leme_config_tag_settings(target->server->config, tag->id, &settings);
+  }
+  return settings.drop_mode;
+}
+
 static void leme_input_pointer_grab_motion(
     struct wlr_seat_pointer_grab *seat_grab,
     uint32_t time_msec, // NOLINT(bugprone-easily-swappable-parameters)
@@ -651,9 +661,10 @@ static void leme_input_pointer_grab_motion(
       leme_input_pointer_grab_hide_preview(grab);
     }
     if (target == NULL ||
-        !leme_layout_drop_at(
-            grab->drop_mode, leme_render_view_content_box(target, target->box),
-            grab->server->cursor->x, grab->server->cursor->y, &drop)) {
+        !leme_layout_drop_at(leme_input_pointer_drop_mode(target),
+                             leme_render_view_content_box(target, target->box),
+                             grab->server->cursor->x, grab->server->cursor->y,
+                             &drop)) {
       grab->drop_target = NULL;
       return;
     }
@@ -1033,8 +1044,6 @@ static bool leme_input_pointer_grab_start(
   grab->edges = edges;
   grab->drop_target = NULL;
   grab->drop_direction = LEME_DIRECTION_LEFT;
-  grab->drop_mode = server->config == NULL ? LEME_DROP_MODE_SIMPLE
-                                           : server->config->drop_mode;
   grab->preview_failed = false;
   grab->destination = leme_view_output(view);
   grab->drop_empty = false;

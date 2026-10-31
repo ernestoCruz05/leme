@@ -334,9 +334,9 @@ static bool leme_config_parse_tags(struct leme_config *config,
         continue;
       }
       if (strcmp(entry->params[0], "simple") == 0) {
-        config->drop_mode = LEME_DROP_MODE_SIMPLE;
+        config->tag_defaults.drop_mode = LEME_DROP_MODE_SIMPLE;
       } else if (strcmp(entry->params[0], "edges") == 0) {
-        config->drop_mode = LEME_DROP_MODE_EDGES;
+        config->tag_defaults.drop_mode = LEME_DROP_MODE_EDGES;
       } else {
         const struct leme_reject_extra extra = {
             .help = "valid values are `simple` and `edges`",
@@ -347,7 +347,6 @@ static bool leme_config_parse_tags(struct leme_config *config,
         }
         continue;
       }
-      config->tag_defaults.drop_mode = config->drop_mode;
       dir_drop_mode = entry;
     } else if (strcmp(entry->name, "layout") == 0) {
       if (dir_layout != NULL) {
@@ -4594,7 +4593,6 @@ struct leme_config *leme_config_load(const char *path, char **error) {
       .position = LEME_BANNER_TOP,
       .timeout = 0,
   };
-  config->drop_mode = LEME_DROP_MODE_SIMPLE;
   config->cursor.size = LEME_CURSOR_SIZE_DEFAULT;
   config->keyboard_repeat_rate = LEME_KEYBOARD_REPEAT_RATE_DEFAULT;
   config->keyboard_repeat_delay = LEME_KEYBOARD_REPEAT_DELAY_DEFAULT;
@@ -4606,7 +4604,7 @@ struct leme_config *leme_config_load(const char *path, char **error) {
           .threshold = 0.5,
           .deceleration = 0.997,
           .velocity_window_ms = 150,
-  };
+      };
   config->publication.activation = LEME_ACTIVATION_FOLLOW;
   leme_config_set_style_defaults(config);
   leme_config_set_output_defaults(config);

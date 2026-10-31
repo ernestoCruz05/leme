@@ -15,6 +15,7 @@ int leme_config_check(const char *path, FILE *stream) {
   size_t errors = 0;
   size_t warnings = 0;
   bool colour;
+  bool valid;
 
   if (path == NULL) {
     fprintf(stream, "no configuration path is available\n");
@@ -34,7 +35,9 @@ int leme_config_check(const char *path, FILE *stream) {
     return 1;
   }
   free(error);
-  if (config->diagnostics.count == 0) {
+  error = NULL;
+  valid = leme_config_validate(config, &error);
+  if (valid && config->diagnostics.count == 0) {
     fprintf(stream, "%s: no problems found\n", path);
     leme_config_destroy(config);
     return 0;
@@ -46,6 +49,7 @@ int leme_config_check(const char *path, FILE *stream) {
 
     if (rendered == NULL) {
       fprintf(stream, "%s: out of memory while reporting\n", path);
+      free(error);
       leme_config_destroy(config);
       return 1;
     }
@@ -72,6 +76,11 @@ int leme_config_check(const char *path, FILE *stream) {
   if (config->diagnostics.truncated) {
     fprintf(stream, "%s: further problems were not recorded\n", path);
   }
+  if (!valid) {
+    fprintf(stream, "%s\n%s: configuration rejected\n",
+            error != NULL ? error : "invalid configuration", path);
+  }
+  free(error);
   leme_config_destroy(config);
   return 1;
 }

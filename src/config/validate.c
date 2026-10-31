@@ -193,7 +193,7 @@ bool leme_config_validate_command(const struct leme_config *config,
     return command->direction >= LEME_DIRECTION_LEFT &&
            command->direction <= LEME_DIRECTION_DOWN && command->amount > 0;
   case LEME_COMMAND_RESIZE:
-    return command->amount > 0 && command->edge >= LEME_RESIZE_LEFT &&
+    return command->amount != 0 && command->edge >= LEME_RESIZE_LEFT &&
            command->edge <= LEME_RESIZE_DOWN;
   case LEME_COMMAND_SPAWN:
     return command->argv != NULL && command->argv[0] != NULL;

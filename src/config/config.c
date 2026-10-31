@@ -366,7 +366,6 @@ struct leme_config *leme_config_defaults(void) {
     return NULL;
   }
   config->max_tags = 9;
-  config->drop_mode = LEME_DROP_MODE_SIMPLE;
   config->cursor.size = LEME_CURSOR_SIZE_DEFAULT;
   config->keyboard_repeat_rate = LEME_KEYBOARD_REPEAT_RATE_DEFAULT;
   config->keyboard_repeat_delay = LEME_KEYBOARD_REPEAT_DELAY_DEFAULT;
@@ -378,7 +377,7 @@ struct leme_config *leme_config_defaults(void) {
           .threshold = 0.5,
           .deceleration = 0.997,
           .velocity_window_ms = 150,
-  };
+      };
   config->publication.activation = LEME_ACTIVATION_FOLLOW;
   config->config_errors = (struct leme_config_errors){
       .show = true,
