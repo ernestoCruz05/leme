@@ -554,7 +554,7 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
 
           struct leme_control_request *req = NULL;
           enum leme_control_code rcode =
-              leme_control_request_create(&doc, &req, &err);
+              leme_control_request_create(&doc, &peer->limits, &req, &err);
           if (rcode != LEME_CONTROL_OK) {
             const char *id_ptr = NULL;
             size_t id_len = 0;

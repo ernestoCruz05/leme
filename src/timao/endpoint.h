@@ -1,7 +1,7 @@
 #ifndef TIMAO_ENDPOINT_H
 #define TIMAO_ENDPOINT_H
 
-#include "public/budget.h"
+#include <stdbool.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -17,8 +17,7 @@ struct timao_endpoint {
   socklen_t length;
 };
 
-enum leme_public_status
-timao_endpoint_resolve(const struct timao_endpoint_options *options,
-                       struct timao_endpoint *out);
+bool timao_endpoint_resolve(const struct timao_endpoint_options *options,
+                            struct timao_endpoint *out);
 
 #endif

@@ -6,7 +6,7 @@
   fullscreen.
 - [Configuration](configuration/README.md): every config block and key.
 - [Guides](guides/README.md): monitors, bars, locking, screen sharing,
-  XWayland, Gentoo, `timao` scripts.
+  XWayland, Gentoo.
 - [Reference](reference/README.md): commands, `timao`, the control socket,
   Wayland protocols, limitations.
 - [Troubleshooting](troubleshooting/README.md): logs first, then fixes by

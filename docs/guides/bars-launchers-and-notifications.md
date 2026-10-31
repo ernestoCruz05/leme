@@ -24,7 +24,7 @@ prints a `snapshot` line and then one line per change, with the result in
 
 ```sh
 timao watch session mode
-timao eval '(watch EXPRESSION)'
+timao watch 'EXPRESSION'
 ```
 
 | Shows | Expression |

@@ -64,7 +64,6 @@ nav:
       - Screen sharing: guides/screen-sharing.md
       - XWayland: guides/xwayland.md
       - Gentoo/OpenRC: guides/gentoo-openrc.md
-      - Writing timao scripts: guides/writing-timao-scripts.md
   - Reference:
       - Reference: reference/README.md
       - Commands: reference/commands.md

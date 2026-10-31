@@ -1,5 +1,6 @@
 #include "control/request.h"
 #include "control/memory.h"
+#include "control/source.h"
 
 #include <errno.h>
 #include <math.h>
@@ -14,6 +15,7 @@ struct leme_control_request {
   struct leme_public_text instance;
   struct leme_public_text subscription;
   const struct leme_public_value *expr;
+  struct leme_public_builder *source_owner;
 };
 
 static void set_error(struct leme_control_error *error,
@@ -35,6 +37,7 @@ static void set_error(struct leme_control_error *error,
 
 enum leme_control_code
 leme_control_request_create(struct leme_control_document **document,
+                            const struct leme_control_limits *limits,
                             struct leme_control_request **out,
                             struct leme_control_error *error) {
   if (out == NULL)
@@ -63,6 +66,9 @@ leme_control_request_create(struct leme_control_document **document,
       leme_public_get(root, LEME_PUBLIC_TEXT("expr"));
   const struct leme_public_value *subscription_val =
       leme_public_get(root, LEME_PUBLIC_TEXT("subscription"));
+  const struct leme_public_value *source_val =
+      leme_public_get(root, LEME_PUBLIC_TEXT("source"));
+  const bool one_expression = (expr_val == NULL) != (source_val == NULL);
 
   if (version_val == NULL) {
     set_error(error, LEME_CONTROL_INVALID_REQUEST, "missing version field");
@@ -113,28 +119,29 @@ leme_control_request_create(struct leme_control_document **document,
   enum leme_control_request_op op = LEME_CONTROL_HELLO;
   if (op_text.length == 5 && memcmp(op_text.data, "hello", 5) == 0) {
     op = LEME_CONTROL_HELLO;
-    if (instance_val != NULL || expr_val != NULL || member_count != 3) {
+    if (instance_val != NULL || expr_val != NULL || source_val != NULL ||
+        member_count != 3) {
       set_error(error, LEME_CONTROL_INVALID_REQUEST,
                 "invalid fields in hello request");
       return LEME_CONTROL_INVALID_REQUEST;
     }
   } else if (op_text.length == 5 && memcmp(op_text.data, "query", 5) == 0) {
     op = LEME_CONTROL_QUERY;
-    if (instance_val == NULL || expr_val == NULL || member_count != 5) {
+    if (instance_val == NULL || !one_expression || member_count != 5) {
       set_error(error, LEME_CONTROL_INVALID_REQUEST,
                 "invalid fields in query request");
       return LEME_CONTROL_INVALID_REQUEST;
     }
   } else if (op_text.length == 3 && memcmp(op_text.data, "act", 3) == 0) {
     op = LEME_CONTROL_ACT;
-    if (instance_val == NULL || expr_val == NULL || member_count != 5) {
+    if (instance_val == NULL || !one_expression || member_count != 5) {
       set_error(error, LEME_CONTROL_INVALID_REQUEST,
                 "invalid fields in act request");
       return LEME_CONTROL_INVALID_REQUEST;
     }
   } else if (op_text.length == 5 && memcmp(op_text.data, "watch", 5) == 0) {
     op = LEME_CONTROL_WATCH;
-    if (instance_val == NULL || expr_val == NULL || member_count != 5) {
+    if (instance_val == NULL || !one_expression || member_count != 5) {
       set_error(error, LEME_CONTROL_INVALID_REQUEST,
                 "invalid fields in watch request");
       return LEME_CONTROL_INVALID_REQUEST;
@@ -142,7 +149,7 @@ leme_control_request_create(struct leme_control_document **document,
   } else if (op_text.length == 7 && memcmp(op_text.data, "unwatch", 7) == 0) {
     op = LEME_CONTROL_UNWATCH;
     if (instance_val == NULL || subscription_val == NULL || expr_val != NULL ||
-        member_count != 5) {
+        source_val != NULL || member_count != 5) {
       set_error(error, LEME_CONTROL_INVALID_REQUEST,
                 "invalid fields in unwatch request");
       return LEME_CONTROL_INVALID_REQUEST;
@@ -187,9 +194,24 @@ leme_control_request_create(struct leme_control_document **document,
     return LEME_CONTROL_INVALID_REQUEST;
   }
 
+  struct leme_public_builder *source_owner = NULL;
+  if (source_val != NULL) {
+    struct leme_public_text source = {0};
+    if (leme_public_as_text(source_val, &source) != LEME_PUBLIC_OK) {
+      set_error(error, LEME_CONTROL_INVALID_REQUEST, "source must be a string");
+      return LEME_CONTROL_INVALID_REQUEST;
+    }
+    const enum leme_control_code code = leme_control_source_read(
+        leme_control_document_account(*document), source, limits, &source_owner,
+        &expr_val, error);
+    if (code != LEME_CONTROL_OK)
+      return code;
+  }
+
   struct leme_control_request *req = leme_control_alloc(
       leme_control_document_account(*document), sizeof(*req));
   if (req == NULL) {
+    leme_public_builder_destroy(source_owner);
     const enum leme_control_code code = errno == ENOSPC
                                             ? LEME_CONTROL_RESOURCE_LIMIT
                                             : LEME_CONTROL_OUT_OF_MEMORY;
@@ -204,6 +226,7 @@ leme_control_request_create(struct leme_control_document **document,
       .instance = inst_text,
       .subscription = subscription,
       .expr = expr_val,
+      .source_owner = source_owner,
   };
 
   *document = NULL;
@@ -227,6 +250,7 @@ void leme_control_request_destroy(struct leme_control_request *request) {
   if (--request->references != 0)
     return;
   struct leme_control_document *doc = request->document;
+  leme_public_builder_destroy(request->source_owner);
   leme_control_free(request);
   leme_control_document_destroy(doc);
 }

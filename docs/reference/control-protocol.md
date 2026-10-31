@@ -15,6 +15,7 @@ later request carries:
 ```json
 {"version":1,"id":"h:1","op":"hello"}
 {"version":1,"id":"q:1","instance":"INSTANCE","op":"query","expr":{"call":"count","args":[{"call":"views","args":[]}]}}
+{"version":1,"id":"q:2","instance":"INSTANCE","op":"query","source":"(count (views))"}
 ```
 
 | `op` | Effect |
@@ -25,13 +26,17 @@ later request carries:
 | `watch` | evaluates an expression now and again on every change |
 | `unwatch` | stops a watch by its `subscription` |
 
-Expressions are `{"literal": VALUE}`, `{"call": NAME, "args": [...]}` and
-`{"field": [...]}`. The roots are `views`, `tags`, `outputs`, `inputs`,
-`session`, `config`, `runtime` and `status`. `act` accepts the
-[commands](commands.md) except `spawn`, `quit` and `switch_vt`.
+`query`, `act` and `watch` carry one expression, either as `expr` or as
+`source`. `expr` is a tree of `{"literal": VALUE}`, `{"call": NAME, "args":
+[...]}` and `{"field": [...]}`. `source` is the same expression as text, in
+the [syntax `timao` uses](timao.md#expressions). The roots are `views`, `tags`,
+`outputs`, `inputs`, `session`, `config`, `runtime` and `status`. `act` accepts
+the [commands](commands.md) except `spawn`, `quit` and `switch_vt`.
 
 A reply has `type: "reply"`, the request `id`, `ok` and either `value` or
-`error`. An `act` that fails partway leaves the earlier actions applied, and the
+`error`. An error has `code`, `message` and `phase`, plus `expr_path` when it
+points into the expression and `offset` when it points at a byte: into the
+frame for a JSON error, into `source` for a syntax error. An `act` that fails partway leaves the earlier actions applied, and the
 error says which ones ran.
 
 ## Watches
@@ -59,6 +64,7 @@ private queries and actions until unlock.
 | response size | 1 MiB |
 | JSON depth | 64 |
 | expression nodes | 4096 |
+| expression nesting | 64 levels of the tree; a call takes two |
 | outstanding requests per client | 16 |
 | watches per client | 32 |
 | action targets | 256 |

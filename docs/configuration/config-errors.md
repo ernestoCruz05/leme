@@ -61,7 +61,7 @@ ${XDG_STATE_HOME:-$HOME/.local/state}/leme/session.log
 `timao` returns the latest ones:
 
 ```sh
-timao eval '(query (get (config) "diagnostics"))'
+timao get config diagnostics
 ```
 
 The `config_errors` block is accepted but does nothing yet.

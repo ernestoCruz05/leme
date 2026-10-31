@@ -10,5 +10,3 @@
   desktop.
 - [XWayland](xwayland.md): X11 apps.
 - [Gentoo and OpenRC](gentoo-openrc.md): one tested login setup.
-- [Writing `timao` scripts](writing-timao-scripts.md): queries, watches and
-  scripts.

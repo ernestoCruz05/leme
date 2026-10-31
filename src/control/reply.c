@@ -200,6 +200,12 @@ bool leme_control_error_write_json(struct leme_json *json,
     leme_json_key(json, "expr_path");
     leme_json_string(json, error->expr_path);
   }
+  if (error != NULL && error->has_byte_offset) {
+    leme_json_key(json, "offset");
+    leme_json_integer(json, error->byte_offset > INT64_MAX
+                                ? INT64_MAX
+                                : (int64_t)error->byte_offset);
+  }
   if (error != NULL && error->details != NULL) {
     leme_json_key(json, "details");
     const struct leme_public_work work = {.context = meter,

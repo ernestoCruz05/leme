@@ -3,6 +3,7 @@
 
 #include "control/decode.h"
 #include "control/error.h"
+#include "control/limits.h"
 #include "public/value.h"
 
 enum leme_control_request_op {
@@ -17,6 +18,7 @@ struct leme_control_request;
 
 enum leme_control_code
 leme_control_request_create(struct leme_control_document **document,
+                            const struct leme_control_limits *limits,
                             struct leme_control_request **out,
                             struct leme_control_error *error);
 void leme_control_request_ref(struct leme_control_request *request);
