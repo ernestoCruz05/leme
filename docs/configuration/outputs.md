@@ -1,6 +1,8 @@
 # Outputs
 
-Leme enables every connected output. Use one named `output` block per connector when you need a specific mode or layout:
+Every connected output is enabled. An `output "NAME"` block sets the mode,
+scale and placement of one connector. Without one, an output uses its
+preferred mode at scale 1, placed left to right.
 
 ```scfg
 output "DP-1" {
@@ -17,37 +19,28 @@ output "HDMI-A-1" {
 }
 ```
 
-## Display settings
+| Key | Values | Effect |
+| --- | --- | --- |
+| `mode` | `WIDTHxHEIGHT` | resolution |
+| `refresh` | Hz, needs `mode` | the advertised rate within 1 Hz of it |
+| `scale` | `0.5` to `4.0` | output scale |
+| `transform` | `normal`, `90`, `180`, `270` | rotation |
+| `position` | `X Y` | position in the layout |
+| `left_of`, `right_of`, `top_of`, `bottom_of` | a connector name | position next to another output |
 
-- `mode` uses `WIDTHxHEIGHT`.
-- `refresh` is optional, but requires `mode`. Leme chooses the nearest advertised fixed refresh for that resolution when it is within 1 Hz.
-- `scale` accepts `0.5` through `4.0`.
-- `transform` accepts `normal`, `90`, `180`, or `270`.
-- A connector may appear in only one named block.
+`wlr-randr` lists connector names and modes. A block takes one relation, and
+`position` wins over it. Outputs that cannot be placed go to the right.
+Overlapping outputs are rejected.
 
-Without output blocks, Leme uses each output's preferred mode, scale 1, normal transform, and a left-to-right layout.
+The layout is shifted so no output sits at a negative coordinate, because X11
+windows cannot be reached there. Output-management tools such as `wlr-randr`
+or `kanshi` can change outputs until the next `reload_config`, and they are not
+shifted.
 
-## Placement
+## Behavior across outputs
 
-Use one of these placement forms:
-
-- `position X Y` for absolute logical coordinates;
-- `left_of NAME`;
-- `right_of NAME`;
-- `top_of NAME`;
-- `bottom_of NAME`.
-
-A block accepts at most one relation. Placement resolves explicit positions first, then relative relations until no more can be placed. Outputs that have no placement, name a disconnected connector, or belong to a cycle are appended to the right of the current layout in connect order.
-
-A block may contain both `position` and a relation. `position` wins and the ignored relation is logged. Overlapping outputs are rejected on reload and fall back to automatic placement at startup.
-
-When placement leaves an output at a negative coordinate, Leme shifts the whole layout so it starts at 0. X11 programs can't reach negative coordinates: Xwayland's screen always starts at 0, so clicks on X11 windows there would miss. With `eDP-1` at `position 0 0` and `DP-3` `top_of "eDP-1"`, DP-3 ends up at 0,0 and eDP-1 at 0,1080. Every connected output counts, including one that is powered off, so eDP-1 keeps its place until DP-3 is unplugged.
-
-The scfg output block is persistent policy. `zwlr_output_manager_v1` clients can request temporary modes, scales, transforms, positions, and multi-output arrangements. They aren't shifted, so a negative position requested that way breaks input for X11 windows on that output. The next configuration reload restores scfg values. Adaptive sync requests remain rejected.
-
-## Cross-output policy
-
-An unnamed `output` block controls movement between outputs:
+An `output` block without a name sets how focus and windows move between
+outputs:
 
 ```scfg
 output {
@@ -55,40 +48,27 @@ output {
     cross_output_move false
     cross_output_drag true
     warp_cursor true
-}
-```
-
-| Key | Default | Effect |
-| --- | --- | --- |
-| `cross_output_focus` | `true` | lets directional focus continue to an adjacent output |
-| `cross_output_move` | `false` | lets a view cross to an adjacent output when no local movement target exists |
-| `cross_output_drag` | `true` | lets pointer drags carry a view to another output |
-| `warp_cursor` | `true` | moves the pointer when a command changes the focused output |
-
-The unnamed policy block and named connector blocks are independent.
-
-## Secondary GPUs
-
-On machines with more than one GPU, such as a laptop with integrated and discrete graphics, Leme renders on the boot GPU. The other GPUs are only needed for monitors plugged into them. `secondary_gpu` in the unnamed `output` block decides when Leme opens them:
-
-```scfg
-output {
     secondary_gpu on_demand
 }
 ```
 
-| Value | Effect |
-| --- | --- |
-| `on_demand` (default) | Leme opens a secondary GPU when a monitor is connected to it and closes it 5 seconds after the last one is unplugged. |
-| `always` | Leme opens every GPU at startup and keeps them open. |
+| Key | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `cross_output_focus` | `true`, `false` | `true` | `focus DIR` continues onto the next output |
+| `cross_output_move` | `true`, `false` | `false` | `move DIR` continues onto the next output |
+| `cross_output_drag` | `true`, `false` | `true` | dragging carries a window to another output |
+| `warp_cursor` | `true`, `false` | `true` | the pointer follows commands that change the focused output |
+| `secondary_gpu` | `on_demand`, `always` | `on_demand` | when GPUs other than the boot GPU are opened |
 
-With `on_demand`, Leme checks each secondary GPU's connectors once at startup and again whenever the kernel reports a hotplug on that GPU. Both checks wake the GPU briefly. While nothing is connected to it, Leme keeps no file open on it, so its driver can power it down and the card can be unbound or handed to a virtual machine.
+With `on_demand`, a second GPU, such as the discrete GPU of a laptop, is only
+opened while a monitor is connected to it and closed 5 seconds after the last
+one is unplugged, so it can power down. `always` opens every GPU at startup.
+`WLR_DRM_DEVICES` overrides both.
 
-`reload_config` applies a change. Setting `WLR_DRM_DEVICES` in the environment overrides this setting: Leme then opens exactly the devices it lists, as plain wlroots does.
+## Activation
 
-## Publication
-
-Leme publishes tags and managed windows for bars, taskbars, and window pickers. The `publication` block controls what happens when an activation request would change the focused output or tag:
+The `publication` block decides what happens when an app asks for a window on
+another tag or output to be focused, such as a browser opening a link:
 
 ```scfg
 publication {
@@ -96,18 +76,11 @@ publication {
 }
 ```
 
-| Key | Values | Default |
-| --- | --- | --- |
-| `activation` | `follow`, `urgent`, `ignore` | `follow` |
+| `activation` | Effect |
+| --- | --- |
+| `follow` (default) | switches to that tag and output and focuses the window |
+| `urgent` | marks the window urgent and leaves focus alone |
+| `ignore` | drops the request |
 
-If the target is already on the focused tag of the focused output, Leme focuses it under every policy. Otherwise:
-
-- `follow` switches to the target output and tag, then focuses it;
-- `urgent` leaves focus alone and marks the target workspace urgent;
-- `ignore` drops the request.
-
-`follow` moves the pointer to the target output when activation crosses
-outputs. This happens even when `warp_cursor` is `false`; that output-policy
-key controls keyboard commands, not external activation requests.
-
-The same setting applies to activation requests from Wayland and X11 apps, such as a browser asked to open a link, and to foreign-toplevel activation and cross-output workspace activation. The tag model determines the rest of publication behavior. See the [publication reference](../reference/wayland-protocols.md).
+A window on the focused tag is always focused. `follow` moves the pointer even
+with `warp_cursor false`.

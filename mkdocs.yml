@@ -43,6 +43,7 @@ nav:
       - Configuration: configuration/README.md
       - Syntax and variables: configuration/syntax-and-variables.md
       - Tags: configuration/tags.md
+      - Desktop layout: configuration/desktop.md
       - Appearance: configuration/appearance.md
       - Animation: configuration/animation.md
       - Window rules: configuration/window-rules.md

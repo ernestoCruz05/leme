@@ -1,24 +1,21 @@
 # Crash reports
 
 Report crashes at
-[github.com/ernestoCruz05/leme/issues](https://github.com/ernestoCruz05/leme/issues).
+[github.com/ernestoCruz05/leme/issues](https://github.com/ernestoCruz05/leme/issues)
+with:
 
-A useful report includes:
-
-- the output of `leme --version`;
-- the smallest configuration that still reproduces the crash;
-- exact reproduction steps, including native Wayland or XWayland clients;
-- the complete Leme stderr or session log from startup through the crash,
-  from a session started with `--debug` if you can reproduce it;
-- relevant kernel lines;
-- a backtrace or core dump when available;
-- output, GPU, driver, input device, login manager, and session-service details.
-
-Collect recent kernel lines with whichever command your system permits:
+- `leme --version`;
+- the smallest config that still crashes;
+- the steps, and which apps were involved, Wayland or X11;
+- the full session log, from a `--debug` session if you can reproduce it;
+- a backtrace or core dump if you have one;
+- kernel lines from around the crash;
+- your GPU, driver, outputs, input devices and login manager.
 
 ```sh
 dmesg --ctime | grep -Ei 'leme|segfault' | tail -50
 journalctl -k -b | grep -Ei 'leme|segfault' | tail -50
 ```
 
-Redact tokens, usernames, and unrelated environment values before sharing logs. Keep timestamps and the order of errors intact.
+Remove tokens, usernames and unrelated environment values from logs, but keep
+the timestamps and the order of errors.

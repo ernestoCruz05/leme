@@ -1,11 +1,14 @@
 # Keybindings
 
-A binding starts with a key combination, followed by a command and its arguments:
+A `binds "MODE"` block maps keys to [commands](../reference/commands.md). Each
+line is a key combination, the command and its arguments. A mode named
+`common` is required and is active at startup.
 
 ```scfg
 binds "common" {
     SUPER+Return spawn foot
-    SUPER+space mode resize
+    SUPER+q close_view
+    SUPER+r mode resize
 }
 
 binds "resize" {
@@ -17,38 +20,37 @@ binds "resize" {
 }
 ```
 
-`repeat` before the command makes the binding fire again while the key is held, at the keyboard's `repeat_rate` and `repeat_delay` (see [keyboard](keyboard.md)). Without it, a binding fires once per press. Pressing or releasing any other key stops the repeat.
+The modifiers are `SUPER`, `ALT`, `CTRL` (or `CONTROL`) and `SHIFT`, in any
+order. A binding only fires with exactly those modifiers held. Keys are named by
+their unshifted symbol, so it is `SUPER+SHIFT+1`, not `SUPER+exclam`.
 
-The supported modifiers are `SUPER`, `ALT`, `CTRL` or `CONTROL`, and `SHIFT`. Their order does not matter, but each may appear only once. Matching uses the exact modifier combination, so an extra held modifier prevents the binding from firing.
+`repeat` before the command fires it again while the key is held, at the
+[keyboard](keyboard.md) repeat rate.
 
-The complete command list is in the [command reference](../reference/commands.md).
-
-Bindings to the file grid's `grid_*` commands apply only while the grid has keyboard focus. Otherwise the key goes to the focused client, so plain keys such as Delete or F2 can be bound to them without affecting other applications.
+`grid_*` commands only take the key while the desktop file grid has focus, so
+plain keys like `Delete` or `F2` can be bound to them.
 
 ## Modes
 
-Every `binds "name"` block creates a persistent keyboard mode. A mode named `common` is required. Modes replace the keymap rather than extending it: only the active mode's bindings are checked, and every other key goes to the focused client.
-
-By default, Escape returns to `common` before ordinary mode lookup. A mode can keep Escape for the client:
+Each `binds` block is a mode, and `mode NAME` switches to it. Only the active
+mode's bindings work, and other keys go to the focused window. Escape goes back
+to `common` unless the mode turns that off, in which case it must bind its own
+way out:
 
 ```scfg
+binds "common" {
+    SUPER+SHIFT+g mode game
+}
+
 binds "game" {
     escape_exits false
     SUPER+SHIFT+g mode common
 }
 ```
 
-A mode with `escape_exits false` must bind a `mode` command. This prevents a configuration edit from creating a mode with no keyboard-only way out. The setting belongs to a `binds` block, not a `bind_group`.
+## Binding groups
 
-`switch_vt` is unavailable in nested and headless sessions. `switch_vt` and `quit` remain emergency compositor actions while a client inhibits shortcuts or the session is locked. `toggle_shortcuts_inhibit` also works while a client inhibits shortcuts; bind it to get back to Leme from a fullscreen remote desktop or virtual machine without the mouse:
-
-```scfg
-binds "common" {
-    SUPER+SHIFT+Escape toggle_shortcuts_inhibit
-}
-```
-
-Range loops can generate numbered VT bindings:
+A `bind_group` holds bindings that modes pull in with `inherit`:
 
 ```scfg
 bind_group "vt" {
@@ -56,37 +58,25 @@ bind_group "vt" {
         CTRL+ALT+F$i switch_vt $i
     }
 }
-```
-
-Generated bindings undergo the same duplicate, keysym, command, and VT validation as handwritten bindings.
-
-## Binding groups
-
-A `bind_group` stores bindings for reuse. It is not a mode and cannot be selected with `mode`:
-
-```scfg
-bind_group "movement" {
-    ALT+Left focus left
-    ALT+Right focus right
-}
 
 binds "common" {
-    inherit movement
+    inherit vt
     SUPER+Return spawn foot
 }
 ```
 
-Groups may inherit other groups. Resolution happens when the configuration loads, so the active mode receives a flat list of bindings.
+Groups can inherit other groups. A binding written in the mode wins over an
+inherited one, but two groups binding the same key is an error. Groups and
+modes cannot share a name.
 
-Rules for inheritance are:
+## When an app grabs the keyboard
 
-- a direct binding overrides one inherited from a group;
-- two different groups binding the same key is an error;
-- reaching the same group through several paths is allowed;
-- repeating a binding in one block is an error;
-- `inherit` accepts group names, not mode names;
-- inheritance cycles are errors;
-- a name cannot be used for both a group and a mode;
-- unused and empty groups are allowed.
+Remote desktops and virtual machines can inhibit compositor shortcuts. Only
+`quit`, `switch_vt` and `toggle_shortcuts_inhibit` still work then, so bind the
+last one to get your keys back:
 
-The full group and mode example is in [`config/leme-full.scfg`](https://github.com/ernestoCruz05/leme/blob/main/config/leme-full.scfg). The [timao scripting guide](../guides/writing-timao-scripts.md) shows how an external script can select a mode.
+```scfg
+binds "common" {
+    SUPER+SHIFT+Escape toggle_shortcuts_inhibit
+}
+```

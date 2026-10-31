@@ -1,17 +1,7 @@
 # Multi-monitor
 
-Leme enables every connected output. List connector names, current settings,
-and advertised modes from inside the session:
-
-```sh
-wlr-randr
-```
-
-The same connector names appear in the compositor log.
-
-## Configure placement
-
-Use one named `output` block per connector:
+Every connected output is enabled. `wlr-randr` lists connector names and modes,
+and the log has the names too. Give each monitor an `output` block:
 
 ```scfg
 output "DP-1" {
@@ -24,23 +14,7 @@ output "DP-2" {
     mode 1920x1080
     right_of "DP-1"
 }
-```
 
-Connector names must match the DRM names exactly. You can use absolute `position`, or place a connector with `left_of`, `right_of`, `top_of`, or `bottom_of`. The [output configuration reference](../configuration/outputs.md) covers mode selection, scale, transform, and placement fallback.
-
-Leme rejects overlapping output geometry on reload. If a relation names a disconnected connector or forms a cycle, Leme appends the unresolved output to the right of the current layout.
-
-## Understand tags across outputs
-
-Each output owns its own tag table. The tag called 3 on `DP-1` is not the tag called 3 on `DP-2`. A window moved between outputs lands on the destination output's current tag unless a command says otherwise.
-
-The focused output follows the pointer. Directional focus can continue across an output edge, and a view can cross that edge through a movement command or pointer drag when the corresponding policies allow it.
-
-## Choose movement policy
-
-The unnamed `output` block controls cross-output behavior:
-
-```scfg
 output {
     cross_output_focus true
     cross_output_move false
@@ -49,18 +23,19 @@ output {
 }
 ```
 
-Use `cross_output_focus` when directional focus should leave the current monitor. Use `cross_output_move` when a keyboard movement at the edge should carry the view to the adjacent monitor. Use `cross_output_drag` for pointer drags. `warp_cursor` controls pointer warping after an output-focus command.
+The unnamed block decides whether `focus`, `move` and dragging cross to the
+next monitor. All keys are in [outputs](../configuration/outputs.md).
 
-## Unplug and reconnect
+Each monitor has its own tags, and focus follows the pointer. A window sent to
+another monitor lands on the tag shown there.
 
-When an output goes away, its windows move to the same tag numbers on a remaining output. Leme remembers which output and tag each window came from, along with the output's focused tag and the layouts of its tags. When an output with the same connector name comes back, those windows return to their tags and the output shows its old focused tag. Sticky windows return to their output too.
+## Unplugging
 
-Switching to another VT counts as an unplug: wlroots removes every output while the session is inactive and adds them back when you return.
+When a monitor goes away, its windows move to the same tag numbers on another
+one. When a monitor with the same connector name comes back, they return, along
+with its shown tag and tag layouts. Windows you moved in the meantime stay
+where you put them. Switching VT counts as an unplug.
 
-A window you move yourself in the meantime, to another tag or output, stays where you put it. Leme matches outputs by connector name, so a monitor plugged into a different port is a new output.
-
-## Temporary output changes
-
-Clients using `zwlr_output_manager_v1` can request temporary positions, modes, scales, and transforms. Those requests do not rewrite scfg. A later configuration reload restores the persistent output policy.
-
-See [tags and outputs](../concepts/tags-and-outputs.md) for the tag model and [troubleshooting outputs](../troubleshooting/outputs.md) when a mode or layout is rejected.
+Tools like `wlr-randr` and `kanshi` can change outputs until the next
+`reload_config`. See [output troubleshooting](../troubleshooting/outputs.md) if
+a mode or layout is rejected.

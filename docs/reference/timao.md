@@ -1,147 +1,95 @@
 # `timao`
 
-`timao` is Leme's control client and scripting runtime. It writes JSON by default. Help and version commands do not connect to the compositor, and invocations do not load startup scripts or modules.
-
-## Invocation
+`timao` talks to a running Leme over its control socket. It runs commands,
+reads and watches state, and runs scripts. Output is JSON.
 
 ```sh
-timao --help
-timao --version
 timao toggle_floating
 timao set_layout master_stack
-timao get session mode
+timao get session focused_output name
 timao watch tags
 timao eval '(query (views))'
-timao --raw eval '(query (get (session) "mode"))'
-timao run script.timao 'literal argument'
-timao run - 'literal argument'
+timao run script.timao 'an argument'
 timao repl
 ```
 
-Global options precede the entrypoint: `--socket PATH`, `--json`, `--raw`, `--human`, `--help`, `--version`, and `--`. Conflicting output formats are errors. There is no implicit REPL. `eval` takes exactly one source argument; `run` takes a filename (`-` means stdin) followed by immutable script `args`. Paths and arguments are literal, not shell-expanded by timao.
+| Form | Effect |
+| --- | --- |
+| `timao COMMAND [ARG ...]` | runs a [command](commands.md), except `spawn`, `quit` and `switch_vt` |
+| `timao get ROOT [FIELD ...]` | prints a value once |
+| `timao watch ROOT [FIELD ...]` | prints a value every time it changes |
+| `timao eval SOURCE` | runs one expression |
+| `timao run FILE [ARG ...]` | runs a script file, `-` for stdin |
+| `timao repl` | interactive prompt |
 
-The client uses `--socket` when supplied. Otherwise it uses a nonempty `LEME_SOCKET`, falling back to `$XDG_RUNTIME_DIR/leme-$WAYLAND_DISPLAY.sock` if that variable is unset or empty. It requires the socket and peer to belong to the current effective user and the socket permissions to be `0600`. On failure, it does not remove the socket or search for another compositor.
+`ROOT` is `views`, `tags`, `outputs`, `inputs`, `session`, `config`, `runtime`
+or `status`. Each `FIELD` reads one member and follows references, so
+`session focused_output name` is the focused output's name. Ask for the fields
+you need: a whole `config` or `runtime` can be too big for one reply.
 
-## Commands
+| Option | Effect |
+| --- | --- |
+| `--socket PATH` | socket to use |
+| `--json` | JSON output, the default |
+| `--raw` | plain scalars, one per line |
+| `--human` | readable output, not for scripts |
 
-Command names and argument syntax are documented in the [command reference](commands.md):
+Without `--socket`, `timao` uses `LEME_SOCKET`, then
+`$XDG_RUNTIME_DIR/leme-$WAYLAND_DISPLAY.sock`. The socket must belong to you and
+have mode `0600`.
 
-- `focus_next_tag`, `focus_previous_tag`, `focus_last_tag`, `focus_previous_view`, `focus_urgent`
-- `focus_tag`, `focus`, `focus_output`
-- `switch_layout`, `set_layout`, `remove_empty_tag`, `mode`
-- `toggle_floating`, `toggle_sticky`, `toggle_fullscreen`, `close_view`
-- `minimize_view`, `restore_minimized`, `show_desktop`
-- `snap`, `place`, `window_menu`, `focus_cycle`
-- `focus_desktop`, `desktop_menu`, `grid_open`, `grid_trash`, `grid_rename`, `grid_new_folder`, `grid_select_all`, `grid_clear`, `grid_select`
-- `container_detach`, `container_dissolve`, `container_layout`, `container_join`
-- `move`, `move_view_to_tag`, `move_view_to_output`, `resize`
-- `reload_config`, `cycle_keyboard_layout`, `toggle_shortcuts_inhibit`
-- `scratchpad_send`, `scratchpad_retrieve`, `scratchpad_toggle`
-
-These commands use the compositor's command adapter. `spawn`, `quit` and `switch_vt` are not available as simple CLI commands. Scripts can start a detached process with `launch`. A command can succeed with a no-op result, for example when a requested state is already set.
-
-Desktop views expose a required boolean `minimized`, including hiding inherited
-from a parent. They remain in `views` while minimized. The typed action
-`set-minimized` accepts view targets and a boolean; explicit `focus` restores its
-target before focusing it. Setting false alone does not activate a window.
+## Queries and actions
 
 ```sh
-timao minimize_view
-timao restore_minimized
+timao eval '(query (tags))'
+timao eval '(query (get (config) "diagnostics"))'
 timao eval '(query (where (views) .minimized))'
+timao eval '(watch (count (views)))'
 timao eval '(act (set-minimized (where (views) .minimized) false))'
-```
-
-`restore_minimized` is limited to the focused output's current desktop tag. The
-last expression restores its selected targets across tags. Minimizing fullscreen,
-sticky, scratchpad or non-desktop views is refused. The writable live config path
-`desktop.minimized_strip` controls only the built-in recovery UI.
-
-View records also expose a required boolean `maximized`. It remains true while a
-maximized desktop window is minimized or fullscreen. Maximize is available through
-window controls, client or shell protocols, and the `place` and `snap` commands;
-there is no typed action for it.
-
-## Desktop containers
-
-The container commands act on the focused member, except `container_join`, which
-groups the focused standalone window with its neighbor in a direction:
-
-```sh
-timao container_layout master_stack
-timao container_detach
-timao container_dissolve
-timao container_join right
-```
-
-The corresponding typed actions are `container-layout`, `container-detach`,
-`container-dissolve` and `container-join`. Each targets one existing view. For
-example:
-
-```sh
-timao eval '(act (container-layout (get (session) "focused_view") "dwindle"))'
 timao eval '(act (container-join (get (session) "focused_view") "left"))'
 ```
 
-View records have a nullable text `container` field. Equal non-null values identify
-members of the same container. The value lasts for that container's lifetime and
-is never reused. It is not an entity reference: there is no container root,
-reference traversal or container `by-id` lookup. Existing view IDs stay unchanged.
-Dialogs have null `container`, even when their parent belongs to a group.
+`query` reads, `watch` streams and `act` changes something. The language is in
+[writing `timao` scripts](../guides/writing-timao-scripts.md).
 
-A bar can group captured records by this field. With `jq`:
+| Action | Effect |
+| --- | --- |
+| `set-minimized VIEWS BOOL` | minimizes or restores desktop windows, on any tag |
+| `container-layout VIEW LAYOUT` | `dwindle` or `master_stack` inside the view's container |
+| `container-join VIEW DIR` | groups the view with its neighbor |
+| `container-detach VIEW` | takes the view out of its container |
+| `container-dissolve VIEW` | breaks up the view's container |
+| `set-config PATH VALUE` | changes a setting until the next reload |
+
+## Live settings
+
+`set-config` changes style, cursor, pointer, gesture, output, publication and
+`desktop.minimized_strip` settings without editing the file. A reload puts the
+file's values back.
+
+```sh
+timao get config effective style gap_outer
+timao eval '(act (set-config (list "style" "gap_outer" "top") 20))'
+timao eval '(act (set-config (list "style" "smart_gaps") true))'
+```
+
+## Window fields for bars
+
+View records have `minimized` and `maximized` booleans, and a `container` text
+that is the same for every member of a container and `null` otherwise:
 
 ```sh
 timao get views | jq 'map(select(.container != null)) | group_by(.container)'
 ```
 
-`set-minimized` on a member affects its whole group. Each member's `minimized`
-field reports effective hiding, but its `maximized` field stays false while
-attached, even when the group fills the output. Explicit focus and foreign
-activation still address real clients.
+Minimized windows stay in `views`. Container members report `maximized` as
+false even when the container is maximized.
 
-## Queries and watches
+## Exit status
 
-```sh
-timao eval '(query (tags))'
-timao eval '(query (outputs))'
-timao eval '(query (get (get (session) "focused_output") "name"))'
-timao eval '(query (get (config) "path"))'
-timao eval '(query (get (config) "diagnostics"))'
-timao eval '(watch (count (views)))'
-```
-
-`timao get ROOT [FIELD...]` prints one value and `timao watch ROOT [FIELD...]` streams it. ROOT is one of `views`, `tags`, `outputs`, `inputs`, `session`, `config`, `runtime` or `status`, and each FIELD reads one member, following references: `timao get session focused_output name` prints the focused output's name. Use `query` and `watch` expressions for anything else, such as filtering or counting. Request the fields you need: returning a whole `config` or `runtime` value can exceed clone or response limits even when a single field would fit.
-
-When eval returns an unattached watch, timao installs a default printer and keeps running. A definition returns null, so `(def w (watch ...))` alone does not install a printer. A watch with a user handler keeps that handler instead. A `watch:N` ID belongs to the current timao process; it is not the server's subscription token and cannot cancel another client's watch.
-
-Timao attempts recovery after retryable connection failures for acknowledged watches still used by a handler, printer or await. Successful recovery starts a new generation and supplies a reset event. Queries and actions are never replayed. Watches report current values and may combine intermediate changes into one event.
-
-Locking suspends sensitive watches and discards pending sensitive data. Unlocking produces a fresh reset; data already delivered to a client cannot be recalled. See the [control protocol](control-protocol.md) for recovery and locking rules.
-
-## Output and interaction
-
-JSON plus LF is the default on stdout, including terminals. Successful simple commands print their action value, not an IPC envelope. Eval and REPL display ordinary results; files print only explicit `emit` output. Watch events include local identity and generation. Callable/watch descriptions, diagnostics, prompts and editing UI use stderr.
-
-`--raw` accepts scalars and flat scalar arrays. It rejects embedded LF/CR/NUL, objects and nested collections, and does not preserve the type information available in JSON. Simple action results and default watch events cannot use raw output; a watch handler can emit scalar values explicitly. `--human` produces escaped output with presentation limits. Use JSON for machine processing.
-
-Diagnostics use JSON in every output mode and include remote details when available. If diagnostic formatting runs out of space or memory, the fallback reports that details are unavailable.
-
-The REPL supports multiline parser-based input, UTF-8 scalar editing and bounded memory-only history. It is not a grapheme-cluster editor. Non-terminal input is line-fed without prompts. Errors are contained to the current form or handler; failed handlers are removed while independent registrations can continue/recover. Ctrl-C clears input or interrupts active work; earlier effects are not rolled back. EOF cancels registrations and exits. If cancellation interrupts an already partly written record, the invocation ends rather than joining subsequent output onto a corrupt record; that final record may be truncated.
-
-## Limits and exit status
-
-The runtime has a 64 MiB parent memory budget, a 32 MiB interpreter limit and 2 MiB client queues. Source is limited to 1 MiB and watches to 32. These limits track allocations made through the runtime's accounting system; they do not cap process RSS.
-
-Request and negotiation waits have deadlines. Output waits can be interrupted by cancellation. Shutdown allows a shared 250 ms grace period for cleanup, though a delayed helper may remain unreaped when it ends.
-
-- `0`: successful finite completion or REPL EOF.
-- `1`: unhandled runtime, remote, resource, launch or output failure.
-- `2`: usage, source/preparation or initial connection failure.
-- `130` / `143`: noninteractive SIGINT / SIGTERM interruption.
-
-A script can catch an error and finish with status 0. For scripts that emit failure records, callers must inspect those records as well as the exit status.
-
-An `outcome_unknown` diagnostic means an action may have happened. Do not replay it automatically. Formatting failures and cancellation do not undo actions. A detached launch acknowledgement confirms exec; it does not confirm window creation or continued application health.
-
-See [writing scripts](../guides/writing-timao-scripts.md) for the language boundary and examples.
+| Status | Meaning |
+| --- | --- |
+| `0` | success |
+| `1` | the command, script or connection failed while running |
+| `2` | bad usage, a script that does not parse, or no connection |
+| `130`, `143` | interrupted by SIGINT or SIGTERM |

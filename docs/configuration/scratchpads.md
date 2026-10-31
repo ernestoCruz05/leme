@@ -1,15 +1,8 @@
 # Scratchpads
 
-Scratchpads keep a window available without putting it on a tag. Leme has one
-compositor-wide pool, shared by every output, and shows at most one pool member
-at a time. They use the same durable overlay as sticky floating windows but
-remain a separate feature: `scratchpad_send` refuses sticky windows and
-`toggle_sticky` refuses scratchpad members, so there is no direct conversion.
-
-## Named scratchpads
-
-Declare a named scratchpad with an exact application identity and an argument
-vector to start it:
+A scratchpad is a window kept off the tags that you show and hide with a key.
+There is one pool shared by every output, and one scratchpad shows at a time,
+above the windows of whatever tag is on screen.
 
 ```scfg
 scratchpad "drop" {
@@ -18,107 +11,44 @@ scratchpad "drop" {
     width 0.6
     height 0.6
 }
-```
 
-The name and `identity` must be nonempty, exact, case-sensitive, and unique.
-A name cannot contain any of the six ASCII whitespace characters: space, tab,
-newline, carriage return, form feed, or vertical tab. This keeps the name safe
-for bindings and native command policy; `timao` preserves each literal argv boundary.
-
-`identity` matches a Wayland app-id or X11 class exactly. It does not match a
-window title or a pattern. `spawn` and `identity` are required. `spawn` is an
-argument vector, not a shell command, so shell expansion is not performed.
-
-`width` and `height` are fractions of the focused output's usable area. They
-default to `0.6` and accept values from `0.1` through `1.0`, inclusive. Named
-scratchpads use these dimensions and are centered whenever they are shown.
-
-`spawn_timeout` is how long, in milliseconds, Leme waits for a started app to
-open its window. It defaults to `10000` and accepts `1000` through `600000`.
-Raise it for apps that start slowly, so they still open as the scratchpad.
-
-Malformed scratchpad blocks, duplicate names or identities, and invalid
-dimensions or timeouts are skipped with configuration diagnostics. A binding for a name
-that has no valid scratchpad definition is also skipped with a diagnostic. See
-[configuration errors](config-errors.md) for diagnostics and reload failures.
-
-## Commands and bindings
-
-Use the standard commands for the unnamed pool:
-
-```scfg
 binds "common" {
     SUPER+minus scratchpad_send
     SUPER+equal scratchpad_toggle
     SUPER+SHIFT+minus scratchpad_retrieve
-}
-```
-
-- `scratchpad_send` sends the focused managed view to the pool. A normal tagged
-  view becomes unnamed, and a tiled or fullscreen view becomes floating first.
-  Sending a shown scratchpad keeps its named claim.
-- `scratchpad_toggle` shows or hides the newest unnamed member. Named members
-  are not part of this rotation.
-- `scratchpad_retrieve` returns the shown member to the focused tag. When none
-  is shown, it returns the newest unnamed member instead.
-
-Use `scratchpad_toggle NAME` for a named definition:
-
-```scfg
-binds "common" {
     SUPER+d scratchpad_toggle drop
 }
 ```
 
-A named toggle looks for one view in this order:
+## Commands
 
-1. its currently shown claimed member;
-2. its hidden claimed member;
-3. the newest hidden unnamed pool member with the configured identity;
-4. the most recently focused tagged view with that identity;
-5. a new process started from `spawn`.
+| Command | Effect |
+| --- | --- |
+| `scratchpad_send` | moves the focused window into the pool |
+| `scratchpad_toggle` | shows or hides the newest window sent to the pool |
+| `scratchpad_toggle NAME` | shows or hides a named scratchpad, starting it if needed |
+| `scratchpad_retrieve` | puts the shown scratchpad, or the newest one, back on the focused tag |
 
-A named definition claims one member. Other windows with the same identity
-remain ordinary windows. Repeating a named toggle while its process is pending
-updates the destination output without starting another process.
+Toggling a scratchpad that is shown on another output moves it to the focused
+one.
 
-## Showing, focus, and outputs
+## Named scratchpads
 
-Showing or retrieving a scratchpad focuses it. Sending or showing one promotes
-it in the global pool. Showing a requested member hides any other shown member.
-Requesting a shown member on the focused output hides it. Requesting it from a
-different focused output moves it there and keeps it shown.
+A `scratchpad "NAME"` block ties a name to an app. Its toggle uses a running
+window with that identity, or starts `spawn` when there is none.
 
-An unnamed scratchpad keeps its floating frame. Moving it to another output
-preserves its size and relative position where possible, then keeps the frame
-inside that output's usable area. A named scratchpad is resized and centered on
-each show. A currently shown scratchpad supports normal floating move and
-resize. Output geometry changes keep its frame inside the usable area.
+| Key | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `identity` | an exact `app_id` or X11 class | required | which window belongs to it |
+| `spawn` | a program and its arguments | required | started when no window matches |
+| `width` | `0.1` to `1.0` | `0.6` | fraction of the output width |
+| `height` | `0.1` to `1.0` | `0.6` | fraction of the output height |
+| `spawn_timeout` | `1000` to `600000` ms | `10000` | how long to wait for the started app's window |
 
-A shown scratchpad remains visible when its output changes tags, above the
-windows on those tags. Hiding a focused scratchpad restores the most recent
-eligible view on the focused tag, or clears keyboard focus when there is none.
-Hiding a nonfocused member leaves focus unchanged.
+Names and identities must be unique, and names cannot contain whitespace. A
+named scratchpad is centered at its size every time it shows. Raise
+`spawn_timeout` for apps that start slowly; a window that opens after it runs
+out is a normal window.
 
-If the displayed output is powered off, disabled, or removed, Leme hides the
-scratchpad and leaves it in the pool. Scratchpad commands refuse while the
-session is locked. Locking keeps the logical shown state, and the scratchpad
-returns after unlock.
-
-## Reload and failures
-
-A reload keeps a named claim only when the name and identity still match a
-valid definition. Removing, renaming, or changing that identity clears the
-claim without closing or moving the existing member. Updated dimensions apply
-the next time a named scratchpad is shown. Retrieving a named member also
-clears its claim.
-
-If no matching view exists, a named toggle starts its configured process and
-waits up to `spawn_timeout` (10 seconds by default) for a matching managed
-view. A window that opens after that is an ordinary window. A spawn failure or timeout
-clears the pending request and records a diagnostic. An unknown named command
-fails without starting a process. Configuration diagnostics are available in
-the session log and through `timao eval '(query (get (config) "diagnostics"))'`.
-
-See the [command reference](../reference/commands.md) for all command forms
-and [`timao`](../reference/timao.md) for control-socket use.
+Sticky windows cannot be sent to the pool, and scratchpads cannot be made
+sticky.

@@ -1,30 +1,33 @@
 # Leme
 
 Leme is a tiling Wayland compositor written in C17 and built on
-wlroots 0.20. It supports dwindle and master-stack layouts,
-per-output adaptive tags, multiple monitors, native Wayland applications, and
-optional XWayland.
+wlroots 0.20. It supports dwindle and master-stack layouts, an experimental
+desktop layout, per-output adaptive tags, multiple monitors, native Wayland
+applications, and optional XWayland.
 
-Leme is early alpha and a personal project. It is usable for daily work but is not stable software: configuration and behavior may change, and physical multi-monitor support has had limited hardware testing. It is built primarily
+Leme is early alpha and a personal project. It is usable for daily work but is
+not stable software: configuration and behavior may change, and physical
+multi-monitor support has had limited hardware testing. It is built primarily
 for my own use. Issues and patches are welcome, but support is best-effort.
 
 ## What works
 
-- Native Wayland windows with optional lazy XWayland support
+- Native Wayland windows, and X11 windows through XWayland started on demand
 - Adaptive tags with dwindle and master-stack layouts
-- Multiple outputs with directional focus, movement, and pointer drag
-- Configurable keyboard layouts, pointer devices, binding modes, and window rules
-- Optional window animations and workspace transitions
-- Layer-shell programs, clipboard and drag-and-drop integration, locking, idle inhibition, and capture
-- A Unix-socket control interface with the `timao` client
-
-See the [documentation index](docs/README.md) for the user path and exact references.
+- A desktop layout with titlebars, minimizing, window groups and a file grid
+- Multiple outputs with directional focus, movement and pointer drag
+- Keyboard layouts, pointer settings, binding modes and window rules
+- Window animations and workspace transitions, off by default
+- Layer-shell programs, clipboard, drag and drop, locking, idle inhibition and
+  capture
+- A control socket with the `timao` client
 
 ## Current limits
 
-Leme does not yet provide persistent VRR policy, touch and tablet input, text-input protocols, color management, HDR, gamma control, or DRM leasing.
-
-See the [current limitations](docs/reference/limitations.md) and the [roadmap](ROADMAP.md).
+Leme does not yet provide persistent VRR policy, touch and tablet input,
+text-input protocols, color management, HDR, gamma control, or DRM leasing.
+See the [limitations](docs/reference/limitations.md) and the
+[roadmap](ROADMAP.md).
 
 ## Build
 
@@ -33,22 +36,13 @@ meson setup build --buildtype=release --prefix=/usr
 ninja -C build
 ```
 
-The [installation guide](docs/getting-started/installation.md) covers dependencies, installation, and the user configuration path.
+The [installation guide](docs/getting-started/installation.md) lists the
+dependencies.
 
 ## Documentation
 
-- [Documentation website](https://ernestocruz05.github.io/leme/)
-- [Documentation index](docs/README.md)
-- [Getting started](docs/getting-started/README.md)
-- [Concepts](docs/concepts/README.md)
-- [Configuration](docs/configuration/README.md)
-- [Guides](docs/guides/README.md)
-- [Reference](docs/reference/README.md)
-- [Troubleshooting](docs/troubleshooting/README.md)
-
-## Project status
-
-See the [roadmap](ROADMAP.md) for current priorities and planned features.
+The docs are on the [website](https://ernestocruz05.github.io/leme/) and in
+[`docs/`](docs/README.md).
 
 ## License
 

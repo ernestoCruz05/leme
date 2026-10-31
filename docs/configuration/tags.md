@@ -1,6 +1,7 @@
 # Tags
 
-The `tags` block sets the tag table shared by each output. Each output still owns a separate live set of tags.
+The `tags` block sets how many tags each output has and the default layout of
+each one. Every output has its own set of tags.
 
 ```scfg
 tags {
@@ -11,79 +12,47 @@ tags {
 
     tag 2 {
         layout master_stack
+        drop_mode edges
         mfact 0.6
         nmaster 1
     }
 
     tag 4-6 {
-        drop_mode edges
         gap 4
         split_ratio 0.5
     }
 }
 ```
 
-## Top-level settings
-
-| Key | Values | Default | Applies to |
+| Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `initial` | positive integer, no greater than `maximum` | `3` | pinned tags on every output |
-| `maximum` | positive integer, up to `64` | `9` | highest tag id |
-| `layout` | `dwindle`, `master_stack`, `desktop` | `dwindle` | all tags |
-| `drop_mode` | `simple`, `edges` | `simple` | tiled drag insertion |
+| `initial` | `1` to `maximum` | `3` | tags that always exist |
+| `maximum` | `1` to `64` | `9` | highest tag id |
+| `layout` | `dwindle`, `master_stack`, `desktop` | `dwindle` | layout of every tag |
+| `drop_mode` | `simple`, `edges` | `simple` | where a dragged tiled window lands: the half of the target facing its longer side, or the nearest edge |
 
-`initial` and `maximum` are optional. Without them, Leme starts with three
-pinned tags and allows tag ids through 9. Put `maximum` before the first
-`tag SPEC` block when the file contains per-tag rules, because selectors are
-validated as the block is read.
+Tags above `initial` are created when a window goes there and removed when the
+last one leaves.
 
-Tags from 1 through `initial` stay allocated. Higher ids remain available
-without creating permanent empty workspaces. Leme creates one of those tags
-when a window opens or moves there, then removes it again after its last window
-leaves.
-
-`drop_mode simple` uses horizontal halves for a wide target and vertical halves for a tall target. `edges` chooses the nearest target edge.
+A `tag` block needs `maximum` set above it, even at the default, since tag ids
+are checked against it as the file is read. A reload that lowers `maximum`
+below a tag in use is rejected.
 
 ## Per-tag settings
 
-A `tag SPEC` block applies settings to one id or an inclusive comma-separated list of ids and ranges:
+`tag SPEC` overrides settings for one id, a range or a comma list, such as
+`2`, `4-6` or `2,4-6`. No spaces inside the spec, and each id can only be in
+one block.
 
-```scfg
-tags {
-    maximum 9
-
-    tag 2,4-6 {
-        layout master_stack
-        mfact 0.6
-        nmaster 2
-        gap 4
-        split_ratio 0.5
-    }
-}
-```
-
-The `SPEC` is one token. Whitespace inside it is invalid. An id must be within `1..maximum`, a range must have its lower bound first, and a tag id cannot be covered by two blocks.
-
-| Key | Values | Default | Used by |
+| Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `layout` | `dwindle`, `master_stack`, `desktop` | `dwindle` | all layouts |
-| `drop_mode` | `simple`, `edges` | `simple` | tiled drag |
-| `mfact` | `0.10` through `0.90` | `0.5` | master-stack |
-| `nmaster` | `1` through `16` | `1` | master-stack |
-| `gap` | integer from `0` through `65535` | `style.gap` | inner spacing in tiled layouts |
-| `split_ratio` | `0.10` through `0.90` | `0.5` | dwindle: the share a tile keeps when a new window splits it |
+| `layout` | `dwindle`, `master_stack`, `desktop` | `tags.layout` | layout of the tag |
+| `drop_mode` | `simple`, `edges` | `tags.drop_mode` | where a window dragged onto this tag's windows lands |
+| `mfact` | `0.10` to `0.90` | `0.5` | master area share, master-stack |
+| `nmaster` | `1` to `16` | `1` | windows in the master area, master-stack |
+| `gap` | `0` to `65535` | `style.gap` | gap between tiled windows |
+| `split_ratio` | `0.10` to `0.90` | `0.5` | share a tile keeps when a new window splits it, dwindle |
 
-Outer and smart gaps use the global [appearance settings](appearance.md#gaps).
-
-An adaptive tag uses its configured settings when it materializes. Its configured
-layout also controls whether desktop icons appear while it is still an empty
-candidate. Showing icons does not materialize the tag. Settings for an inactive
-layout are retained and take effect if the tag later switches layout.
-
-A reload compares effective settings per tag. A live tag resets to its
-configured values only when those settings change. An unrelated reload keeps
-runtime layout and resize adjustments. A reload that lowers `maximum` below a
-currently created tag is rejected, and the running configuration remains in
-place.
-
-See [tags and outputs](../concepts/tags-and-outputs.md) and [layouts](../concepts/layouts.md) for the behavior behind these settings.
+Outer and smart gaps come from [appearance](appearance.md#gaps). A reload only
+resets a tag's runtime layout and resize changes when its settings in the file
+changed.

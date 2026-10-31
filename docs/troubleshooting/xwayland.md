@@ -1,16 +1,13 @@
 # XWayland troubleshooting
 
-XWayland starts only after an X11 client connects. No XWayland process at Leme startup is normal.
-
-Check the reserved display and the process list after launching an X11 client:
+XWayland only starts when an X11 app connects, so no Xwayland process at
+startup is normal. After starting an X11 app:
 
 ```sh
 printf '%s\n' "$DISPLAY"
 pgrep -af Xwayland
 ```
 
-Confirm that the XWayland executable is installed and available through `PATH`. If it exits, native Wayland clients should continue running. Inspect the compositor log around the first X11 connection and any restart attempt.
-
-When an application supports both backends, force its native Wayland mode. If the native client works, the remaining failure is in the XWayland path.
-
-For managed X11 behavior, dialogs, override-redirect surfaces, and clipboard sharing, see the [XWayland guide](../guides/xwayland.md).
+If it does not start, check that `Xwayland` is on `PATH` and read the log
+around the app's first connection. If the app also runs on Wayland, try that to
+see whether the problem is X11 only. See the [XWayland guide](../guides/xwayland.md).

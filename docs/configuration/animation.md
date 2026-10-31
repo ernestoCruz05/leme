@@ -1,11 +1,8 @@
 # Animation
 
-The `animation` block controls optional window and workspace animations. Each
-event remains instant unless its own sub-block is present.
-
-## Window animations
-
-Use `open` and `close` to animate windows as they appear and disappear:
+Animations are off until the `animation` block turns them on, one event at a
+time: `open` and `close` for windows appearing and disappearing, `move` for
+windows changing place or size, and `workspace` for tag switches.
 
 ```scfg
 animation {
@@ -20,163 +17,38 @@ animation {
         curve ease_in
         effect fade
     }
+    move {
+        duration 200
+    }
+    workspace {
+        style glide_fade
+    }
 }
 ```
 
-You can configure either event by itself. For example, an `open` block without
-a `close` block leaves closing instant.
+An empty block such as `open { }` turns that event on with the defaults below.
+`duration 0` turns it off.
 
-### Window options
+## Window events
 
-| Key | Accepted values | Default | Effect |
+`open`, `close` and `move` take these keys:
+
+| Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `duration` | nonnegative integer in milliseconds, clamped to `1000` | `150` | sets the animation length |
-| `curve` | preset name or four decimal control points | `ease_out` | shapes scale and other movement |
-| `opacity_curve` | same values as `curve` | value of `curve` | shapes the fade separately |
-| `effect` | `fade`, `scale`, both, or `none` alone | `fade` | selects the visible effects |
-| `scale_from` | decimal from `0.1` through `2.0` | `0.92` | sets the starting and ending scale |
+| `duration` | milliseconds, `0` to `1000` | `150` | animation length |
+| `curve` | a [curve](#curves) | `ease_out` | shape of the motion |
+| `spring` | a [spring](#springs) block | none | replaces `duration` and `curve` |
+| `effect` | `fade`, `scale`, both, or `none` | `fade` | what the animation does |
+| `opacity_curve` | a [curve](#curves) | same as `curve` | shape of the fade |
+| `scale_from` | `0.1` to `2.0` | `0.92` | size an opening window starts at, and a closing one ends at |
 
-Defaults apply when a sub-block is present, so `open { }` enables a 150 ms
-`ease_out` fade. `duration 0` and `effect none` disable that event without a
-diagnostic.
-
-A duration above 1000 ms is clamped and reported. An invalid curve, effect, or
-scale records a diagnostic and leaves that key at its sub-block default. See
-[configuration errors](config-errors.md) for reporting and reload behavior.
-
-### What a window animation shows
-
-During an animation, Leme draws a temporary image of the complete window,
-including its border and application content. The real window already has its
-final position and size, so pointer input, bars, window lists, and `timao`
-report the final state.
-
-Opening fades from transparent to visible and scales from `scale_from` to full
-size. Closing performs the reverse. The border keeps its configured thickness
-throughout the scale, and scaling stays centered on the window. A value above
-`1.0` starts an opening window larger than its final size and shrinks it into
-place.
-
-An application may continue drawing while the temporary image is visible
-without changing the image partway through. A closing window keeps its last
-content visible until the animation ends instead of becoming blank.
-
-An opening window waits until the application has drawn at its configured
-size. If that takes longer than 200 ms, Leme shows the window immediately
-instead of delaying it further.
-
-### When window animations stay instant
-
-A window opens or closes without animation when:
-
-- the session is locked;
-- the window is fullscreen;
-- the window is an unmanaged XWayland surface, such as a menu or tooltip;
-- the window belongs to a tag that is not visible.
-
-A running window animation ends immediately when the displayed tag changes or
-the session locks. An animation never delays a window from opening or closing.
-
-## Layout changes
-
-Use `move` to animate tiled windows that change place or size when the layout
-rearranges: a window opens or closes on the tag, windows swap or move, the
-layout switches, a split is resized with a command, or a dragged window is
-dropped into a new slot. On desktop tags, `move` also controls window placement,
-container reflows, minimize/restore and drag previews.
-
-```scfg
-animation {
-    move {
-        duration 340
-        curve 0.30 1.50 0.50 1.00
-    }
-}
-```
-
-`move` takes `duration`, `curve` and `spring`, with the same values as `open`
-and `close`. `effect`, `scale_from` and `opacity_curve` do not apply to it and
-are reported as configuration problems. A spring works the same way here:
-
-```scfg
-animation {
-    move {
-        spring {
-            damping_ratio 0.8
-            stiffness 600
-        }
-    }
-}
-```
-
-### What a layout animation shows
-
-The window's frame glides from the old place to the new one, and its content is
-never stretched: it keeps its real size, anchored at the top-left corner, and
-the frame cuts it off where it doesn't fit. A window that shrinks shows its old
-content being covered from the right and bottom, like a curtain. A window that
-grows shows the content the application has already drawn at its new size,
-revealed as the frame opens. The application gets its new size when the
-animation starts, and most redraw within a frame or two. Until then, a growing
-window shows its old content with the background visible in the part not yet
-filled.
-
-When the animation ends, the live window takes over. If the application has not
-drawn at its new size by then, the old content stays at the final place for up
-to 200 ms more, so a slow application never shows its old, larger content
-spilling past the frame.
-
-The content shown during the animation is a still image: a video or a terminal
-updates again when the animation ends. Pointer input, bars and `timao` see the
-final position and size from the start, as they do for `open` and `close`.
-
-When the layout changes again during an animation, the next one starts from
-where the window is shown at that moment.
-
-### Desktop animations
-
-Maximize, restore, halves and quarters animate for standalone desktop windows and
-containers. Container creation, insertion, member removal, layout switches and
-keyboard split resizing use the same settings. The
-frame and moving members wait for native clients to acknowledge their new size,
-up to 200 ms, then start together. Borders keep their configured thickness.
-Members can run the configured `close` animation without an individual titlebar;
-windows opening directly into a container do not run `open`.
-
-Minimizing scales and fades a snapshot toward the unit's strip cell. A unit on
-another page uses the arrow cell pointing toward that page. Restoring reverses
-the motion, including restoration through focus or a foreign shell. Without an
-available strip cell, the small endpoint is 60% of the window's size, centered
-on its position. Container members and their frame share the strip endpoint.
-Restored clients remain enabled and transparent while the snapshot is visible,
-so they can keep drawing.
-
-Desktop snap and grouping previews grow from a 32px square at the cursor.
-Changing targets continues from the preview's current position. Dismissing a
-preview removes it immediately.
-
-Pointer moves, edge and split resizing, and restore-on-drag remain instant.
-Output transfers and geometry reconciliation also remain instant. None of these
-desktop animations runs without a `move` block. Desktop workspace transitions
-remain instant.
-
-### When layout changes stay instant
-
-A tiled window moves without animation when:
-
-- the configuration has no `move` block;
-- the window is floating or fullscreen;
-- a bar or panel reserves or releases space, an output changes, or the
-  configuration is reloaded;
-- a split is resized by dragging it with the pointer, so both sides follow the
-  cursor;
-- the window's tag is not visible, a workspace transition is running, or the
-  session is locked.
+`effect`, `opacity_curve` and `scale_from` only apply to `open` and `close`. On
+desktop tags, `move` also animates maximize, `snap`, containers and minimizing.
 
 ## Springs
 
-A window event (`open`, `close` or `move`) or the workspace transition may use a
-spring instead of a duration and curve:
+A `spring` block in `open`, `close`, `move` or `workspace` replaces `duration`,
+`curve` and `opacity_curve`:
 
 ```scfg
 animation {
@@ -184,167 +56,36 @@ animation {
         spring {
             damping_ratio 0.8
             stiffness 900
-            epsilon 0.0001
-        }
-    }
-    workspace {
-        spring {
-            damping_ratio 1.0
-            stiffness 800
         }
     }
 }
 ```
 
-| Key | Values | Default |
-| --- | --- | --- |
-| `damping_ratio` | decimal greater than `0` | `1.0` |
-| `stiffness` | decimal greater than `0` | `800` |
-| `epsilon` | decimal above `0` and below `1`, floored at `0.000001` | `0.0001` |
+| Key | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `damping_ratio` | above `0` | `1.0` | below `1.0` overshoots and springs back |
+| `stiffness` | above `0` | `800` | higher settles faster |
+| `epsilon` | above `0`, below `1` | `0.0001` | how close to the target counts as settled |
 
-A spring has no duration of its own. It runs until its amplitude falls below
-`epsilon`, and that settle time is computed once when the animation starts. A
-`damping_ratio` below `1.0` overshoots and springs back; `1.0` is critically
-damped and reaches the target without overshooting; above `1.0` approaches
-more slowly, still without overshooting.
-
-Three combinations are rejected rather than clamped, each with a diagnostic:
-
-- `damping_ratio 0`, because an undamped spring never settles and would hold
-  an output awake indefinitely.
-- `epsilon` at `1.0` or above, because the amplitude starts below it and the
-  spring would be considered settled before it moved, so the animation would
-  not run.
-- Parameters that settle slower than the `duration` maximum of 1000 ms. A weak
-  spring such as `stiffness 8` takes over three seconds, and the diagnostic
-  names the settle time it computed.
-
-`epsilon` is a cost control as much as a feel control. It is measured in
-normalised progress, so `0.0001` is roughly a fifth of a pixel on a 1920-wide
-slide. Lowering it makes the compositor animate motion too small to see, for
-hundreds of extra frames.
-
-An event with a `spring` block ignores `duration`, `curve` and
-`opacity_curve`. An event without one is unchanged, so existing configurations
-keep their present behaviour.
+A spring that takes longer than 1000 ms to settle is rejected.
 
 ## Workspace transitions
 
-Tag switching remains instant unless `animation` contains a `workspace` block.
-This complete example enables the default glide and fade:
-
-```scfg
-animation {
-    workspace {
-        duration 180
-        style glide_fade
-        distance 0.15
-        curve ease_out
-    }
-}
-```
-
-A full-width slide needs only:
-
-```scfg
-animation {
-    workspace {
-        style full_slide
-    }
-}
-```
-
-### Workspace options
-
-| Key | Accepted values | Default | Effect |
+| Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `duration` | nonnegative integer in milliseconds, clamped to `1000` | `180` | sets the transition length |
-| `style` | `glide_fade` or `full_slide` | `glide_fade` | selects the transition style |
-| `distance` | decimal from `0.0` through `1.0` | `0.15` | sets glide travel as a fraction of output width |
-| `curve` | preset name or four decimal control points | `ease_out` | shapes movement |
+| `duration` | milliseconds, `0` to `1000` | `180` | transition length |
+| `style` | `glide_fade`, `full_slide` | `glide_fade` | a short glide with a cross-fade, or a slide by the full output width |
+| `distance` | `0.0` to `1.0` | `0.15` | how far `glide_fade` moves, as a fraction of the output width |
+| `curve` | a [curve](#curves) | `ease_out` | shape of the motion |
+| `spring` | a [spring](#springs) block | none | replaces `duration` and `curve`, and sets the release of a [touchpad swipe](gestures.md) |
 
-`glide_fade` moves the source and destination windows by `distance` times the
-output width while cross-fading them. `full_slide` moves them by one complete
-output width and does not fade. `distance` is accepted in a `full_slide` block
-but does not affect that style. In `glide_fade`, opacity follows transition
-travel directly.
-
-An empty `workspace { }` block uses all defaults in the table. `duration 0`
-disables workspace transitions without a diagnostic. An invalid style,
-distance, or curve records a diagnostic and leaves that key at its default.
-
-### Direction
-
-- `focus_next_tag` and a followed `next` move travel forward, including the
-  wrap from the highest navigable tag to tag 1. With `occupied`, the same holds
-  for the wrap from the highest occupied tag.
-- `focus_previous_tag` and a followed `previous` move travel backward,
-  including the reverse wrap.
-- A direct numbered selection or followed numbered move uses the tag numbers:
-  a higher destination travels forward and a lower destination travels
-  backward.
-- Workspace and taskbar activation use the same numbered rule.
-- `focus_last_tag` reverses the direction of the tag change it is undoing.
-
-Forward movement sends the current tag left and brings the destination from
-the right. Backward movement reverses both directions. A numbered jump shows
-only its source and destination; intermediate tags do not appear.
-
-### What moves
-
-Managed tiled and floating windows on the source and destination tags take part
-in the transition. Wallpaper, panels, notifications, overlays, the cursor, and
-lock content stay fixed. Each transition remains clipped to its own output, so
-it cannot draw across the edge of an adjacent monitor.
-
-Switching between an occupied and an empty tag moves the occupied windows into
-or out of the fixed background. Switching between two empty tags is instant.
-
-### Interrupting a transition
-
-Focus and input switch to the destination as soon as the transition begins.
-The moving image is visual only and does not receive input. Bars, task switchers,
-workspace publication, and `timao` also report the destination immediately.
-
-If another switch happens before the animation finishes, the new transition
-continues from what is currently visible instead of snapping back or waiting
-in a queue. Reloading the configuration does not alter a transition already in
-progress.
-
-### When workspace transitions stay instant
-
-A tag switch remains instant when:
-
-- either tag has a fullscreen window;
-- the session is locked or inactive;
-- the output is powered off, disabled, or has no valid size;
-- Leme cannot prepare the visual transition.
-
-A running transition ends before an output changes mode, scale, transform,
-position, or connection state. Locking, deactivating the session,
-powering off the output, or entering fullscreen also ends it immediately.
-
-Every tag change finishes any window open or close animation already running on
-that output. Gesture-controlled workspace transitions are not supported.
+A switch is instant when either tag has a fullscreen window or uses the desktop
+layout.
 
 ## Curves
 
-A curve is a cubic bezier. Use a preset name or four control-point coordinates:
-
-```scfg
-animation {
-    open {
-        duration 200
-        curve 0.34 1.56 0.64 1.0
-        opacity_curve ease_out
-        effect fade scale
-        scale_from 0.85
-    }
-}
-```
-
-The four numbers are `x1 y1 x2 y2`, using the same convention as CSS
-`cubic-bezier`.
+A curve is a preset name or four numbers, `x1 y1 x2 y2`, read like CSS
+`cubic-bezier`. Both x values must be from `0.0` to `1.0`.
 
 | Preset | Control points |
 | --- | --- |
@@ -352,28 +93,3 @@ The four numbers are `x1 y1 x2 y2`, using the same convention as CSS
 | `ease_in` | `0.42 0.0 1.0 1.0` |
 | `ease_out` | `0.0 0.0 0.58 1.0` |
 | `ease_in_out` | `0.42 0.0 0.58 1.0` |
-
-The two x coordinates must lie from `0.0` through `1.0`. Values outside that
-range are rejected with a diagnostic. The y coordinates are unconstrained. A
-y value above `1.0` can overshoot the target before settling, while a negative
-y value can move away from the target first.
-
-`opacity_curve` shapes a fade separately from movement. When omitted, it
-follows `curve`. This allows a window to overshoot slightly while its opacity
-rises smoothly.
-
-Preset names resolve to the control points in the table. Specify all four
-control points when a configuration needs an exact curve independent of preset
-definitions.
-
-## Known limits
-
-While a window scales, a subsurface such as a video overlay or client-side
-header can be displaced by up to one pixel. The offset disappears when the
-animation finishes and is most visible with a small `scale_from`.
-
-Animation duration follows elapsed time rather than frame count. Monitors with
-different refresh rates remain synchronized, and a dropped frame does not
-extend the configured duration.
-
-See [appearance](appearance.md) for gaps, borders, and opacity.

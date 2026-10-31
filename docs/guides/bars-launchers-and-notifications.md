@@ -1,19 +1,8 @@
-# Bars, launchers, and notifications
+# Bars, launchers and notifications
 
-Bars, launchers, wallpapers and notification daemons place themselves through
-layer-shell, the Wayland interface for desktop surfaces. Leme positions them
-around managed windows according to the layer they ask for.
-
-## Layer-shell surfaces
-
-Leme supports background, bottom, top, overlay, tiled, floating, drag, and lock surfaces. It honors exclusive zones and keyboard interactivity. Background surfaces stay below managed windows. Top and overlay surfaces stay above them.
-
-Viewporter and fractional-scale support are available to current layer-shell clients. Leme does not load wallpaper images or animate those clients itself.
-
-## Start external programs
-
-You can start a program after Leme finishes compositor startup with an `exec`
-block:
+Bars, launchers, wallpapers and notification daemons are layer-shell clients:
+they pick a layer and Leme places them there. Exclusive zones push tiled windows
+aside, and keyboard interactivity works. Start them with `exec`:
 
 ```scfg
 exec {
@@ -23,43 +12,36 @@ exec {
 }
 ```
 
-`exec` receives argument vectors directly and runs once at startup. A configuration reload does not start the programs again. The programs are not build dependencies, and Leme does not manage their complete lifetime on exit.
-
-If you need a bar to remain tied to the graphical login, use the service manager or session wrapper provided by your distribution.
+`exec` runs once at startup and does not restart anything that exits. Use your
+service manager if you want that.
 
 ## Data for a bar
 
-A bar can read Leme's state with `timao`. `watch` prints one JSON event per
-line: a `snapshot` first, then one each time the result changes. The result is
-in the event's `value` field:
+Bars that support `ext-workspace-v1` and the foreign-toplevel protocols work as
+they are. A custom bar can also follow Leme's state with `timao watch`, which
+prints a `snapshot` line and then one line per change, with the result in
+`value`:
 
 ```sh
+timao watch session mode
 timao eval '(watch EXPRESSION)'
 ```
 
-A single field also has a short form: `timao watch session mode` is the same
-as `timao eval '(watch (get (session) "mode"))'`. Useful expressions:
-
 | Shows | Expression |
 | --- | --- |
-| Focused output | `(get (get (session) "focused_output") "name")` |
-| Tags to draw | `(select (where (tags) .navigable) .number .active .view_count .urgent .output.name)` |
-| Focused window | `(select (where (views) .focused) .title .app_id)` |
-| Layout of the focused output's tag | `(get (first (where (tags) (and .active (contains (list "DP-1") .output.name)))) "layout")` |
-| Keyboard layout | `(get (get (session) "keyboard_layout") "active")` |
-| Binding mode | `(get (session) "mode")` |
+| focused output | `(get (get (session) "focused_output") "name")` |
+| tags to draw | `(select (where (tags) .navigable) .number .active .view_count .urgent .output.name)` |
+| focused window | `(select (where (views) .focused) .title .app_id)` |
+| layout on `DP-1` | `(get (first (where (tags) (and .active (contains (list "DP-1") .output.name)))) "layout")` |
+| keyboard layout | `(get (get (session) "keyboard_layout") "active")` |
+| binding mode | `(get (session) "mode")` |
 
-`navigable` tags are the ones a bar should show: pinned tags, occupied tags,
-and the current empty one. `view_count` is the number of windows on a tag.
-The focused-window expression returns an empty list when nothing has focus;
-reading `title` straight from `(get (session) "focused_view")` fails then,
-because that field is `null`. Replace `DP-1` with the connector name of the
-output the bar sits on.
+The focused-window query returns an empty list when nothing has focus.
 
 ## Media keys
 
-Audio and media control remain external. If `wpctl` and `playerctl` are
-installed, add a reusable group such as:
+Audio and media control are up to other programs. With `wpctl` and
+`playerctl`:
 
 ```scfg
 bind_group "media" {
@@ -70,10 +52,8 @@ bind_group "media" {
     XF86AudioNext spawn playerctl next
     XF86AudioPrev spawn playerctl previous
 }
+
+binds "common" {
+    inherit media
+}
 ```
-
-Then place `inherit media` inside the existing `binds "common"` block.
-
-## Input and focus
-
-A layer-shell client can request keyboard interactivity. Exclusive zones reserve space for tiled content; a surface without an exclusive zone overlays content instead. Session-lock surfaces follow a separate fail-closed policy described in the [locking and idle guide](locking-and-idle.md).

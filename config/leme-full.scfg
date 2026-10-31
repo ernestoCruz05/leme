@@ -85,8 +85,7 @@ style {
 #     output "DP-2"
 # }
 
-# A named scratchpad matches this exact Wayland app-id or X11 class. Its
-# command is an argument vector, so shell expansion is not available here.
+# identity is an exact app_id or X11 class. spawn runs without a shell.
 scratchpad "drop" {
     identity "foot-drop"
     spawn foot --app-id foot-drop
@@ -138,9 +137,9 @@ output "DP-2" {
     right_of "DP-1"
 }
 
-# Profile-based output selection example (uncomment the profile variable below
-# first). LEME_PROFILE comes from the environment, or from a leme.env file beside
-# this one -- see config/leme.env for an example:
+# Outputs per profile. Uncomment the profile variable in vars first.
+# LEME_PROFILE comes from the environment or from leme.env next to this file,
+# see config/leme.env.
 # if $profile == "laptop" {
 #     output "eDP-1" {
 #         mode 1920x1080
@@ -165,6 +164,13 @@ pointer "Razer Razer DeathAdder V2" {
     accel_profile flat
     accel_speed 0.0
 }
+
+# The experimental desktop layout. Turn it on per tag with `layout desktop`
+# in tags, or with switch_layout.
+# desktop {
+#     minimized_strip true
+#     container_modifier shift
+# }
 
 # gestures {
 #     workspace_switch {
@@ -287,9 +293,8 @@ cursor {
     size 24
 }
 
-# Configuration errors are written to the session log and exposed through
-# `timao get config`. The accepted config_errors block is reserved for a
-# future on-screen report and currently has no visible effect.
+# Config errors go to the session log and to `timao get config diagnostics`.
+# The config_errors block is accepted but does nothing yet.
 
 env {
     MOZ_ENABLE_WAYLAND 1

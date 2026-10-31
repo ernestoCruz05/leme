@@ -1,12 +1,11 @@
 # Troubleshooting
 
-Start with the [session log](startup.md#start-with-the-log), then choose the symptom that matches what you see.
+Start with the [session log](startup.md#start-with-the-log).
 
-- [Startup](startup.md) covers logs, `XDG_RUNTIME_DIR`, D-Bus, and login-session checks.
-- [Outputs](outputs.md) covers connector names, modes, power requests, and recovery from bad geometry.
-- [Input](input.md) covers seat access, VT switching, pointer names, and nested-session limits.
-- [Portals and capture](portals-and-capture.md) separates compositor capture from portal and PipeWire failures.
-- [XWayland](xwayland.md) covers lazy startup, missing binaries, and native fallback.
-- [Crashes](crashes.md) lists the information needed for a useful report.
-- [Performance](performance.md) shows how to measure what effects and animations cost per frame.
-
+- [Startup](startup.md): the log, `XDG_RUNTIME_DIR`, D-Bus.
+- [Outputs](outputs.md): rejected output blocks, a dark second GPU, power.
+- [Input](input.md): seat access, VT switching, pointer names.
+- [Portals and capture](portals-and-capture.md): screenshots and screen sharing.
+- [XWayland](xwayland.md): X11 apps.
+- [Crashes](crashes.md): what to put in a report.
+- [Performance](performance.md): measuring frame times.

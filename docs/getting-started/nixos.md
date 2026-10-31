@@ -1,12 +1,14 @@
-# NixOS installation
+# NixOS
 
-In `flake.nix`, add the GitHub Repository to your inputs and outputs:
+Add the flake to your inputs and outputs:
+
 ```nix
 leme = {
   url = "github:ernestoCruz05/leme";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
+
 ```nix
 outputs =
   inputs@{
@@ -15,7 +17,8 @@ outputs =
   }:
 ```
 
-And enable the Leme module. It will set portals and a login manager entry by default.
+Add the module, which also sets up portals and a login manager entry:
+
 ```nix
 modules = [
   leme.nixosModules.default
@@ -23,7 +26,10 @@ modules = [
 ];
 ```
 
-Install Leme, either in `configuration.nix` or `flake.nix`:
+Then enable it:
+
 ```nix
 programs.leme.enable = true;
 ```
+
+The package is the effects build, so `corner_radius` and `blur` work.

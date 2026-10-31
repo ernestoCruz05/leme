@@ -1,30 +1,21 @@
 # Output troubleshooting
 
-## Output configuration fails
+## An output block is rejected
 
-Connector names are exact. List them and their advertised modes from inside
-the session:
+`wlr-randr` lists the exact connector names and modes. Check that:
 
-```sh
-wlr-randr
-```
+- `refresh` has a `mode` with it, and is within 1 Hz of an advertised rate;
+- `scale` is from `0.5` to `4.0`;
+- `transform` is `normal`, `90`, `180` or `270`;
+- no two outputs overlap.
 
-You can also inspect the compositor log for each active connector.
+Removing the block falls back to the preferred mode at scale 1. A reload that
+fails keeps the outputs as they were.
 
-Remember:
+## A monitor on the second GPU stays dark
 
-- a refresh value requires a matching `mode`;
-- Leme accepts a requested refresh only when the nearest advertised value is within 1 Hz;
-- scale must be from `0.5` through `4.0`;
-- transform must be `normal`, `90`, `180`, or `270`.
-
-Remove a hardware-specific `output` block to recover. Leme then uses each output's preferred mode at scale 1 and normal transform. A failed runtime reload keeps the last working output state.
-
-Output-management clients can request temporary positions and modes. Reload restores scfg policy. Overlapping output geometry and requests that disable every output are rejected.
-
-## Monitor on a secondary GPU stays dark
-
-On a laptop, some ports are often wired to the discrete GPU. With `secondary_gpu on_demand`, the default, Leme opens that GPU only after the kernel reports the hotplug. The log shows each step:
+With `secondary_gpu on_demand`, Leme opens the second GPU when the kernel
+reports a monitor on it. The log shows it:
 
 ```text
 leme: /dev/dri/card0 stays closed until a monitor is connected
@@ -32,41 +23,23 @@ leme: opened /dev/dri/card0
 leme: closing /dev/dri/card0, nothing is connected to it
 ```
 
-If plugging the monitor in prints nothing, check that the kernel sends the event:
+If plugging in prints nothing, check that the kernel sends the event:
 
 ```sh
 udevadm monitor --kernel --subsystem-match=drm
 ```
 
-A `change` line for that card should appear when you plug the monitor in. If none appears, set `secondary_gpu always` in the unnamed `output` block and reload. The reload opens the GPU and finds the monitor that is already plugged in.
+If no `change` line shows up, set `secondary_gpu always` and reload.
 
-## Output does not power off or return
-
-Confirm that Leme advertises the power-management global:
+## An output does not turn off or back on
 
 ```sh
 wayland-info | grep zwlr_output_power_manager_v1
-```
-
-Use a client such as `wlopm` to inspect and change the state:
-
-```sh
 wlopm
 wlopm --off DP-1
-wlopm
 wlopm --on DP-1
-wlopm
 ```
 
-Quote the all-output wildcard:
-
-```sh
-wlopm --off '*'
-wlopm --on '*'
-```
-
-Power-off is not unplug. The output remains tracked with dormant tags and views, and a reload does not wake it. Powering every physical output off does not create a headless fallback.
-
-If ON fails, Leme leaves the target off rather than disturbing another output. Correct the configured mode or non-overlapping geometry, reload while the output remains off, and retry.
-
-For capture recovery, verify that the output is back on before checking portals and PipeWire. A direct capture command such as `grim -o DP-1 capture.png` separates compositor capture from transport problems.
+An output that is off keeps its tags and windows, and a reload does not wake
+it. If turning it on fails, its mode or position is the problem: fix it in the
+config, reload while it is off, and try again.
