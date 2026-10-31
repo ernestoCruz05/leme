@@ -365,11 +365,11 @@ static bool leme_config_parse_tags(struct leme_config *config,
           !leme_config_parse_layout_kind(entry->params[0],
                                          &config->tag_defaults.layout)) {
         const struct leme_reject_extra extra = {
-            .help = "valid values are `dwindle` and `master_stack`",
+            .help = "valid values are `dwindle`, `master_stack` and `desktop`",
         };
         if (!leme_config_reject_detailed(config, entry, 0, &extra,
-                                         "layout must be dwindle or "
-                                         "master_stack")) {
+                                         "layout must be dwindle, "
+                                         "master_stack or desktop")) {
           return false;
         }
         continue;

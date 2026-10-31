@@ -3,6 +3,8 @@
 - No VRR or adaptive-sync policy.
 - No touch, tablet, client pointer gestures, text input or input methods.
 - No color management, HDR, gamma control or DRM leasing.
+- Rounded corners and blur only render with the GLES2 and pixman renderers,
+  not with `WLR_RENDERER=vulkan`.
 - No terminal swallowing.
 - Multi-monitor support still needs testing on more hardware.
 - Portal window sharing needs `xdg-desktop-portal-luminous`;
