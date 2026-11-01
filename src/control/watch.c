@@ -221,8 +221,8 @@ enum leme_control_code leme_control_watch_request(
   struct leme_public_snapshot *snapshot = NULL;
   struct leme_control_evaluation *candidate = NULL;
   struct leme_control_frame *frames[2] = {0};
-  enum leme_control_code code =
-      leme_control_compile(context, request, &slot->program, error);
+  enum leme_control_code code = leme_control_compile(
+      leme_control_context_limits(context), request, &slot->program, error);
   if (code != LEME_CONTROL_OK)
     goto cleanup;
   slot->roots = leme_control_program_roots(slot->program);

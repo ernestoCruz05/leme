@@ -185,6 +185,14 @@ static bool leme_config_desktop_menu_row(struct leme_config *config,
     free(error);
     return false;
   }
+  if (!leme_config_check_command(&entry->command, &error)) {
+    *fatal =
+        !leme_config_reject(config, row, 1, "invalid command for entry: %s",
+                            error != NULL ? error : "invalid command");
+    free(error);
+    leme_config_finish_command(&entry->command);
+    return false;
+  }
   if (!leme_config_desktop_menu_placeholders(config, row, menu, &entry->command,
                                              fatal)) {
     leme_config_finish_command(&entry->command);

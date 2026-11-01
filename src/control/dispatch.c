@@ -110,6 +110,53 @@ static enum leme_control_code act_reply(size_t limit,
   return code;
 }
 
+enum leme_control_code
+leme_control_run_act(struct leme_control_context *context,
+                     const struct leme_control_request *request,
+                     size_t *affected, struct leme_control_error *error) {
+  if (context == NULL || request == NULL || affected == NULL || error == NULL)
+    return LEME_CONTROL_INVALID_ARGUMENT;
+  *affected = 0;
+  struct leme_control_program *program = NULL;
+  enum leme_control_code code = leme_control_compile(
+      leme_control_context_limits(context), request, &program, error);
+  if (code != LEME_CONTROL_OK)
+    return code;
+  uint32_t roots = leme_control_program_roots(program);
+  if (roots == 0)
+    roots = LEME_PUBLIC_ALL_ROOTS;
+  struct leme_public_model *model = leme_control_context_model(context);
+  struct leme_public_snapshot *snapshot = NULL;
+  struct leme_public_capture_diagnostic diagnostic = {0};
+  const enum leme_public_status status = leme_public_model_capture_diagnostic(
+      model, leme_control_context_source(context), roots, &diagnostic,
+      &snapshot);
+  if (status != LEME_PUBLIC_OK) {
+    leme_control_program_destroy(program);
+    error->phase = LEME_CONTROL_PREFLIGHT;
+    (void)snprintf(error->expr_path, sizeof(error->expr_path), "/expr");
+    if (status == LEME_PUBLIC_LOCKED) {
+      error->code = LEME_CONTROL_SESSION_LOCKED;
+      (void)snprintf(error->message, sizeof(error->message),
+                     "session is locked");
+    } else {
+      error->code = LEME_CONTROL_RESOURCE_LIMIT;
+      capture_error_message(error, &diagnostic, status);
+    }
+    return error->code;
+  }
+  code = leme_control_act(context, program, snapshot, affected, error);
+  leme_public_snapshot_unref(snapshot);
+  leme_control_program_destroy(program);
+  if (*affected > 0)
+    leme_public_model_invalidate(model);
+  if (code != LEME_CONTROL_OK) {
+    error->has_affected = true;
+    error->affected = *affected;
+  }
+  return code;
+}
+
 static enum leme_control_code
 dispatch_request(struct leme_control_context *context,
                  struct leme_control_peer *peer,
@@ -221,7 +268,7 @@ dispatch_request(struct leme_control_context *context,
     struct leme_control_program *prog = NULL;
     struct leme_control_error err = {0};
     enum leme_control_code code =
-        leme_control_compile(context, request, &prog, &err);
+        leme_control_compile(limits, request, &prog, &err);
     if (code != LEME_CONTROL_OK) {
       enum leme_control_code rep_code = leme_control_reply_create_error(
           limits->response_bytes, req_id.data, req_id.length, inst.data,
@@ -309,75 +356,22 @@ dispatch_request(struct leme_control_context *context,
   }
 
   if (op == LEME_CONTROL_ACT) {
-    struct leme_control_program *prog = NULL;
     struct leme_control_error err = {0};
-    enum leme_control_code code =
-        leme_control_compile(context, request, &prog, &err);
-    if (code != LEME_CONTROL_OK) {
-      enum leme_control_code rep_code = leme_control_reply_create_error(
-          limits->response_bytes, req_id.data, req_id.length, inst.data,
-          inst.length, &err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
-          *out_frame != NULL) {
-        leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
-                                        false, req_id.data, req_id.length);
-      }
-      return rep_code;
-    }
-
-    uint32_t roots = leme_control_program_roots(prog);
-    if (roots == 0) {
-      roots = LEME_PUBLIC_ALL_ROOTS;
-    }
-    struct leme_public_snapshot *snap = NULL;
-    const struct leme_public_source *source =
-        leme_control_context_source(context);
-    struct leme_public_capture_diagnostic diagnostic = {0};
-    enum leme_public_status st = leme_public_model_capture_diagnostic(
-        model, source, roots, &diagnostic, &snap);
-    if (st != LEME_PUBLIC_OK) {
-      leme_control_program_destroy(prog);
-      if (st == LEME_PUBLIC_LOCKED) {
-        err.code = LEME_CONTROL_SESSION_LOCKED;
-        err.phase = LEME_CONTROL_PREFLIGHT;
-        (void)snprintf(err.message, sizeof(err.message), "session is locked");
-        (void)snprintf(err.expr_path, sizeof(err.expr_path), "/expr");
-      } else {
-        err.code = LEME_CONTROL_RESOURCE_LIMIT;
-        err.phase = LEME_CONTROL_PREFLIGHT;
-        capture_error_message(&err, &diagnostic, st);
-        (void)snprintf(err.expr_path, sizeof(err.expr_path), "/expr");
-      }
-      enum leme_control_code rep_code = leme_control_reply_create_error(
-          limits->response_bytes, req_id.data, req_id.length, inst.data,
-          inst.length, &err, out_frame);
-      if (rep_code == LEME_CONTROL_OK && out_frame != NULL &&
-          *out_frame != NULL) {
-        leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
-                                        false, req_id.data, req_id.length);
-      }
-      return rep_code;
-    }
-
     size_t affected = 0;
-    code = leme_control_act(context, prog, snap, &affected, &err);
-    leme_public_snapshot_unref(snap);
-    leme_control_program_destroy(prog);
-    if (affected > 0)
-      leme_public_model_invalidate(model);
-    if (code != LEME_CONTROL_OK) {
-      err.has_affected = true;
-      err.affected = affected;
-      code = leme_control_reply_create_error(
-          limits->response_bytes, req_id.data, req_id.length, inst.data,
-          inst.length, &err, out_frame);
-    } else {
-      code =
-          act_reply(limits->response_bytes, req_id, inst, affected, out_frame);
-    }
+    const enum leme_control_code acted =
+        leme_control_run_act(context, request, &affected, &err);
+    const enum leme_control_code code =
+        acted == LEME_CONTROL_OK
+            ? act_reply(limits->response_bytes, req_id, inst, affected,
+                        out_frame)
+            : leme_control_reply_create_error(
+                  limits->response_bytes, req_id.data, req_id.length, inst.data,
+                  inst.length, &err, out_frame);
     if (code == LEME_CONTROL_OK && *out_frame != NULL)
       leme_control_frame_set_metadata(*out_frame, LEME_CONTROL_FRAME_ACTION,
-                                      true, req_id.data, req_id.length);
+                                      acted == LEME_CONTROL_OK ||
+                                          err.has_affected,
+                                      req_id.data, req_id.length);
     return code;
   }
 

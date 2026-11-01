@@ -21,6 +21,10 @@ leme_control_request_create(struct leme_control_document **document,
                             const struct leme_control_limits *limits,
                             struct leme_control_request **out,
                             struct leme_control_error *error);
+enum leme_control_code leme_control_request_create_source(
+    enum leme_control_request_op op, struct leme_public_text source,
+    const struct leme_control_limits *limits, struct leme_control_request **out,
+    struct leme_control_error *error);
 void leme_control_request_ref(struct leme_control_request *request);
 void leme_control_request_destroy(struct leme_control_request *request);
 struct leme_public_text

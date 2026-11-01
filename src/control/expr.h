@@ -42,7 +42,7 @@ struct leme_control_node {
 };
 
 enum leme_control_code
-leme_control_compile(struct leme_control_context *context,
+leme_control_compile(const struct leme_control_limits *limits,
                      const struct leme_control_request *request,
                      struct leme_control_program **out,
                      struct leme_control_error *error);

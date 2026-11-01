@@ -197,6 +197,8 @@ bool leme_config_validate_command(const struct leme_config *config,
            command->edge <= LEME_RESIZE_DOWN;
   case LEME_COMMAND_SPAWN:
     return command->argv != NULL && command->argv[0] != NULL;
+  case LEME_COMMAND_ACT:
+    return command->text != NULL && command->text[0] != '\0';
   case LEME_COMMAND_SET_MODE:
     return command->text != NULL && command->text[0] != '\0' &&
            leme_config_has_mode(config, command->text);

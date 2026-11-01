@@ -4,7 +4,10 @@
 #include "config/live.h"
 #include "config/prepare.h"
 #include "control/action.h"
+#include "control/dispatch.h"
 #include "control/error.h"
+#include "control/limits.h"
+#include "control/request.h"
 #include "core/command.h"
 #include "core/server.h"
 #include "input/control.h"
@@ -13,6 +16,7 @@
 #include "output/control.h"
 #include "output/output.h"
 #include "protocols/session.h"
+#include "public/server.h"
 #include "public/value.h"
 #include "shell/ownership.h"
 #include "shell/container.h"
@@ -478,7 +482,7 @@ static enum leme_control_code command(struct leme_server *server,
   }
   free(parse_error);
   if (cmd.type == LEME_COMMAND_SPAWN || cmd.type == LEME_COMMAND_QUIT ||
-      cmd.type == LEME_COMMAND_SWITCH_VT)
+      cmd.type == LEME_COMMAND_SWITCH_VT || cmd.type == LEME_COMMAND_ACT)
     code =
         leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED, "command refused");
   else if (server->config != NULL &&
@@ -543,4 +547,38 @@ struct leme_control_domain
 leme_server_control_domain(struct leme_server *server) {
   return (struct leme_control_domain){.context = server,
                                       .run = server_control_run};
+}
+
+bool leme_server_control_act(struct leme_server *server, const char *source) {
+  if (server == NULL || source == NULL || server->public_model == NULL)
+    return false;
+  const struct leme_control_limits limits = leme_control_limits_default();
+  const struct leme_public_source public_source =
+      leme_public_server_source(server);
+  const struct leme_control_domain domain = leme_server_control_domain(server);
+  struct leme_control_context *context = NULL;
+  struct leme_control_request *request = NULL;
+  struct leme_control_error error = {0};
+  size_t affected = 0;
+  enum leme_control_code code = leme_control_context_create(
+      server, server->public_model, &public_source, &limits, &domain, &context);
+  if (code == LEME_CONTROL_OK)
+    code = leme_control_request_create_source(
+        LEME_CONTROL_ACT, (struct leme_public_text){source, strlen(source)},
+        &limits, &request, &error);
+  if (code == LEME_CONTROL_OK)
+    code = leme_control_run_act(context, request, &affected, &error);
+  if (code != LEME_CONTROL_OK) {
+    const char *message = error.message[0] != '\0'
+                              ? error.message
+                              : leme_control_code_to_string(code);
+    if (error.expr_path[0] != '\0')
+      wlr_log(WLR_ERROR, "leme: act binding failed: %s (%s)", message,
+              error.expr_path);
+    else
+      wlr_log(WLR_ERROR, "leme: act binding failed: %s", message);
+  }
+  leme_control_request_destroy(request);
+  leme_control_context_destroy(context);
+  return code == LEME_CONTROL_OK && affected > 0;
 }

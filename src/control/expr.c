@@ -1,8 +1,6 @@
 #include "control/expr.h"
 
-#include "control/control.h"
 #include "control/validate.h"
-#include "public/schema.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +20,6 @@ struct leme_control_program {
 };
 
 struct compiler {
-  struct leme_control_context *context;
   const struct leme_control_limits *limits;
   enum leme_control_request_op request_op;
   struct leme_control_program *program;
@@ -240,8 +237,10 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
     return set_error(c, LEME_CONTROL_INVALID_REQUEST,
                      "action operator not allowed in pure request");
 
+  const bool root_if = c->request_op == LEME_CONTROL_ACT && is_root &&
+                       op->opcode == LEME_CONTROL_OP_IF;
   if (c->request_op == LEME_CONTROL_ACT) {
-    if (is_root && op->effect != LEME_CONTROL_EFFECT_ACTION)
+    if (is_root && !root_if && op->effect != LEME_CONTROL_EFFECT_ACTION)
       return set_error(c, LEME_CONTROL_INVALID_REQUEST,
                        "act request must have action operator at root");
     if (!is_root && op->effect == LEME_CONTROL_EFFECT_ACTION)
@@ -272,8 +271,8 @@ compile_call(struct compiler *c, const struct leme_public_value *call_val,
     }
 
     uint32_t child_idx = 0;
-    code =
-        compile_node(c, arg_node, scope_for_arg, depth + 1, false, &child_idx);
+    code = compile_node(c, arg_node, scope_for_arg, depth + 1, root_if && i > 0,
+                        &child_idx);
     if (code != LEME_CONTROL_OK) {
       pop_path_arg(c, prev_len);
       return code;
@@ -522,6 +521,10 @@ compile_node(struct compiler *c, const struct leme_public_value *node_val,
   const struct leme_public_value *args =
       leme_public_get(node_val, LEME_PUBLIC_TEXT("args"));
 
+  if (is_root && c->request_op == LEME_CONTROL_ACT && call == NULL)
+    return set_error(c, LEME_CONTROL_INVALID_REQUEST,
+                     "act request must have action operator at root");
+
   if (literal != NULL) {
     if (count != 1)
       return set_error(c, LEME_CONTROL_INVALID_REQUEST,
@@ -548,25 +551,20 @@ compile_node(struct compiler *c, const struct leme_public_value *node_val,
 }
 
 enum leme_control_code
-leme_control_compile(struct leme_control_context *context,
+leme_control_compile(const struct leme_control_limits *limits,
                      const struct leme_control_request *request,
                      struct leme_control_program **out,
                      struct leme_control_error *error) {
   if (out == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *out = NULL;
-  if (context == NULL || request == NULL)
+  if (limits == NULL || request == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
 
   const struct leme_public_value *expr =
       leme_control_request_expression(request);
   if (expr == NULL)
     return LEME_CONTROL_INVALID_REQUEST;
-
-  const struct leme_control_limits *limits =
-      leme_control_context_limits(context);
-  if (limits == NULL)
-    return LEME_CONTROL_INVALID_ARGUMENT;
 
   struct leme_control_program *prog =
       malloc(sizeof(struct leme_control_program));
@@ -582,7 +580,6 @@ leme_control_compile(struct leme_control_context *context,
   prog->request = request;
 
   struct compiler c = {0};
-  c.context = context;
   c.limits = limits;
   c.request_op = leme_control_request_operation(request);
   c.program = prog;

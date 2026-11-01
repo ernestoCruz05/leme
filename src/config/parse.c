@@ -6,6 +6,7 @@
 #include "config/scfg.h"
 #include "config/source_table.h"
 
+#include "control/action.h"
 #include "core/command.h"
 
 #include <ctype.h>
@@ -3886,8 +3887,39 @@ static bool leme_config_parse_command(struct leme_binding *binding,
     return false;
   }
   binding->repeat = skip == 1;
-  return leme_command_parse(&binding->command, entry->params + skip,
-                            entry->params_len - skip, error);
+  if (!leme_command_parse(&binding->command, entry->params + skip,
+                          entry->params_len - skip, error)) {
+    return false;
+  }
+  if (!leme_config_check_command(&binding->command, error)) {
+    leme_command_finish(&binding->command);
+    return false;
+  }
+  return true;
+}
+
+bool leme_config_check_command(const struct leme_command *command,
+                               char **error) {
+  if (command->type != LEME_COMMAND_ACT) {
+    return true;
+  }
+  struct leme_control_error failure = {0};
+  const enum leme_control_code code = leme_control_check_act(
+      (struct leme_public_text){command->text, strlen(command->text)},
+      &failure);
+  if (code == LEME_CONTROL_OK) {
+    return true;
+  }
+  const char *message = failure.message[0] != '\0'
+                            ? failure.message
+                            : leme_control_code_to_string(code);
+  if (failure.has_byte_offset) {
+    leme_config_set_error(error, "act: %s at byte %zu", message,
+                          failure.byte_offset);
+  } else {
+    leme_config_set_error(error, "act: %s", message);
+  }
+  return false;
 }
 
 static struct leme_bind_group *

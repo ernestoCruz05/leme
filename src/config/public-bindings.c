@@ -88,6 +88,8 @@ static const char *command_name(enum leme_command_type type) {
     return "restore_minimized";
   case LEME_COMMAND_SPAWN:
     return "spawn";
+  case LEME_COMMAND_ACT:
+    return "act";
   case LEME_COMMAND_RELOAD_CONFIG:
     return "reload_config";
   case LEME_COMMAND_SET_MODE:
@@ -245,6 +247,7 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
       status = integer_text(b, command->amount, &arguments[count++]);
     break;
   case LEME_COMMAND_SET_MODE:
+  case LEME_COMMAND_ACT:
     status = argument_text(b, command->text, &arguments[count++]);
     break;
   case LEME_COMMAND_SWITCH_VT:

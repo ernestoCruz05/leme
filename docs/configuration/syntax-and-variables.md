@@ -22,6 +22,11 @@ scratchpad "term" { identity foot-term; spawn foot --app-id foot-term }
 `#` starts a comment only when a space, a tab or the end of the line follows
 it, so colours like `#296bb8` need no quotes.
 
+Double quotes take backslash escapes and must close on the same line. Single
+quotes keep everything up to the closing quote as written, newlines and double
+quotes included, which suits [expressions](keybindings.md#expressions). `$`
+still expands inside both kinds of quotes.
+
 ## Variables
 
 A `vars` block names values. `$name` expands in directive names and

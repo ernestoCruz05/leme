@@ -192,7 +192,7 @@ static bool leme_scfg_lex_quoted(struct leme_scfg_lexer *lexer, char quote) {
   while (lexer->index < source->length) {
     char value = source->data[lexer->index];
 
-    if (value == '\n') {
+    if (value == '\n' && quote == '"') {
       break;
     }
     if (value == quote) {

@@ -12,6 +12,36 @@
 yyjson 0.12 or newer is used if installed. Otherwise Meson downloads the pinned
 copy on the first setup.
 
+## Install script
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ernestoCruz05/leme/main/install.sh | bash
+```
+
+The script checks these requirements and lists anything missing by its
+pkg-config name. In a terminal it shows a menu to choose
+[effects](#rounded-corners-and-blur), the source directory (`~/.local/src/leme`
+by default), the install prefix and the version, and writes nothing until you
+pick Install. It builds in `build-release` with `-Dwerror=false`, logs the
+build to `~/.cache/leme-install.log` and installs to `/usr`, asking for sudo
+only for that step. Running it again updates the source and reinstalls. From a
+clone, `./install.sh` builds the checked-out code instead.
+
+On NixOS the script points to the [flake](nixos.md) instead. It also stops
+before building when the prefix is read-only, as `/usr` is on Fedora
+Silverblue; use `--prefix ~/.local` there and start Leme from a TTY.
+
+| Option | Effect |
+| --- | --- |
+| `--effects`, `--no-effects` | answers the effects question |
+| `--dir PATH` | where to clone the source |
+| `--prefix PATH` | where to install, `/usr` by default |
+| `--main` | builds the main branch instead of the latest release |
+| `--yes` | takes the defaults without asking |
+| `--plain` | asks line by line instead of showing the menu |
+
+To uninstall, run `sudo ninja -C ~/.local/src/leme/build-release uninstall`.
+
 ## Build and install
 
 ```sh
@@ -39,7 +69,7 @@ sudo ninja -C build-effects install
 ```
 
 That wlroots needs Meson 1.3, Wayland 1.24.0, wayland-protocols 1.47, libdrm
-2.4.129, xkbcommon 1.8.0 and Pixman 0.43.0 or newer, plus the wlroots backend
+2.4.129, xkbcommon 1.8.0 and Pixman 0.46.0 or newer, plus the wlroots backend
 dependencies. Check Meson's summary that DRM, libinput, GLES2 and XWayland are
 enabled.
 

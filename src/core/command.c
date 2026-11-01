@@ -14,6 +14,7 @@
 #include "shell/sticky.h"
 #include "shell/view.h"
 #include "shell/container.h"
+#include "shell/control.h"
 #include "shell/xwayland.h"
 #include "protocols/input.h"
 #include "protocols/session.h"
@@ -500,6 +501,8 @@ bool leme_command_execute(struct leme_server *server,
     return true;
   case LEME_COMMAND_SPAWN:
     return leme_process_spawn_detached(server, command->argv);
+  case LEME_COMMAND_ACT:
+    return leme_server_control_act(server, command->text);
   case LEME_COMMAND_RELOAD_CONFIG:
     return leme_command_reload(server);
   case LEME_COMMAND_SET_MODE:

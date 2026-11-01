@@ -41,6 +41,9 @@ leme_control_act(struct leme_control_context *context,
                  const struct leme_public_snapshot *snapshot, size_t *affected,
                  struct leme_control_error *error);
 
+enum leme_control_code leme_control_check_act(struct leme_public_text source,
+                                              struct leme_control_error *error);
+
 enum leme_control_code leme_control_refuse(struct leme_control_error *error,
                                            enum leme_control_code code,
                                            const char *message);

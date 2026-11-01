@@ -29,15 +29,17 @@ text-input protocols, color management, HDR, gamma control, or DRM leasing.
 See the [limitations](docs/reference/limitations.md) and the
 [roadmap](ROADMAP.md).
 
-## Build
+## Install
 
 ```sh
-meson setup build --buildtype=release --prefix=/usr
-ninja -C build
+curl -fsSL https://raw.githubusercontent.com/ernestoCruz05/leme/main/install.sh | bash
 ```
 
-The [installation guide](docs/getting-started/installation.md) lists the
-dependencies.
+The script checks the dependencies, asks whether to build with rounded corners
+and blur and where to put the source, then builds and installs to `/usr`. From
+a clone, run `./install.sh`. The
+[installation guide](docs/getting-started/installation.md) lists the
+dependencies and the manual steps.
 
 ## Documentation
 

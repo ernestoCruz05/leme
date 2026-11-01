@@ -30,6 +30,28 @@ their unshifted symbol, so it is `SUPER+SHIFT+1`, not `SUPER+exclam`.
 `grid_*` commands only take the key while the desktop file grid has focus, so
 plain keys like `Delete` or `F2` can be bound to them.
 
+## Expressions
+
+`act` runs an [action expression](../reference/timao.md#expressions) when the
+key is pressed, so one key can do different things depending on the state.
+Write the expression in single quotes, which keep the double quotes inside it
+and can span lines. A variable can hold a part you use more than once:
+
+```scfg
+vars {
+    layout '(get (get (get (session) "focused_output") "active_tag") "layout")'
+}
+
+binds "common" {
+    SUPER+o act '(if (= $layout "desktop")
+                  (command "show_desktop" (list))
+                  (command "toggle_floating" (list)))'
+}
+```
+
+Leme checks the expression when it loads the config, and logs
+`act binding failed` when one fails on a press.
+
 ## Modes
 
 Each `binds` block is a mode, and `mode NAME` switches to it. Only the active

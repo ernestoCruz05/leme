@@ -30,8 +30,10 @@ later request carries:
 `source`. `expr` is a tree of `{"literal": VALUE}`, `{"call": NAME, "args":
 [...]}` and `{"field": [...]}`. `source` is the same expression as text, in
 the [syntax `timao` uses](timao.md#expressions). The roots are `views`, `tags`,
-`outputs`, `inputs`, `session`, `config`, `runtime` and `status`. `act` accepts
-the [commands](commands.md) except `spawn`, `quit` and `switch_vt`.
+`outputs`, `inputs`, `session`, `config`, `runtime` and `status`. An `act`
+expression has an action at its root, or an `if` that chooses between actions.
+`act` accepts the [commands](commands.md) except `spawn`, `quit`,
+`switch_vt` and `act`.
 
 A reply has `type: "reply"`, the request `id`, `ok` and either `value` or
 `error`. An error has `code`, `message` and `phase`, plus `expr_path` when it

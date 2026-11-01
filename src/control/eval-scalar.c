@@ -293,7 +293,14 @@ enum leme_control_code eval_scalar_call(struct evaluator *ev,
                             "if condition must be boolean");
     if (cond)
       return eval_node(ev, args[1], out);
-    return eval_node(ev, args[2], out);
+    if (arg_count > 2)
+      return eval_node(ev, args[2], out);
+    struct leme_public_value *none = NULL;
+    if (leme_public_null(ev->builder, &none) != LEME_PUBLIC_OK)
+      return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
+                            "null allocation failed");
+    *out = none;
+    return LEME_CONTROL_OK;
   }
   case LEME_CONTROL_OP_EQ: {
     const struct leme_public_value *v0 = NULL, *v1 = NULL;

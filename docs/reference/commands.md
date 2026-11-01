@@ -1,7 +1,7 @@
 # Commands
 
 Commands go in [bindings](../configuration/keybindings.md), desktop menus and
-`timao`. `timao` cannot run `spawn`, `quit` or `switch_vt`.
+`timao`. `timao` cannot run `spawn`, `quit`, `switch_vt` or `act`.
 
 `DIR` is `left`, `right`, `up` or `down`. Ids, counts and pixel amounts are
 positive integers unless a row says otherwise.
@@ -104,6 +104,7 @@ can be bound to plain keys.
 | Command | Effect |
 | --- | --- |
 | `spawn PROGRAM [ARG ...]` | starts a program, without a shell |
+| `act EXPRESSION` | runs an [action expression](../configuration/keybindings.md#expressions) |
 | `reload_config` | reloads the config file |
 | `mode NAME` | switches to a [binding mode](../configuration/keybindings.md#modes) |
 | `cycle_keyboard_layout` | next keyboard layout |

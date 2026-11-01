@@ -228,6 +228,37 @@ leme_control_request_create(struct leme_control_document **document,
   return LEME_CONTROL_OK;
 }
 
+enum leme_control_code leme_control_request_create_source(
+    enum leme_control_request_op op, struct leme_public_text source,
+    const struct leme_control_limits *limits, struct leme_control_request **out,
+    struct leme_control_error *error) {
+  if (out == NULL)
+    return LEME_CONTROL_INVALID_ARGUMENT;
+  *out = NULL;
+  if (limits == NULL)
+    return LEME_CONTROL_INVALID_ARGUMENT;
+  struct leme_public_builder *owner = NULL;
+  const struct leme_public_value *expr = NULL;
+  const enum leme_control_code code =
+      leme_control_source_read(source, limits, &owner, &expr, error);
+  if (code != LEME_CONTROL_OK)
+    return code;
+  struct leme_control_request *req = malloc(sizeof(*req));
+  if (req == NULL) {
+    leme_public_builder_destroy(owner);
+    set_error(error, LEME_CONTROL_OUT_OF_MEMORY, "request allocation failed");
+    return LEME_CONTROL_OUT_OF_MEMORY;
+  }
+  *req = (struct leme_control_request){
+      .references = 1,
+      .op = op,
+      .expr = expr,
+      .source_owner = owner,
+  };
+  *out = req;
+  return LEME_CONTROL_OK;
+}
+
 void leme_control_request_ref(struct leme_control_request *request) {
   if (request == NULL)
     return;

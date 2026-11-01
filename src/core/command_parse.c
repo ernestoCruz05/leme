@@ -60,6 +60,7 @@ static const struct leme_command_usage leme_command_usages[] = {
     {"minimize_view", "minimize_view"},
     {"restore_minimized", "restore_minimized"},
     {"spawn", "spawn PROGRAM [ARG ...]"},
+    {"act", "act EXPRESSION"},
     {"reload_config", "reload_config"},
     {"mode", "mode NAME"},
     {"cycle_keyboard_layout", "cycle_keyboard_layout"},
@@ -443,6 +444,12 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
     }
   } else if (strcmp(name, "scratchpad_retrieve") == 0 && arguments == 0) {
     command->type = LEME_COMMAND_SCRATCHPAD_RETRIEVE;
+  } else if (strcmp(name, "act") == 0 && arguments == 1) {
+    command->type = LEME_COMMAND_ACT;
+    command->text = strdup(params[1]);
+    if (command->text == NULL) {
+      goto allocation;
+    }
   } else {
     goto invalid;
   }

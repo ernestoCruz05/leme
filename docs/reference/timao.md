@@ -15,7 +15,7 @@ timao watch '(get (session) "mode")'
 
 | Form | Effect |
 | --- | --- |
-| `timao COMMAND [ARG ...]` | runs a [command](commands.md), except `spawn`, `quit` and `switch_vt` |
+| `timao COMMAND [ARG ...]` | runs a [command](commands.md), except `spawn`, `quit`, `switch_vt` and `act` |
 | `timao get ROOT [FIELD ...]` | prints a value once |
 | `timao watch ROOT [FIELD ...]` | prints a value every time it changes |
 | `timao query EXPRESSION` | evaluates an expression once |
@@ -75,8 +75,18 @@ objects with `(object KEY VALUE ...)`.
 | arithmetic | `+` `-` `*` `/` |
 | logic | `and` `or` `not` `if` |
 
-An `act` expression has one action at its root, and `timao` prints
-`{"affected":N}`, the number of targets it changed:
+`(if COND THEN ELSE)` gives `THEN` or `ELSE`. `ELSE` is optional and defaults
+to `null`.
+
+An `act` expression has one action at its root, or an `if` whose branches are
+actions:
+
+```sh
+timao act '(if (= (get (get (get (session) "focused_output") "active_tag") "layout") "desktop") (command "show_desktop" (list)) (command "toggle_floating" (list)))'
+```
+
+`timao` prints `{"affected":N}`, the number of targets it changed, and
+`{"affected":0}` when an `if` without an else did nothing. The actions:
 
 | Action | Effect |
 | --- | --- |

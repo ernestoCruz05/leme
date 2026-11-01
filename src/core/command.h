@@ -56,6 +56,7 @@ enum leme_command_type {
   LEME_COMMAND_GRID_SELECT_ALL,
   LEME_COMMAND_GRID_CLEAR,
   LEME_COMMAND_GRID_SELECT,
+  LEME_COMMAND_ACT,
 };
 
 struct leme_command {

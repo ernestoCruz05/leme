@@ -1,5 +1,7 @@
 #include "control/action.h"
 #include "control/eval-internal.h"
+#include "control/limits.h"
+#include "control/request.h"
 #include "public/model-internal.h"
 #include "public/value-internal.h"
 
@@ -33,6 +35,22 @@ enum leme_control_code leme_control_fail(struct leme_control_error *error,
                                          enum leme_control_code code,
                                          const char *message) {
   return report(error, code, LEME_CONTROL_EXECUTE, message);
+}
+
+enum leme_control_code
+leme_control_check_act(struct leme_public_text source,
+                       struct leme_control_error *error) {
+  const struct leme_control_limits limits = leme_control_limits_default();
+  struct leme_control_request *request = NULL;
+  enum leme_control_code code = leme_control_request_create_source(
+      LEME_CONTROL_ACT, source, &limits, &request, error);
+  if (code != LEME_CONTROL_OK)
+    return code;
+  struct leme_control_program *program = NULL;
+  code = leme_control_compile(&limits, request, &program, error);
+  leme_control_program_destroy(program);
+  leme_control_request_destroy(request);
+  return code;
 }
 
 static bool targeted(enum leme_control_opcode opcode, bool *single,
@@ -204,6 +222,29 @@ run_targets(const struct leme_control_domain *domain,
   return code;
 }
 
+static enum leme_control_code
+act_choose(struct evaluator *ev, const struct leme_control_node **root) {
+  while (*root != NULL && (*root)->kind == LEME_CONTROL_NODE_CALL &&
+         (*root)->as.call.op != NULL &&
+         (*root)->as.call.op->opcode == LEME_CONTROL_OP_IF) {
+    const uint32_t *args = (*root)->as.call.arg_indices;
+    const struct leme_public_value *value = NULL;
+    const enum leme_control_code code = eval_node(ev, args[0], &value);
+    if (code != LEME_CONTROL_OK)
+      return code;
+    bool chosen = false;
+    if (leme_public_as_bool(value, &chosen) != LEME_PUBLIC_OK)
+      return leme_control_refuse(ev->error, LEME_CONTROL_TYPE_ERROR,
+                                 "if condition must be boolean");
+    if (!chosen && (*root)->as.call.arg_count < 3) {
+      *root = NULL;
+      return LEME_CONTROL_OK;
+    }
+    *root = leme_control_program_node(ev->program, args[chosen ? 1 : 2]);
+  }
+  return LEME_CONTROL_OK;
+}
+
 enum leme_control_code
 leme_control_act(struct leme_control_context *context,
                  const struct leme_control_program *program,
@@ -212,18 +253,6 @@ leme_control_act(struct leme_control_context *context,
   if (context == NULL || program == NULL || affected == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *affected = 0;
-  const struct leme_control_node *root = leme_control_program_node(
-      program, leme_control_program_root_index(program));
-  if (root == NULL || root->kind != LEME_CONTROL_NODE_CALL ||
-      root->as.call.op == NULL ||
-      root->as.call.op->effect != LEME_CONTROL_EFFECT_ACTION)
-    return LEME_CONTROL_INVALID_REQUEST;
-  const enum leme_control_opcode opcode = root->as.call.op->opcode;
-  const size_t argc = root->as.call.arg_count;
-  if (argc > LEME_CONTROL_ACT_ARGS)
-    return leme_control_refuse(error, LEME_CONTROL_INVALID_REQUEST,
-                               "too many action arguments");
-
   const struct leme_control_domain *domain =
       leme_control_context_domain(context);
   if (domain == NULL || domain->run == NULL)
@@ -253,10 +282,32 @@ leme_control_act(struct leme_control_context *context,
       .error = error,
   };
 
+  const struct leme_control_node *root = leme_control_program_node(
+      program, leme_control_program_root_index(program));
+  enum leme_control_code code = act_choose(&ev, &root);
+  if (code != LEME_CONTROL_OK) {
+    if (error != NULL)
+      error->phase = LEME_CONTROL_PREFLIGHT;
+    goto done;
+  }
+  if (root == NULL)
+    goto done;
+  if (root->kind != LEME_CONTROL_NODE_CALL || root->as.call.op == NULL ||
+      root->as.call.op->effect != LEME_CONTROL_EFFECT_ACTION) {
+    code = LEME_CONTROL_INVALID_REQUEST;
+    goto done;
+  }
+  const enum leme_control_opcode opcode = root->as.call.op->opcode;
+  const size_t argc = root->as.call.arg_count;
+  if (argc > LEME_CONTROL_ACT_ARGS) {
+    code = leme_control_refuse(error, LEME_CONTROL_INVALID_REQUEST,
+                               "too many action arguments");
+    goto done;
+  }
+
   const struct leme_public_value *values[LEME_CONTROL_ACT_ARGS] = {0};
   const struct leme_public_value *owned[LEME_CONTROL_ACT_ARGS] = {0};
   size_t owned_count = 0;
-  enum leme_control_code code = LEME_CONTROL_OK;
   for (size_t i = 0; i < argc; ++i) {
     code = eval_node(&ev, root->as.call.arg_indices[i], &values[i]);
     if (code != LEME_CONTROL_OK) {
