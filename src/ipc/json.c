@@ -3,10 +3,8 @@
 #endif
 
 #include "ipc/json.h"
-#include "public/budget.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <float.h>
 #include <inttypes.h>
 #include <locale.h>
@@ -25,12 +23,6 @@ static void leme_json_fail(struct leme_json *json, enum leme_json_error error) {
 bool leme_json_reserve(struct leme_json *json, size_t extra) {
   if (json->failed)
     return false;
-  if (json->charge != NULL) {
-    if (!json->charge(json->meter, 1)) {
-      leme_json_fail(json, LEME_JSON_ERROR_LIMIT);
-      return false;
-    }
-  }
   if (json->limit == SIZE_MAX || json->length > json->limit ||
       extra > json->limit - json->length) {
     leme_json_fail(json, LEME_JSON_ERROR_LIMIT);
@@ -49,36 +41,6 @@ bool leme_json_reserve(struct leme_json *json, size_t extra) {
     capacity = maximum;
   while (capacity < needed) {
     capacity = capacity > maximum / 2 ? maximum : capacity * 2;
-  }
-  if (json->account != NULL) {
-    if (capacity > json->reserved) {
-      const enum leme_public_status status =
-          leme_public_budget_reserve(json->account, capacity);
-      if (status == LEME_PUBLIC_LIMIT) {
-        leme_json_fail(json, LEME_JSON_ERROR_LIMIT);
-        return false;
-      }
-      if (status != LEME_PUBLIC_OK) {
-        leme_json_fail(json, LEME_JSON_ERROR_OOM);
-        return false;
-      }
-      char *data = malloc(capacity);
-      if (data == NULL) {
-        leme_public_budget_release(json->account, capacity);
-        leme_json_fail(json, LEME_JSON_ERROR_OOM);
-        return false;
-      }
-      if (json->length != 0) {
-        memcpy(data, json->data, json->length);
-      }
-      data[json->length] = '\0';
-      free(json->data);
-      leme_public_budget_release(json->account, json->reserved);
-      json->reserved = capacity;
-      json->data = data;
-      json->capacity = capacity;
-      return true;
-    }
   }
   char *data = realloc(json->data, capacity);
   if (data == NULL) {
@@ -110,24 +72,6 @@ void leme_json_init_limit(struct leme_json *json, size_t limit) {
     leme_json_fail(json, LEME_JSON_ERROR_LIMIT);
 }
 
-void leme_json_init_budget(struct leme_json *json,
-                           struct leme_public_budget *account, size_t limit) {
-  *json = (struct leme_json){
-      .account = account,
-      .limit = limit,
-  };
-  if (limit == SIZE_MAX)
-    leme_json_fail(json, LEME_JSON_ERROR_LIMIT);
-}
-
-void leme_json_set_meter(struct leme_json *json, void *meter,
-                         bool (*charge)(void *meter, size_t units)) {
-  if (json != NULL) {
-    json->meter = meter;
-    json->charge = charge;
-  }
-}
-
 void leme_json_init(struct leme_json *json) {
   leme_json_init_limit(json, SIZE_MAX - 1);
 }
@@ -149,9 +93,6 @@ void leme_json_init_fixed(struct leme_json *json, char *buffer,
 void leme_json_finish(struct leme_json *json) {
   if (!json->fixed && json->data != NULL) {
     free(json->data);
-    if (json->account != NULL && json->reserved > 0) {
-      leme_public_budget_release(json->account, json->reserved);
-    }
   }
   leme_json_init(json);
 }

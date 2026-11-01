@@ -1,10 +1,8 @@
 
 #include "control/reply.h"
 #include "control/error.h"
-#include "control/memory.h"
 #include "ipc/frame.h"
 #include "ipc/json.h"
-#include "public/budget.h"
 #include "public/json.h"
 #include "public/value.h"
 
@@ -53,38 +51,19 @@ const char *leme_control_code_to_string(enum leme_control_code code) {
   return "error";
 }
 
-static enum leme_public_status meter_step_cb(void *context, size_t units) {
-  struct leme_control_meter *meter = context;
-  if (meter == NULL) {
-    return LEME_PUBLIC_OK;
-  }
-  return leme_control_charge(meter, units) == LEME_CONTROL_OK
-             ? LEME_PUBLIC_OK
-             : LEME_PUBLIC_LIMIT;
-}
-
-static bool json_charge_cb(void *context, size_t units) {
-  struct leme_control_meter *meter = context;
-  if (meter == NULL) {
-    return true;
-  }
-  return leme_control_charge(meter, units) == LEME_CONTROL_OK;
-}
-
-enum leme_control_code leme_control_reply_create_value_metered(
-    struct leme_public_budget *account, size_t max_response_bytes,
-    const char *id, size_t id_len, const char *instance, size_t instance_len,
-    const char *revision, size_t revision_len,
-    const struct leme_public_value *value, struct leme_control_meter *meter,
-    struct leme_control_frame **out_frame) {
+enum leme_control_code
+leme_control_reply_create_value(size_t max_response_bytes, const char *id,
+                                size_t id_len, const char *instance,
+                                size_t instance_len,
+                                const struct leme_public_value *value,
+                                struct leme_control_frame **out_frame) {
   if (out_frame == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
   *out_frame = NULL;
 
   struct leme_json json;
-  leme_json_init_budget(&json, account, max_response_bytes);
-  leme_json_set_meter(&json, meter, meter != NULL ? json_charge_cb : NULL);
+  leme_json_init_limit(&json, max_response_bytes);
   leme_json_object_begin(&json);
 
   leme_json_key(&json, "type");
@@ -107,27 +86,10 @@ enum leme_control_code leme_control_reply_create_value_metered(
     leme_json_null(&json);
   }
 
-  leme_json_key(&json, "revision");
-  if (revision != NULL) {
-    leme_json_string_n(&json, revision, revision_len);
-  } else {
-    leme_json_null(&json);
-  }
-
   leme_json_key(&json, "value");
   if (value != NULL) {
-    if (meter != NULL) {
-      struct leme_public_work work = {
-          .context = meter,
-          .step = meter_step_cb,
-      };
-      if (leme_public_write_json_work(value, &json, &work) != LEME_PUBLIC_OK) {
-        json.failed = true;
-      }
-    } else {
-      if (leme_public_write_json(value, &json) != LEME_PUBLIC_OK) {
-        json.failed = true;
-      }
+    if (leme_public_write_json(value, &json) != LEME_PUBLIC_OK) {
+      json.failed = true;
     }
   } else {
     leme_json_null(&json);
@@ -146,20 +108,9 @@ enum leme_control_code leme_control_reply_create_value_metered(
   }
 
   enum leme_control_code code =
-      leme_control_frame_create(account, json.data, json.length, out_frame);
+      leme_control_frame_create(json.data, json.length, out_frame);
   leme_json_finish(&json);
   return code;
-}
-
-enum leme_control_code leme_control_reply_create_value(
-    struct leme_public_budget *account, size_t max_response_bytes,
-    const char *id, size_t id_len, const char *instance, size_t instance_len,
-    const char *revision, size_t revision_len,
-    const struct leme_public_value *value,
-    struct leme_control_frame **out_frame) {
-  return leme_control_reply_create_value_metered(
-      account, max_response_bytes, id, id_len, instance, instance_len, revision,
-      revision_len, value, NULL, out_frame);
 }
 
 static const char *phase_to_string(enum leme_control_phase phase) {
@@ -179,8 +130,7 @@ static const char *phase_to_string(enum leme_control_phase phase) {
 }
 
 bool leme_control_error_write_json(struct leme_json *json,
-                                   const struct leme_control_error *error,
-                                   struct leme_control_meter *meter) {
+                                   const struct leme_control_error *error) {
   if (json == NULL)
     return false;
   const enum leme_control_code code =
@@ -208,39 +158,34 @@ bool leme_control_error_write_json(struct leme_json *json,
   }
   if (error != NULL && error->details != NULL) {
     leme_json_key(json, "details");
-    const struct leme_public_work work = {.context = meter,
-                                          .step = meter_step_cb};
-    if (leme_public_write_json_work(error->details, json,
-                                    meter != NULL ? &work : NULL) !=
-        LEME_PUBLIC_OK)
+    if (leme_public_write_json(error->details, json) != LEME_PUBLIC_OK)
       json->failed = true;
-  } else if (error != NULL &&
-             (error->phase == LEME_CONTROL_PREFLIGHT ||
-              error->phase == LEME_CONTROL_EXECUTE || error->effects_applied)) {
+  } else if (error != NULL && error->has_affected) {
     leme_json_key(json, "details");
     leme_json_object_begin(json);
-    leme_json_key(json, "effects_applied");
-    leme_json_bool(json, error->effects_applied);
+    leme_json_key(json, "affected");
+    leme_json_integer(json, error->affected > INT64_MAX
+                                ? INT64_MAX
+                                : (int64_t)error->affected);
     leme_json_object_end(json);
   }
   leme_json_object_end(json);
   return !json->failed;
 }
 
-enum leme_control_code leme_control_reply_create_error_metered(
-    struct leme_public_budget *account, size_t max_response_bytes,
-    const char *id, size_t id_len, const char *instance, size_t instance_len,
-    const char *revision, size_t revision_len,
-    const struct leme_control_error *error, struct leme_control_meter *meter,
-    struct leme_control_frame **out_frame) {
+enum leme_control_code
+leme_control_reply_create_error(size_t max_response_bytes, const char *id,
+                                size_t id_len, const char *instance,
+                                size_t instance_len,
+                                const struct leme_control_error *error,
+                                struct leme_control_frame **out_frame) {
   if (out_frame == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
   *out_frame = NULL;
 
   struct leme_json json;
-  leme_json_init_budget(&json, account, max_response_bytes);
-  leme_json_set_meter(&json, meter, meter != NULL ? json_charge_cb : NULL);
+  leme_json_init_limit(&json, max_response_bytes);
   leme_json_object_begin(&json);
 
   leme_json_key(&json, "type");
@@ -263,15 +208,8 @@ enum leme_control_code leme_control_reply_create_error_metered(
     leme_json_null(&json);
   }
 
-  leme_json_key(&json, "revision");
-  if (revision != NULL) {
-    leme_json_string_n(&json, revision, revision_len);
-  } else {
-    leme_json_null(&json);
-  }
-
   leme_json_key(&json, "error");
-  if (!leme_control_error_write_json(&json, error, meter))
+  if (!leme_control_error_write_json(&json, error))
     json.failed = true;
   leme_json_object_end(&json);
   leme_json_append(&json, "\n", 1);
@@ -286,18 +224,7 @@ enum leme_control_code leme_control_reply_create_error_metered(
   }
 
   enum leme_control_code ret =
-      leme_control_frame_create(account, json.data, json.length, out_frame);
+      leme_control_frame_create(json.data, json.length, out_frame);
   leme_json_finish(&json);
   return ret;
-}
-
-enum leme_control_code leme_control_reply_create_error(
-    struct leme_public_budget *account, size_t max_response_bytes,
-    const char *id, size_t id_len, const char *instance, size_t instance_len,
-    const char *revision, size_t revision_len,
-    const struct leme_control_error *error,
-    struct leme_control_frame **out_frame) {
-  return leme_control_reply_create_error_metered(
-      account, max_response_bytes, id, id_len, instance, instance_len, revision,
-      revision_len, error, NULL, out_frame);
 }

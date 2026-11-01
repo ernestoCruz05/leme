@@ -72,14 +72,4 @@ struct leme_public_root_descriptor {
   const struct leme_public_schema *type;
   enum leme_public_access access;
 };
-struct leme_public_registry {
-  const struct leme_public_schema *types;
-  size_t type_count;
-  const struct leme_public_root_descriptor *roots;
-  size_t root_count;
-};
-
-enum leme_public_status
-leme_public_registry_validate(const struct leme_public_registry *registry);
-
 #endif

@@ -2,7 +2,6 @@
 #define LEME_IPC_FRAME_H
 
 #include "control/error.h"
-#include "public/budget.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -12,12 +11,11 @@ struct leme_control_frame;
 struct leme_control_framer;
 
 enum leme_control_code
-leme_control_frame_create(struct leme_public_budget *account, const char *bytes,
-                          size_t length, struct leme_control_frame **out);
+leme_control_frame_create(const char *bytes, size_t length,
+                          struct leme_control_frame **out);
 
 enum leme_control_code
-leme_control_frame_create_capacity(struct leme_public_budget *account,
-                                   size_t capacity,
+leme_control_frame_create_capacity(size_t capacity,
                                    struct leme_control_frame **out);
 
 void leme_control_frame_destroy(struct leme_control_frame *frame);
@@ -66,8 +64,7 @@ const char *leme_control_frame_id(const struct leme_control_frame *frame,
                                   size_t *out_len);
 
 enum leme_control_code
-leme_control_framer_create(struct leme_public_budget *account,
-                           size_t max_record_bytes,
+leme_control_framer_create(size_t max_record_bytes,
                            struct leme_control_framer **out);
 
 void leme_control_framer_destroy(struct leme_control_framer *framer);

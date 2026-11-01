@@ -19,15 +19,14 @@ struct leme_control_watch_event {
   uint64_t subscription;
   uint64_t sequence;
   struct leme_public_text instance;
-  struct leme_public_text revision;
   const struct leme_public_value *value;
   const struct leme_control_error *error;
   bool sensitive;
 };
 
-enum leme_control_code leme_control_watch_event_create(
-    struct leme_public_budget *account, size_t maximum,
-    const struct leme_control_watch_event *event,
-    struct leme_control_meter *meter, struct leme_control_frame **out);
+enum leme_control_code
+leme_control_watch_event_create(size_t maximum,
+                                const struct leme_control_watch_event *event,
+                                struct leme_control_frame **out);
 
 #endif

@@ -26,9 +26,7 @@ PUBLIC_SCHEMA(CONFIG, "config", false,
   PUBLIC_FIELD("overrides", OVERRIDES, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Ordered active overrides; empty in this read-only stage"),
   PUBLIC_FIELD("diagnostics", DIAGNOSTICS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
-      "Structured diagnostics without raw source excerpts"),
-  PUBLIC_FIELD("settings_schema", SETTING_DESCRIPTORS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
-      "Authoritative setting paths and application behavior")
+      "Structured diagnostics without raw source excerpts")
 )
 PUBLIC_SCHEMA(DESKTOP_CONFIG, "desktop", false,
   PUBLIC_FIELD("minimized_strip", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",

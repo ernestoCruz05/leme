@@ -1,5 +1,4 @@
 #include "public/value-internal.h"
-#include "public/budget.h"
 
 #include <stdalign.h>
 #include <stdlib.h>
@@ -48,21 +47,6 @@ enum leme_public_status
 leme_public_builder_create(size_t maximum_bytes,
                            const struct leme_public_allocator *allocator,
                            struct leme_public_builder **out) {
-  return leme_public_builder_with_budget(maximum_bytes, NULL, allocator, out);
-}
-
-enum leme_public_status
-leme_public_builder_create_budget(struct leme_public_budget *budget,
-                                  size_t maximum,
-                                  struct leme_public_builder **out) {
-  return leme_public_builder_with_budget(maximum, budget, NULL, out);
-}
-
-enum leme_public_status
-leme_public_builder_with_budget(size_t maximum_bytes,
-                                struct leme_public_budget *budget,
-                                const struct leme_public_allocator *allocator,
-                                struct leme_public_builder **out) {
   if (out == NULL)
     return LEME_PUBLIC_INVALID;
   *out = NULL;
@@ -72,23 +56,12 @@ leme_public_builder_with_budget(size_t maximum_bytes,
     return LEME_PUBLIC_INVALID;
   if (maximum_bytes < sizeof(struct leme_public_builder))
     return LEME_PUBLIC_LIMIT;
-  if (budget != NULL) {
-    const enum leme_public_status status =
-        leme_public_budget_reserve(budget, sizeof(struct leme_public_builder));
-    if (status != LEME_PUBLIC_OK)
-      return status;
-  }
   struct leme_public_builder *b =
       selected.allocate(selected.context, sizeof(*b));
-  if (b == NULL) {
-    leme_public_budget_release(budget, sizeof(*b));
+  if (b == NULL)
     return LEME_PUBLIC_OOM;
-  }
-  leme_public_budget_ref(budget);
-  *b = (struct leme_public_builder){.maximum = maximum_bytes,
-                                    .bytes = sizeof(*b),
-                                    .allocator = selected,
-                                    .budget = budget};
+  *b = (struct leme_public_builder){
+      .maximum = maximum_bytes, .bytes = sizeof(*b), .allocator = selected};
   *out = b;
   return LEME_PUBLIC_OK;
 }
@@ -103,11 +76,7 @@ void leme_public_builder_destroy(struct leme_public_builder *b) {
     chunk = next;
   }
   const struct leme_public_allocator allocator = b->allocator;
-  struct leme_public_budget *budget = b->budget;
-  const size_t bytes = b->bytes;
   allocator.release(allocator.context, b);
-  leme_public_budget_release(budget, bytes);
-  leme_public_budget_unref(budget);
 }
 
 size_t leme_public_builder_bytes(const struct leme_public_builder *b) {
@@ -150,17 +119,8 @@ void *leme_public_allocate(struct leme_public_builder *b, size_t count,
     if (capacity > available - sizeof(*chunk))
       capacity = available - sizeof(*chunk);
     const size_t allocation = sizeof(*chunk) + capacity;
-    if (b->budget != NULL) {
-      const enum leme_public_status status =
-          leme_public_budget_reserve(b->budget, allocation);
-      if (status != LEME_PUBLIC_OK) {
-        leme_public_fail(b, status);
-        return NULL;
-      }
-    }
     chunk = b->allocator.allocate(b->allocator.context, allocation);
     if (chunk == NULL) {
-      leme_public_budget_release(b->budget, allocation);
       leme_public_fail(b, LEME_PUBLIC_OOM);
       return NULL;
     }

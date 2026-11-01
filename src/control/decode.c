@@ -1,39 +1,15 @@
 #include "control/decode.h"
-#include "control/memory.h"
 #include "control/number.h"
 #include "public/value-internal.h"
 #include "yyjson.h"
 
-#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct leme_control_document {
   struct leme_public_builder *builder;
   const struct leme_public_value *root;
 };
-
-static void *yy_malloc(void *ctx, size_t size) {
-  struct leme_public_budget *account = ctx;
-  return leme_control_alloc(account, size);
-}
-
-static void *yy_realloc(void *ctx, void *ptr, size_t old_size, size_t size) {
-  (void)ctx;
-  (void)old_size;
-  return leme_control_realloc(ptr, size);
-}
-
-static void yy_free(void *ctx, void *ptr) {
-  (void)ctx;
-  leme_control_free(ptr);
-}
-
-static enum leme_public_status number_work(void *context, size_t units) {
-  struct leme_control_meter *meter = context;
-  return meter == NULL || leme_control_charge(meter, units) == LEME_CONTROL_OK
-             ? LEME_PUBLIC_OK
-             : LEME_PUBLIC_LIMIT;
-}
 
 static bool prescan_json(const char *data, size_t len, size_t max_depth) {
   size_t depth = 0;
@@ -81,11 +57,9 @@ static enum leme_control_code convert_node(struct leme_public_builder *b,
                                            yyjson_val *val,
                                            struct leme_public_value **out,
                                            struct leme_control_meter *meter) {
-  if (meter != NULL) {
-    const enum leme_control_code charge_code = leme_control_charge(meter, 1);
-    if (charge_code != LEME_CONTROL_OK)
-      return charge_code;
-  }
+  const enum leme_control_code charge_code = leme_control_charge(meter, 1);
+  if (charge_code != LEME_CONTROL_OK)
+    return charge_code;
 
   if (yyjson_is_null(val)) {
     if (leme_public_null(b, out) != LEME_PUBLIC_OK)
@@ -103,12 +77,8 @@ static enum leme_control_code convert_node(struct leme_public_builder *b,
     const char *raw = yyjson_get_raw(val);
     const size_t len = yyjson_get_len(val);
     double num = 0.0;
-    const struct leme_public_allocator allocator = {
-        .context = b->budget, .allocate = yy_malloc, .release = yy_free};
-    const struct leme_public_work work = {.context = meter,
-                                          .step = number_work};
     const enum leme_public_status parsed = leme_control_parse_number_checked(
-        (struct leme_public_text){raw, len}, &allocator, &work, &num);
+        (struct leme_public_text){raw, len}, &num);
     if (parsed != LEME_PUBLIC_OK)
       return parsed == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
              : parsed == LEME_PUBLIC_OOM ? LEME_CONTROL_OUT_OF_MEMORY
@@ -190,13 +160,12 @@ static enum leme_control_code convert_node(struct leme_public_builder *b,
 }
 
 enum leme_control_code leme_control_decode(
-    struct leme_public_budget *account, struct leme_public_text bytes,
-    const struct leme_control_limits *limits, struct leme_control_meter *meter,
+    struct leme_public_text bytes, const struct leme_control_limits *limits,
     struct leme_control_document **out, struct leme_control_error *error) {
   if (out == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *out = NULL;
-  if (account == NULL || limits == NULL)
+  if (limits == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
 
   if (bytes.length == SIZE_MAX || bytes.length > limits->request_bytes) {
@@ -209,10 +178,11 @@ enum leme_control_code leme_control_decode(
     return LEME_CONTROL_INVALID_JSON;
   }
 
-  if (meter != NULL) {
+  struct leme_control_meter meter = {.remaining = limits->work_units};
+  {
     const size_t units = bytes.length / 128 + (bytes.length % 128 != 0);
     const enum leme_control_code charge_code =
-        leme_control_charge(meter, units > 0 ? units : 1);
+        leme_control_charge(&meter, units > 0 ? units : 1);
     if (charge_code != LEME_CONTROL_OK) {
       if (error != NULL) {
         *error = (struct leme_control_error){
@@ -234,11 +204,9 @@ enum leme_control_code leme_control_decode(
     return LEME_CONTROL_INVALID_JSON;
   }
 
-  char *copy = leme_control_alloc(account, bytes.length + 1);
+  char *copy = malloc(bytes.length + 1);
   if (copy == NULL) {
-    const enum leme_control_code code = errno == ENOSPC
-                                            ? LEME_CONTROL_RESOURCE_LIMIT
-                                            : LEME_CONTROL_OUT_OF_MEMORY;
+    const enum leme_control_code code = LEME_CONTROL_OUT_OF_MEMORY;
     if (error != NULL) {
       *error = (struct leme_control_error){
           .code = code,
@@ -250,26 +218,17 @@ enum leme_control_code leme_control_decode(
   memcpy(copy, bytes.data, bytes.length);
   copy[bytes.length] = '\0';
 
-  const yyjson_alc alc = {
-      .malloc = yy_malloc,
-      .realloc = yy_realloc,
-      .free = yy_free,
-      .ctx = account,
-  };
-
   yyjson_read_err err = {0};
   yyjson_doc *doc = yyjson_read_opts(copy, bytes.length,
-                                     YYJSON_READ_NUMBER_AS_RAW, &alc, &err);
-  const int parse_errno = errno;
-  leme_control_free(copy);
+                                     YYJSON_READ_NUMBER_AS_RAW, NULL, &err);
+  free(copy);
 
   if (doc == NULL) {
     const bool allocation_failed =
         err.code == YYJSON_READ_ERROR_MEMORY_ALLOCATION;
-    const enum leme_control_code code =
-        allocation_failed ? (parse_errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
-                                                   : LEME_CONTROL_OUT_OF_MEMORY)
-                          : LEME_CONTROL_INVALID_JSON;
+    const enum leme_control_code code = allocation_failed
+                                            ? LEME_CONTROL_OUT_OF_MEMORY
+                                            : LEME_CONTROL_INVALID_JSON;
     if (error != NULL) {
       *error = (struct leme_control_error){
           .code = code,
@@ -284,7 +243,7 @@ enum leme_control_code leme_control_decode(
 
   struct leme_public_builder *b = NULL;
   const enum leme_public_status b_status =
-      leme_public_builder_create_budget(account, limits->retained_bytes, &b);
+      leme_public_builder_create(limits->retained_bytes, NULL, &b);
   if (b_status != LEME_PUBLIC_OK) {
     yyjson_doc_free(doc);
     if (error != NULL) {
@@ -298,13 +257,10 @@ enum leme_control_code leme_control_decode(
                                          : LEME_CONTROL_OUT_OF_MEMORY;
   }
 
-  const struct leme_public_work work = {.context = meter, .step = number_work};
-  if (meter != NULL)
-    leme_public_builder_set_work(b, &work);
   yyjson_val *root_val = yyjson_doc_get_root(doc);
   struct leme_public_value *converted_root = NULL;
   enum leme_control_code conv_code =
-      convert_node(b, root_val, &converted_root, meter);
+      convert_node(b, root_val, &converted_root, &meter);
   yyjson_doc_free(doc);
 
   if (conv_code != LEME_CONTROL_OK) {
@@ -339,14 +295,10 @@ enum leme_control_code leme_control_decode(
     }
     return code;
   }
-  leme_public_builder_set_work(b, NULL);
 
-  struct leme_control_document *doc_out =
-      leme_control_alloc(account, sizeof(*doc_out));
+  struct leme_control_document *doc_out = malloc(sizeof(*doc_out));
   if (doc_out == NULL) {
-    const enum leme_control_code code = errno == ENOSPC
-                                            ? LEME_CONTROL_RESOURCE_LIMIT
-                                            : LEME_CONTROL_OUT_OF_MEMORY;
+    const enum leme_control_code code = LEME_CONTROL_OUT_OF_MEMORY;
     leme_public_builder_destroy(b);
     if (error != NULL) {
       *error = (struct leme_control_error){
@@ -370,29 +322,10 @@ leme_control_document_value(const struct leme_control_document *document) {
   return document == NULL ? NULL : document->root;
 }
 
-struct leme_public_budget *
-leme_control_document_account(const struct leme_control_document *document) {
-  return document != NULL ? document->builder->budget : NULL;
-}
-
-size_t
-leme_control_document_bytes(const struct leme_control_document *document) {
-  if (document == NULL)
-    return 0;
-  const size_t arena = leme_public_builder_bytes(document->builder);
-  const size_t metadata = leme_control_allocation_bytes(document);
-  return arena > SIZE_MAX - metadata ? SIZE_MAX : arena + metadata;
-}
-
-size_t leme_control_document_overhead(void) {
-  return sizeof(struct leme_control_document) +
-         leme_control_allocation_overhead();
-}
-
 void leme_control_document_destroy(struct leme_control_document *document) {
   if (document == NULL)
     return;
   struct leme_public_builder *b = document->builder;
-  leme_control_free(document);
+  free(document);
   leme_public_builder_destroy(b);
 }

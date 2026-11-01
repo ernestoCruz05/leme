@@ -41,7 +41,8 @@ struct leme_control_error {
   char expr_path[1024];
   size_t byte_offset;
   bool has_byte_offset;
-  bool effects_applied;
+  size_t affected;
+  bool has_affected;
   bool sensitive;
   const struct leme_public_value *details;
 };

@@ -3,7 +3,6 @@
 
 #include "control/error.h"
 #include "ipc/frame.h"
-#include "public/budget.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -18,7 +17,6 @@ typedef void (*leme_control_queue_completion_fn)(
     struct leme_control_frame *frame, void *user_data);
 
 struct leme_control_queue {
-  struct leme_public_budget *account;
   size_t max_bytes;
   size_t queued_bytes;
   size_t reserved_bytes;
@@ -37,8 +35,7 @@ enum leme_control_flush_status {
 };
 
 enum leme_control_code
-leme_control_queue_create(struct leme_public_budget *account, size_t max_bytes,
-                          struct leme_control_queue **out);
+leme_control_queue_create(size_t max_bytes, struct leme_control_queue **out);
 
 void leme_control_queue_destroy(struct leme_control_queue *queue);
 
@@ -99,7 +96,6 @@ struct leme_control_peer {
   struct wl_event_loop *loop;
   struct wl_event_source *source;
   int fd;
-  struct leme_public_budget *account;
   struct leme_control_limits limits;
   struct leme_control_framer *framer;
   struct leme_control_queue *queue;

@@ -423,34 +423,17 @@ static enum leme_public_status check_node(struct leme_public_builder *b,
     if (value->data.object.used != value->data.object.count)
       return LEME_PUBLIC_INVALID;
     if (value->data.object.count > 1) {
-      if (b->work.step != NULL) {
-        enum leme_public_status step_st =
-            b->work.step(b->work.context, value->data.object.count);
-        if (step_st != LEME_PUBLIC_OK)
-          return step_st;
-      }
       qsort(value->data.object.members, value->data.object.count,
             sizeof(struct leme_public_member), compare_members);
     }
   }
   mark->visiting = true;
-  if (b->work.step != NULL) {
-    enum leme_public_status step_st = b->work.step(b->work.context, 1);
-    if (step_st != LEME_PUBLIC_OK)
-      return step_st;
-  }
   size_t work = 1;
   size_t height = 1;
   if (value->kind == LEME_PUBLIC_STRING) {
     if (value->data.string.length > b->maximum - work)
       return LEME_PUBLIC_LIMIT;
     work += value->data.string.length;
-    if (b->work.step != NULL && value->data.string.length > 0) {
-      enum leme_public_status step_st =
-          b->work.step(b->work.context, value->data.string.length);
-      if (step_st != LEME_PUBLIC_OK)
-        return step_st;
-    }
   }
   const size_t count =
       value->kind == LEME_PUBLIC_ARRAY
@@ -483,13 +466,6 @@ static enum leme_public_status check_node(struct leme_public_builder *b,
   return LEME_PUBLIC_OK;
 }
 
-void leme_public_builder_set_work(struct leme_public_builder *builder,
-                                  const struct leme_public_work *work) {
-  if (builder == NULL)
-    return;
-  builder->work = (work != NULL) ? *work : (struct leme_public_work){0};
-}
-
 enum leme_public_status
 leme_public_builder_seal(struct leme_public_builder *b,
                          const struct leme_public_value *const *roots,
@@ -518,137 +494,57 @@ leme_public_builder_seal(struct leme_public_builder *b,
   return LEME_PUBLIC_OK;
 }
 
-static enum leme_public_status
-text_equal_checked(struct leme_public_text left, struct leme_public_text right,
-                   const struct leme_public_work *work, bool *out) {
-  *out = false;
-  if (left.length != right.length)
-    return LEME_PUBLIC_OK;
-  for (size_t offset = 0; offset < left.length;) {
-    const size_t remaining = left.length - offset;
-    const size_t count = remaining < 128 ? remaining : 128;
-    if (work != NULL && work->step != NULL) {
-      const enum leme_public_status status = work->step(work->context, count);
-      if (status != LEME_PUBLIC_OK)
-        return status;
-    }
-    if (memcmp(left.data + offset, right.data + offset, count) != 0)
-      return LEME_PUBLIC_OK;
-    offset += count;
-  }
-  *out = true;
-  return LEME_PUBLIC_OK;
+static bool text_equal(struct leme_public_text left,
+                       struct leme_public_text right) {
+  return left.length == right.length &&
+         (left.length == 0 || memcmp(left.data, right.data, left.length) == 0);
 }
 
-static enum leme_public_status values_equal_checked(
-    const struct leme_public_value *left, const struct leme_public_value *right,
-    const struct leme_public_work *work, size_t depth, bool *out) {
-  if (depth > LEME_PUBLIC_MAX_DEPTH)
-    return LEME_PUBLIC_LIMIT;
-  if (work != NULL && work->step != NULL) {
-    enum leme_public_status st = work->step(work->context, 1);
-    if (st != LEME_PUBLIC_OK)
-      return st;
-  }
-  if (left == NULL || right == NULL || left->kind != right->kind) {
-    *out = false;
-    return LEME_PUBLIC_OK;
-  }
+static bool values_equal(const struct leme_public_value *left,
+                         const struct leme_public_value *right, size_t depth) {
+  if (depth > LEME_PUBLIC_MAX_DEPTH || left == NULL || right == NULL ||
+      left->kind != right->kind)
+    return false;
   if ((left->kind == LEME_PUBLIC_ARRAY || left->kind == LEME_PUBLIC_OBJECT) &&
-      (!left->owner->sealed || !right->owner->sealed)) {
-    *out = false;
-    return LEME_PUBLIC_OK;
-  }
-  if (left == right) {
-    *out = true;
-    return LEME_PUBLIC_OK;
-  }
+      (!left->owner->sealed || !right->owner->sealed))
+    return false;
+  if (left == right)
+    return true;
   switch (left->kind) {
   case LEME_PUBLIC_NULL:
-    *out = true;
-    return LEME_PUBLIC_OK;
+    return true;
   case LEME_PUBLIC_BOOLEAN:
-    *out = (left->data.boolean == right->data.boolean);
-    return LEME_PUBLIC_OK;
+    return left->data.boolean == right->data.boolean;
   case LEME_PUBLIC_NUMBER:
-    *out = (left->data.number == right->data.number);
-    return LEME_PUBLIC_OK;
+    return left->data.number == right->data.number;
   case LEME_PUBLIC_STRING:
-    return text_equal_checked(left->data.string, right->data.string, work, out);
-  case LEME_PUBLIC_ARRAY: {
-    if (left->data.array.count != right->data.array.count) {
-      *out = false;
-      return LEME_PUBLIC_OK;
-    }
-    for (size_t i = 0; i < left->data.array.count; ++i) {
-      bool item_equal = false;
-      enum leme_public_status st = values_equal_checked(
-          left->data.array.items[i], right->data.array.items[i], work,
-          depth + 1, &item_equal);
-      if (st != LEME_PUBLIC_OK)
-        return st;
-      if (!item_equal) {
-        *out = false;
-        return LEME_PUBLIC_OK;
-      }
-    }
-    *out = true;
-    return LEME_PUBLIC_OK;
-  }
-  case LEME_PUBLIC_OBJECT: {
-    if (left->data.object.count != right->data.object.count) {
-      *out = false;
-      return LEME_PUBLIC_OK;
-    }
+    return text_equal(left->data.string, right->data.string);
+  case LEME_PUBLIC_ARRAY:
+    if (left->data.array.count != right->data.array.count)
+      return false;
+    for (size_t i = 0; i < left->data.array.count; ++i)
+      if (!values_equal(left->data.array.items[i], right->data.array.items[i],
+                        depth + 1))
+        return false;
+    return true;
+  case LEME_PUBLIC_OBJECT:
+    if (left->data.object.count != right->data.object.count)
+      return false;
     for (size_t i = 0; i < left->data.object.count; ++i) {
       const struct leme_public_member *a = &left->data.object.members[i];
       const struct leme_public_member *b = &right->data.object.members[i];
-      bool key_equal = false;
-      enum leme_public_status st =
-          text_equal_checked(a->key, b->key, work, &key_equal);
-      if (st != LEME_PUBLIC_OK)
-        return st;
-      if (!key_equal) {
-        *out = false;
-        return LEME_PUBLIC_OK;
-      }
-      bool member_equal = false;
-      st = values_equal_checked(a->value, b->value, work, depth + 1,
-                                &member_equal);
-      if (st != LEME_PUBLIC_OK)
-        return st;
-      if (!member_equal) {
-        *out = false;
-        return LEME_PUBLIC_OK;
-      }
+      if (!text_equal(a->key, b->key) ||
+          !values_equal(a->value, b->value, depth + 1))
+        return false;
     }
-    *out = true;
-    return LEME_PUBLIC_OK;
+    return true;
   }
-  }
-  *out = false;
-  return LEME_PUBLIC_OK;
-}
-
-enum leme_public_status
-leme_public_equal_checked(const struct leme_public_value *left,
-                          const struct leme_public_value *right,
-                          const struct leme_public_work *work, bool *out) {
-  if (out == NULL)
-    return LEME_PUBLIC_INVALID;
-  bool result = false;
-  enum leme_public_status st =
-      values_equal_checked(left, right, work, 1, &result);
-  if (st == LEME_PUBLIC_OK)
-    *out = result;
-  return st;
+  return false;
 }
 
 bool leme_public_equal(const struct leme_public_value *left,
                        const struct leme_public_value *right) {
-  bool out = false;
-  return leme_public_equal_checked(left, right, NULL, &out) == LEME_PUBLIC_OK &&
-         out;
+  return values_equal(left, right, 1);
 }
 
 static enum leme_public_status
@@ -657,11 +553,6 @@ clone_value(struct leme_public_builder *b,
             struct leme_public_value **out) {
   if (depth > LEME_PUBLIC_MAX_DEPTH)
     return leme_public_fail(b, LEME_PUBLIC_LIMIT);
-  if (b->work.step != NULL) {
-    enum leme_public_status st = b->work.step(b->work.context, 1);
-    if (st != LEME_PUBLIC_OK)
-      return leme_public_fail(b, st);
-  }
   switch (input->kind) {
   case LEME_PUBLIC_NULL:
     return leme_public_null(b, out);

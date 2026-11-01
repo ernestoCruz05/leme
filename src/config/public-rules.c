@@ -500,9 +500,6 @@ leme_config_public_rules(struct leme_public_builder *b,
             LEME_PUBLIC_OK)
       return leme_public_builder_status(b);
   }
-  const enum leme_public_status status = leme_public_settings_validate(record);
-  if (status != LEME_PUBLIC_OK)
-    return leme_public_fail(b, status);
   *out = record;
   return LEME_PUBLIC_OK;
 }

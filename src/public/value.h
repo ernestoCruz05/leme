@@ -41,10 +41,6 @@ struct leme_public_allocator {
   void *(*allocate)(void *context, size_t bytes);
   void (*release)(void *context, void *allocation);
 };
-struct leme_public_work {
-  void *context;
-  enum leme_public_status (*step)(void *context, size_t units);
-};
 
 enum leme_public_status
 leme_public_builder_create(size_t maximum_bytes,
@@ -54,8 +50,6 @@ void leme_public_builder_destroy(struct leme_public_builder *builder);
 size_t leme_public_builder_bytes(const struct leme_public_builder *builder);
 enum leme_public_status
 leme_public_builder_status(const struct leme_public_builder *builder);
-void leme_public_builder_set_work(struct leme_public_builder *builder,
-                                  const struct leme_public_work *work);
 enum leme_public_status
 leme_public_builder_seal(struct leme_public_builder *builder,
                          const struct leme_public_value *const *roots,
@@ -137,9 +131,5 @@ leme_public_as_text(const struct leme_public_value *value,
                     struct leme_public_text *out);
 bool leme_public_equal(const struct leme_public_value *left,
                        const struct leme_public_value *right);
-enum leme_public_status
-leme_public_equal_checked(const struct leme_public_value *left,
-                          const struct leme_public_value *right,
-                          const struct leme_public_work *work, bool *out);
 
 #endif

@@ -4,7 +4,6 @@
 #include "config/internal.h"
 #include "config/live-internal.h"
 #include "config/live.h"
-#include "control/memory.h"
 #include "core/server.h"
 #include "desktop/owner.h"
 #include "desktop/decoration.h"
@@ -30,8 +29,6 @@
 #include <wlr/util/log.h>
 
 struct leme_config_reload {
-  enum leme_control_opcode opcode;
-  struct leme_public_budget *account;
   struct leme_config *next;
   struct leme_config *effective;
   struct wlr_xcursor_manager *cursor_manager;
@@ -143,14 +140,12 @@ set_preflight_error(struct leme_control_error *error,
     (void)snprintf(error->message, sizeof(error->message), "%.*s",
                    (int)sizeof(error->message) - 1, msg);
     (void)snprintf(error->expr_path, sizeof(error->expr_path), "/expr");
-    error->effects_applied = false;
   }
   return code;
 }
 
 enum leme_control_code
 leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
-                           struct leme_public_budget *account,
                            struct leme_config_reload **out,
                            struct leme_control_error *error) {
   if (server == NULL || next == NULL || out == NULL) {
@@ -183,20 +178,12 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
     km = NULL;
   }
 
-  struct leme_config_reload *plan = NULL;
-  if (account != NULL) {
-    plan = leme_control_alloc(account, sizeof(*plan));
-  } else {
-    plan = calloc(1, sizeof(*plan));
-  }
+  struct leme_config_reload *plan = calloc(1, sizeof(*plan));
   if (plan == NULL) {
     xkb_keymap_unref(km);
     return set_preflight_error(error, LEME_CONTROL_OUT_OF_MEMORY,
                                "out of memory");
   }
-  memset(plan, 0, sizeof(*plan));
-  plan->opcode = LEME_CONTROL_OP_RELOAD_CONFIG;
-  plan->account = account;
   plan->next = next;
   plan->keymap = km;
   plan->pointers_changed = leme_pointers_have_delta(server, next);
@@ -272,7 +259,7 @@ leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
 
   if (server->config_store != NULL) {
     enum leme_control_code copy_code =
-        leme_config_effective_copy(next, NULL, &plan->effective, error);
+        leme_config_effective_copy(next, &plan->effective, error);
     if (copy_code != LEME_CONTROL_OK) {
       plan->next = NULL;
       leme_config_reload_discard(&plan);
@@ -400,9 +387,5 @@ void leme_config_reload_discard(struct leme_config_reload **plan_ptr) {
   if (plan->next != NULL) {
     leme_config_destroy(plan->next);
   }
-  if (plan->account != NULL) {
-    leme_control_free(plan);
-  } else {
-    free(plan);
-  }
+  free(plan);
 }

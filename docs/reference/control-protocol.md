@@ -22,7 +22,7 @@ later request carries:
 | --- | --- |
 | `hello` | starts the session and returns `instance`, capabilities and limits |
 | `query` | evaluates a read-only expression |
-| `act` | checks an action plan, then applies it |
+| `act` | checks an action expression, then applies it |
 | `watch` | evaluates an expression now and again on every change |
 | `unwatch` | stops a watch by its `subscription` |
 
@@ -36,8 +36,13 @@ the [commands](commands.md) except `spawn`, `quit` and `switch_vt`.
 A reply has `type: "reply"`, the request `id`, `ok` and either `value` or
 `error`. An error has `code`, `message` and `phase`, plus `expr_path` when it
 points into the expression and `offset` when it points at a byte: into the
-frame for a JSON error, into `source` for a syntax error. An `act` that fails partway leaves the earlier actions applied, and the
-error says which ones ran.
+frame for a JSON error, into `source` for a syntax error.
+
+An `act` reply's `value` is `{"affected": N}`, the number of targets it
+changed. Actions run one target at a time and stop at the first one that
+fails; the targets before it stay changed, and the error's `details.affected`
+says how many there were. A command runs as it would from a key binding, and
+counts as affected when it did something.
 
 ## Watches
 
@@ -68,6 +73,8 @@ private queries and actions until unlock.
 | outstanding requests per client | 16 |
 | watches per client | 32 |
 | action targets | 256 |
+| evaluation work | 100000 steps |
+| queued output per client | 2 MiB |
 
 Ask for the fields you need. A whole root can go over the response limit when
 one field of it fits.

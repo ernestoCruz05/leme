@@ -68,8 +68,7 @@ leme_control_watch_peer_open(struct leme_control_peer *peer) {
                                                .publish = publish,
                                                .discard = discard,
                                                .close = close_peer};
-  return leme_control_watch_set_create(peer->account, &peer->limits, &sink,
-                                       &peer->watches);
+  return leme_control_watch_set_create(&peer->limits, &sink, &peer->watches);
 }
 
 enum leme_control_code
@@ -86,11 +85,9 @@ leme_control_watch_peer_request(struct leme_control_peer *peer,
     code = leme_control_context_create(
         leme_control_context_server(peer->context),
         leme_control_context_model(peer->context),
-        leme_control_context_source(peer->context), peer->account,
-        &peer->limits, leme_control_context_domain(peer->context), &context);
+        leme_control_context_source(peer->context), &peer->limits,
+        leme_control_context_domain(peer->context), &context);
   if (code == LEME_CONTROL_OK) {
-    leme_control_context_set_deadline(
-        context, leme_control_context_deadline(peer->context));
     peer->watch_reply_slot = slot;
     code = leme_control_watch_request(peer->watches, context, request, &error);
     peer->watch_reply_slot = -1;
@@ -107,8 +104,8 @@ leme_control_watch_peer_request(struct leme_control_peer *peer,
   const struct leme_public_text instance =
       leme_public_model_instance(leme_control_context_model(peer->context));
   enum leme_control_code reply_code = leme_control_reply_create_error(
-      peer->account, peer->limits.response_bytes, id.data, id.length,
-      instance.data, instance.length, NULL, 0, &error, &error_reply);
+      peer->limits.response_bytes, id.data, id.length, instance.data,
+      instance.length, &error, &error_reply);
   if (reply_code == LEME_CONTROL_OK) {
     leme_control_frame_set_metadata(error_reply, LEME_CONTROL_FRAME_QUERY,
                                     error.sensitive, id.data, id.length);
@@ -127,14 +124,12 @@ void leme_control_watch_peer_step(struct leme_control_peer *peer) {
   const enum leme_control_code code = leme_control_context_create(
       leme_control_context_server(peer->context),
       leme_control_context_model(peer->context),
-      leme_control_context_source(peer->context), peer->account, &peer->limits,
+      leme_control_context_source(peer->context), &peer->limits,
       leme_control_context_domain(peer->context), &context);
   if (code != LEME_CONTROL_OK) {
     leme_control_peer_close(peer);
     return;
   }
-  leme_control_context_set_deadline(
-      context, leme_control_context_deadline(peer->context));
   leme_control_watch_step(peer->watches, context);
   leme_control_context_destroy(context);
 }

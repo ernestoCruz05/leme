@@ -397,10 +397,6 @@ leme_config_public_scalars(struct leme_public_builder *b,
       leme_public_object_set(b, settings, LEME_PUBLIC_TEXT("config_errors"),
                              errors) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
-  const enum leme_public_status status =
-      leme_public_settings_validate(settings);
-  if (status != LEME_PUBLIC_OK)
-    return leme_public_fail(b, status);
   *out = settings;
   return LEME_PUBLIC_OK;
 }

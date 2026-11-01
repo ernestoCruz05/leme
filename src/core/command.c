@@ -75,7 +75,7 @@ static bool leme_command_reload(struct leme_server *server) {
   struct leme_config_reload *plan = NULL;
   struct leme_control_error err = {0};
   enum leme_control_code code =
-      leme_config_reload_prepare(server, next, NULL, &plan, &err);
+      leme_config_reload_prepare(server, next, &plan, &err);
   if (code != LEME_CONTROL_OK) {
     wlr_log(WLR_ERROR, "leme: reload failed: %s", err.message);
     leme_config_destroy(next);

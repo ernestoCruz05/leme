@@ -1,8 +1,8 @@
 #include "control/eval-internal.h"
-#include "control/memory.h"
 #include "public/value-internal.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 struct sort_entry {
@@ -91,7 +91,7 @@ static enum leme_control_code eval_where(struct evaluator *ev,
     return LEME_CONTROL_OK;
   }
 
-  bool *matched = leme_control_alloc(ev->account, n * sizeof(bool));
+  bool *matched = malloc(n * sizeof(bool));
   if (matched == NULL)
     return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                           "allocation failed");
@@ -99,7 +99,7 @@ static enum leme_control_code eval_where(struct evaluator *ev,
   size_t match_count = 0;
   for (size_t i = 0; i < n; ++i) {
     if (leme_control_charge(&ev->meter, 1) != LEME_CONTROL_OK) {
-      leme_control_free(matched);
+      free(matched);
       return eval_set_error(ev, "/expr", LEME_CONTROL_RESOURCE_LIMIT,
                             "work limit exceeded in where");
     }
@@ -110,11 +110,11 @@ static enum leme_control_code eval_where(struct evaluator *ev,
     code = eval_node(ev, node->as.call.arg_indices[1], &pred_val);
     ev->current_item = prev_item;
     if (code != LEME_CONTROL_OK) {
-      leme_control_free(matched);
+      free(matched);
       return code;
     }
     if (pred_val == NULL || leme_public_kind(pred_val) != LEME_PUBLIC_BOOLEAN) {
-      leme_control_free(matched);
+      free(matched);
       return eval_set_error(ev, "/expr", LEME_CONTROL_TYPE_ERROR,
                             "where predicate must evaluate to boolean");
     }
@@ -127,7 +127,7 @@ static enum leme_control_code eval_where(struct evaluator *ev,
 
   struct leme_public_value *res = NULL;
   if (leme_public_array(ev->builder, match_count, &res) != LEME_PUBLIC_OK) {
-    leme_control_free(matched);
+    free(matched);
     return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                           "array allocation failed");
   }
@@ -139,19 +139,19 @@ static enum leme_control_code eval_where(struct evaluator *ev,
       const struct leme_public_value *owned =
           eval_ensure_owned(ev, item, &code);
       if (owned == NULL) {
-        leme_control_free(matched);
+        free(matched);
         return code;
       }
       if (leme_public_array_set(ev->builder, res, out_idx++, owned) !=
           LEME_PUBLIC_OK) {
-        leme_control_free(matched);
+        free(matched);
         return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                               "array set failed");
       }
     }
   }
 
-  leme_control_free(matched);
+  free(matched);
   *out = res;
   return LEME_CONTROL_OK;
 }
@@ -165,8 +165,8 @@ static void free_select_keys(struct select_key *keys, size_t count) {
   if (keys == NULL)
     return;
   for (size_t k = 0; k < count; ++k)
-    leme_control_free(keys[k].buf);
-  leme_control_free(keys);
+    free(keys[k].buf);
+  free(keys);
 }
 
 static enum leme_control_code
@@ -193,8 +193,7 @@ eval_select(struct evaluator *ev, const struct leme_control_node *node,
     return LEME_CONTROL_OK;
   }
 
-  struct select_key *keys =
-      leme_control_alloc(ev->account, field_count * sizeof(struct select_key));
+  struct select_key *keys = malloc(field_count * sizeof(struct select_key));
   if (keys == NULL)
     return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                           "allocation failed");
@@ -215,7 +214,7 @@ eval_select(struct evaluator *ev, const struct leme_control_node *node,
       size_t tot = fn->as.field.count - 1;
       for (size_t c = 0; c < fn->as.field.count; ++c)
         tot += fn->as.field.components[c].length;
-      char *buf = leme_control_alloc(ev->account, tot + 1);
+      char *buf = malloc(tot + 1);
       if (buf == NULL) {
         free_select_keys(keys, field_count);
         return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
@@ -388,8 +387,7 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
     return LEME_CONTROL_OK;
   }
 
-  struct sort_entry *entries =
-      leme_control_alloc(ev->account, n * sizeof(struct sort_entry));
+  struct sort_entry *entries = malloc(n * sizeof(struct sort_entry));
   if (entries == NULL)
     return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                           "allocation failed");
@@ -402,7 +400,7 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
     code = eval_node(ev, node->as.call.arg_indices[1], &entries[i].key);
     ev->current_item = prev_item;
     if (code != LEME_CONTROL_OK) {
-      leme_control_free(entries);
+      free(entries);
       return code;
     }
   }
@@ -413,14 +411,14 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
       enum leme_public_kind k = leme_public_kind(entries[i].key);
       if (k != LEME_PUBLIC_NULL) {
         if (k != LEME_PUBLIC_NUMBER && k != LEME_PUBLIC_STRING) {
-          leme_control_free(entries);
+          free(entries);
           return eval_set_error(ev, "/expr", LEME_CONTROL_TYPE_ERROR,
                                 "sort keys must be number or string");
         }
         if (expected_kind == LEME_PUBLIC_NULL) {
           expected_kind = k;
         } else if (expected_kind != k) {
-          leme_control_free(entries);
+          free(entries);
           return eval_set_error(
               ev, "/expr", LEME_CONTROL_TYPE_ERROR,
               "sort keys must be homogeneous numbers or strings");
@@ -430,10 +428,9 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
   }
 
   if (n > 1) {
-    struct sort_entry *aux =
-        leme_control_alloc(ev->account, n * sizeof(struct sort_entry));
+    struct sort_entry *aux = malloc(n * sizeof(struct sort_entry));
     if (aux == NULL) {
-      leme_control_free(entries);
+      free(entries);
       return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                             "allocation failed");
     }
@@ -450,8 +447,8 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
           int cmp = 0;
           code = compare_entries(ev, &entries[p1], &entries[p2], is_desc, &cmp);
           if (code != LEME_CONTROL_OK) {
-            leme_control_free(aux);
-            leme_control_free(entries);
+            free(aux);
+            free(entries);
             return code;
           }
           if (cmp <= 0)
@@ -467,12 +464,12 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
                (right - left) * sizeof(struct sort_entry));
       }
     }
-    leme_control_free(aux);
+    free(aux);
   }
 
   struct leme_public_value *res = NULL;
   if (leme_public_array(ev->builder, n, &res) != LEME_PUBLIC_OK) {
-    leme_control_free(entries);
+    free(entries);
     return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                           "array allocation failed");
   }
@@ -481,17 +478,17 @@ eval_sort_by(struct evaluator *ev, const struct leme_control_node *node,
     const struct leme_public_value *owned =
         eval_ensure_owned(ev, entries[i].item, &code);
     if (owned == NULL) {
-      leme_control_free(entries);
+      free(entries);
       return code;
     }
     if (leme_public_array_set(ev->builder, res, i, owned) != LEME_PUBLIC_OK) {
-      leme_control_free(entries);
+      free(entries);
       return eval_set_error(ev, "/expr", LEME_CONTROL_OUT_OF_MEMORY,
                             "array set failed");
     }
   }
 
-  leme_control_free(entries);
+  free(entries);
   *out = res;
   return LEME_CONTROL_OK;
 }

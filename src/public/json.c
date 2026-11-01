@@ -29,18 +29,13 @@ static enum leme_public_status reject(struct leme_json *json,
 
 static enum leme_public_status
 write_value(const struct leme_public_value *value, struct leme_json *json,
-            const struct leme_public_work *work, size_t depth) {
+            size_t depth) {
   if (json->failed)
     return writer_status(json);
   if (value == NULL)
     return reject(json, LEME_JSON_ERROR_INVALID);
   if (depth > LEME_PUBLIC_MAX_DEPTH)
     return reject(json, LEME_JSON_ERROR_LIMIT);
-  if (work != NULL && work->step != NULL) {
-    enum leme_public_status st = work->step(work->context, 1);
-    if (st != LEME_PUBLIC_OK)
-      return reject(json, LEME_JSON_ERROR_LIMIT);
-  }
   switch (leme_public_kind(value)) {
   case LEME_PUBLIC_NULL:
     leme_json_null(json);
@@ -68,11 +63,6 @@ write_value(const struct leme_public_value *value, struct leme_json *json,
     struct leme_public_text text = {0};
     if (leme_public_as_text(value, &text) != LEME_PUBLIC_OK)
       return reject(json, LEME_JSON_ERROR_INVALID);
-    if (work != NULL && work->step != NULL && text.length > 0) {
-      enum leme_public_status st = work->step(work->context, text.length);
-      if (st != LEME_PUBLIC_OK)
-        return reject(json, LEME_JSON_ERROR_LIMIT);
-    }
     leme_json_string_n(json, text.data, text.length);
     break;
   }
@@ -80,7 +70,7 @@ write_value(const struct leme_public_value *value, struct leme_json *json,
     leme_json_array_begin(json);
     for (size_t i = 0; i < leme_public_length(value) && !json->failed; ++i) {
       const enum leme_public_status status =
-          write_value(leme_public_at(value, i), json, work, depth + 1);
+          write_value(leme_public_at(value, i), json, depth + 1);
       if (status != LEME_PUBLIC_OK)
         return status;
     }
@@ -92,7 +82,7 @@ write_value(const struct leme_public_value *value, struct leme_json *json,
       const struct leme_public_text key = leme_public_key_at(value, i);
       leme_json_key_n(json, key.data, key.length);
       const enum leme_public_status status =
-          write_value(leme_public_member_at(value, i), json, work, depth + 1);
+          write_value(leme_public_member_at(value, i), json, depth + 1);
       if (status != LEME_PUBLIC_OK)
         return status;
     }
@@ -103,18 +93,11 @@ write_value(const struct leme_public_value *value, struct leme_json *json,
 }
 
 enum leme_public_status
-leme_public_write_json_work(const struct leme_public_value *value,
-                            struct leme_json *json,
-                            const struct leme_public_work *work) {
+leme_public_write_json(const struct leme_public_value *value,
+                       struct leme_json *json) {
   if (json == NULL)
     return LEME_PUBLIC_INVALID;
   if (value == NULL || !value->owner->sealed)
     return reject(json, LEME_JSON_ERROR_INVALID);
-  return write_value(value, json, work, 1);
-}
-
-enum leme_public_status
-leme_public_write_json(const struct leme_public_value *value,
-                       struct leme_json *json) {
-  return leme_public_write_json_work(value, json, NULL);
+  return write_value(value, json, 1);
 }

@@ -6,7 +6,6 @@
 #include "control/eval.h"
 #include "control/expr.h"
 #include "control/limits.h"
-#include "public/budget.h"
 #include "public/model.h"
 #include "public/value.h"
 
@@ -15,7 +14,6 @@ struct evaluator {
   const struct leme_control_program *program;
   const struct leme_public_snapshot *snapshot;
   struct leme_public_builder *builder;
-  struct leme_public_budget *account;
   const struct leme_control_limits *limits;
   struct leme_control_meter meter;
   struct leme_control_error *error;

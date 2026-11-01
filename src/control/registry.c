@@ -4,168 +4,8 @@
 
 #define STATIC_TEXT(s) {.data = (s), .length = sizeof(s) - 1u}
 
-static const struct leme_public_argument args_1_string[] = {
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_tag[] = {
-    {STATIC_TEXT("output | string"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("integer"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_by_id[] = {
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_where[] = {
-    {STATIC_TEXT("array<T>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("boolean"), STATIC_TEXT("item")}};
-
-static const struct leme_public_argument args_select[] = {
-    {STATIC_TEXT("array<T>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("FIELD"), STATIC_TEXT("item")}};
-
-static const struct leme_public_argument args_map[] = {
-    {STATIC_TEXT("array<T>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("any"), STATIC_TEXT("item")}};
-
-static const struct leme_public_argument args_sort_by[] = {
-    {STATIC_TEXT("array<T>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("FIELD"), STATIC_TEXT("item")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_limit[] = {
-    {STATIC_TEXT("array<T>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("integer"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_first[] = {
-    {STATIC_TEXT("array<T>"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_count[] = {
-    {STATIC_TEXT("array"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_get[] = {
-    {STATIC_TEXT("object | reference"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_1_any[] = {
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_contains[] = {
-    {STATIC_TEXT("array"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_2_any[] = {
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_2_number_or_string[] = {
-    {STATIC_TEXT("number | string"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("number | string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_2_number[] = {
-    {STATIC_TEXT("number"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("number"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_minus[] = {
-    {STATIC_TEXT("number"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("number"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_1_boolean[] = {
-    {STATIC_TEXT("boolean"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_if[] = {
-    {STATIC_TEXT("boolean"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_describe[] = {
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_focus_view[] = {
-    {STATIC_TEXT("view"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_container_layout[] = {
-    {STATIC_TEXT("view"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_container_join[] = {
-    {STATIC_TEXT("view"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_focus_tag[] = {
-    {STATIC_TEXT("tag"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_focus_output[] = {
-    {STATIC_TEXT("output"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_move_to_tag[] = {
-    {STATIC_TEXT("array<view>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("tag"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_move_to_output[] = {
-    {STATIC_TEXT("array<view>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("output"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_views_boolean[] = {
-    {STATIC_TEXT("array<view>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("boolean"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_resize[] = {
-    {STATIC_TEXT("view"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("integer"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_close[] = {
-    {STATIC_TEXT("array<view>"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_set_layout[] = {
-    {STATIC_TEXT("array<tag>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_set_input[] = {
-    {STATIC_TEXT("array<input>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_configure_output[] = {
-    {STATIC_TEXT("output"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("object"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_set_output_power[] = {
-    {STATIC_TEXT("array<output>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("boolean"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_set_config[] = {
-    {STATIC_TEXT("array<string>"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("any"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_argument args_command[] = {
-    {STATIC_TEXT("string"), STATIC_TEXT("outer")},
-    {STATIC_TEXT("array<string>"), STATIC_TEXT("outer")}};
-
-static const struct leme_public_operation public_operations[] = {
-#define CONTROL_OP(id, name_str, is_act, min_a, max_a, args_arr, args_cnt,     \
-                   res_str, desc_str, work_str)                                \
-  {                                                                            \
-      .name = STATIC_TEXT(name_str),                                           \
-      .documentation = STATIC_TEXT(desc_str),                                  \
-      .action = (is_act),                                                      \
-      .available = true,                                                       \
-      .stability = STATIC_TEXT("api-versioned"),                               \
-      .min_args = (min_a),                                                     \
-      .max_args = (max_a),                                                     \
-      .arguments = (args_arr),                                                 \
-      .argument_count = (args_cnt),                                            \
-      .result = STATIC_TEXT(res_str),                                          \
-      .work = STATIC_TEXT(work_str),                                           \
-  },
-#include "control/operators.def"
-#undef CONTROL_OP
-};
-
 static const struct leme_control_operator operators[] = {
-#define CONTROL_OP(id, name_str, is_act, min_a, max_a, args_arr, args_cnt,     \
-                   res_str, desc_str, work_str)                                \
+#define CONTROL_OP(id, name_str, is_act, min_a, max_a)                         \
   [LEME_CONTROL_OP_##id] = {                                                   \
       .opcode = LEME_CONTROL_OP_##id,                                          \
       .name = STATIC_TEXT(name_str),                                           \
@@ -173,24 +13,10 @@ static const struct leme_control_operator operators[] = {
           (is_act) ? LEME_CONTROL_EFFECT_ACTION : LEME_CONTROL_EFFECT_PURE,    \
       .min_args = (min_a),                                                     \
       .max_args = (max_a),                                                     \
-      .arguments = (args_arr),                                                 \
-      .argument_count = (args_cnt),                                            \
-      .result = STATIC_TEXT(res_str),                                          \
-      .description = STATIC_TEXT(desc_str),                                    \
-      .work = STATIC_TEXT(work_str),                                           \
-      .available = true,                                                       \
   },
 #include "control/operators.def"
 #undef CONTROL_OP
 };
-
-static const struct leme_control_registry registry = {
-    .operations = public_operations,
-    .count = sizeof(public_operations) / sizeof(public_operations[0])};
-
-const struct leme_control_registry *leme_control_registry(void) {
-  return &registry;
-}
 
 const struct leme_control_operator *
 leme_control_operator_by_opcode(enum leme_control_opcode opcode) {
@@ -209,14 +35,6 @@ leme_control_operator_find(struct leme_public_text name) {
       return &operators[i];
   }
   return NULL;
-}
-
-const struct leme_public_operation *
-leme_control_operation_find(struct leme_public_text name) {
-  const struct leme_control_operator *op = leme_control_operator_find(name);
-  if (op == NULL || (size_t)op->opcode >= registry.count)
-    return NULL;
-  return &registry.operations[op->opcode];
 }
 
 uint32_t

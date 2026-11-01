@@ -39,8 +39,6 @@ bool leme_config_parse_desktop_menu(struct leme_config *config,
                                     const struct leme_scfg_directive *directive,
                                     const struct leme_scfg_directive **seen);
 bool leme_config_drop_invalid_desktop_menu(struct leme_config *config);
-bool leme_config_validate_command(const struct leme_config *config,
-                                  const struct leme_command *command);
 bool leme_config_drop_invalid_binds(struct leme_config *config);
 void leme_config_set_error(char **error, const char *format, ...);
 void leme_config_finish_command(struct leme_command *command);

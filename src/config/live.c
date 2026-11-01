@@ -2,7 +2,6 @@
 #include "config/live-internal.h"
 #include "config/config.h"
 #include "control/control.h"
-#include "control/memory.h"
 #include "core/server.h"
 #include "input/input.h"
 #include "output/output.h"
@@ -68,28 +67,20 @@ bool leme_config_live_init(struct leme_server *server) {
   if (store == NULL) {
     return false;
   }
-  if (leme_public_budget_create((size_t)256 * 1024U, NULL, &store->account) !=
+  if (leme_public_builder_create((size_t)256 * 1024U, NULL, &store->builder) !=
       LEME_PUBLIC_OK) {
-    free(store);
-    return false;
-  }
-  if (leme_public_builder_create_budget(store->account, (size_t)256 * 1024U,
-                                        &store->builder) != LEME_PUBLIC_OK) {
-    leme_public_budget_unref(store->account);
     free(store);
     return false;
   }
   if (leme_public_builder_seal(store->builder, NULL, 0) != LEME_PUBLIC_OK) {
     leme_public_builder_destroy(store->builder);
-    leme_public_budget_unref(store->account);
     free(store);
     return false;
   }
   store->baseline = server->config;
-  if (leme_config_effective_copy(store->baseline, NULL, &store->effective,
-                                 NULL) != LEME_CONTROL_OK) {
+  if (leme_config_effective_copy(store->baseline, &store->effective, NULL) !=
+      LEME_CONTROL_OK) {
     leme_public_builder_destroy(store->builder);
-    leme_public_budget_unref(store->account);
     free(store);
     return false;
   }
@@ -116,11 +107,9 @@ void leme_config_store_clear_overrides(struct leme_config_store *store) {
     leme_public_builder_destroy(store->builder);
     store->builder = NULL;
   }
-  if (store->account != NULL) {
-    if (leme_public_builder_create_budget(store->account, (size_t)256 * 1024U,
-                                          &store->builder) == LEME_PUBLIC_OK) {
-      (void)leme_public_builder_seal(store->builder, NULL, 0);
-    }
+  if (leme_public_builder_create((size_t)256 * 1024U, NULL, &store->builder) ==
+      LEME_PUBLIC_OK) {
+    (void)leme_public_builder_seal(store->builder, NULL, 0);
   }
 }
 
@@ -136,10 +125,6 @@ void leme_config_live_finish(struct leme_server *server) {
   if (store->builder != NULL) {
     leme_public_builder_destroy(store->builder);
     store->builder = NULL;
-  }
-  if (store->account != NULL) {
-    leme_public_budget_unref(store->account);
-    store->account = NULL;
   }
   if (store->effective != NULL) {
     leme_config_destroy(store->effective);
@@ -219,8 +204,8 @@ enum leme_control_code leme_config_store_add_override(
   size_t new_count =
       found_match ? store->override_count : store->override_count + 1;
   struct leme_public_builder *new_builder = NULL;
-  if (leme_public_builder_create_budget(store->account, (size_t)256 * 1024U,
-                                        &new_builder) != LEME_PUBLIC_OK) {
+  if (leme_public_builder_create((size_t)256 * 1024U, NULL, &new_builder) !=
+      LEME_PUBLIC_OK) {
     for (size_t j = 0; j < path_count; ++j) {
       free(path_copy[j]);
     }
@@ -368,8 +353,8 @@ void leme_config_store_drop_target(struct leme_config_store *store,
 
   size_t new_count = store->override_count - match_count;
   struct leme_public_builder *new_builder = NULL;
-  if (leme_public_builder_create_budget(store->account, (size_t)256 * 1024U,
-                                        &new_builder) != LEME_PUBLIC_OK) {
+  if (leme_public_builder_create((size_t)256 * 1024U, NULL, &new_builder) !=
+      LEME_PUBLIC_OK) {
     return;
   }
 
@@ -489,13 +474,11 @@ enum leme_live_setting_id {
 };
 
 struct leme_config_prepared_set {
-  enum leme_control_opcode opcode;
   enum leme_live_setting_id setting_id;
   char **path;
   size_t path_count;
   const struct leme_public_value *value;
   struct leme_public_builder *builder;
-  struct leme_public_budget *account;
   union {
     int int_val;
     double num_val;
@@ -510,14 +493,7 @@ struct leme_config_prepared_set {
 static enum leme_control_code set_err(struct leme_control_error *error,
                                       enum leme_control_code code,
                                       const char *msg) {
-  if (error != NULL) {
-    error->code = code;
-    error->phase = LEME_CONTROL_PREFLIGHT;
-    (void)snprintf(error->message, sizeof(error->message), "%s", msg);
-    (void)snprintf(error->expr_path, sizeof(error->expr_path), "/expr");
-    error->effects_applied = false;
-  }
-  return code;
+  return leme_control_refuse(error, code, msg);
 }
 
 static int find_live_setting(const char *const *path, size_t path_count) {
@@ -691,13 +667,15 @@ static void cleanup_prepared_set(struct leme_config_prepared_set *prep) {
     leme_public_builder_destroy(prep->builder);
     prep->builder = NULL;
   }
-  leme_control_free(prep);
+  free(prep);
 }
 
-enum leme_control_code leme_config_live_prepare_set(
-    struct leme_server *server, const char *const *path, size_t path_count,
-    const struct leme_public_value *value, struct leme_public_budget *account,
-    struct leme_control_prepared **out, struct leme_control_error *error) {
+static enum leme_control_code prepare_set(struct leme_server *server,
+                                          const char *const *path,
+                                          size_t path_count,
+                                          const struct leme_public_value *value,
+                                          struct leme_config_prepared_set **out,
+                                          struct leme_control_error *error) {
   if (out == NULL) {
     return set_err(error, LEME_CONTROL_INVALID_ARGUMENT, "null out pointer");
   }
@@ -736,16 +714,12 @@ enum leme_control_code leme_config_live_prepare_set(
     }
   }
 
-  struct leme_config_prepared_set *prep =
-      leme_control_alloc(account, sizeof(struct leme_config_prepared_set));
+  struct leme_config_prepared_set *prep = calloc(1, sizeof(*prep));
   if (prep == NULL) {
     return set_err(error, LEME_CONTROL_OUT_OF_MEMORY,
                    "out of memory allocating prepared set");
   }
-  memset(prep, 0, sizeof(*prep));
-  prep->opcode = LEME_CONTROL_OP_SET_CONFIG;
   prep->setting_id = id;
-  prep->account = account;
 
   switch (id) {
   case LEME_LIVE_STYLE_GAP:
@@ -761,7 +735,7 @@ enum leme_control_code leme_config_live_prepare_set(
   case LEME_LIVE_GESTURES_VELOCITY_WINDOW: {
     int64_t ival = 0;
     if (leme_public_as_integer(value, &ival) != LEME_PUBLIC_OK) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected integer value");
     }
     int64_t min_bound = 0;
@@ -775,12 +749,12 @@ enum leme_control_code leme_config_live_prepare_set(
       min_bound = 1;
     }
     if (ival < min_bound || ival > max_bound) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "integer out of range");
     }
     if (id == LEME_LIVE_GESTURES_FINGERS && (ival == 1 || ival == 2)) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "disallowed finger count");
     }
@@ -795,37 +769,37 @@ enum leme_control_code leme_config_live_prepare_set(
   case LEME_LIVE_GESTURES_DECELERATION: {
     double dval = 0.0;
     if (leme_public_as_number(value, &dval) != LEME_PUBLIC_OK) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected number value");
     }
     if (!isfinite(dval)) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "nonfinite number value");
     }
     if (id == LEME_LIVE_STYLE_OPACITY_ACTIVE ||
         id == LEME_LIVE_STYLE_OPACITY_INACTIVE) {
       if (dval < 0.0 || dval > 1.0) {
-        leme_control_free(prep);
+        free(prep);
         return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                        "opacity out of range 0..1");
       }
     } else if (id == LEME_LIVE_POINTER_ACCEL_SPEED) {
       if (dval < -1.0 || dval > 1.0) {
-        leme_control_free(prep);
+        free(prep);
         return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                        "accel speed out of range -1..1");
       }
     } else if (id == LEME_LIVE_GESTURES_DISTANCE) {
       if (dval <= 0.0) {
-        leme_control_free(prep);
+        free(prep);
         return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                        "distance must be positive");
       }
     } else if (id == LEME_LIVE_GESTURES_THRESHOLD ||
                id == LEME_LIVE_GESTURES_DECELERATION) {
       if (dval <= 0.0 || dval >= 1.0) {
-        leme_control_free(prep);
+        free(prep);
         return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                        "value must be strictly between 0 and 1");
       }
@@ -845,7 +819,7 @@ enum leme_control_code leme_config_live_prepare_set(
   case LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE:
   case LEME_LIVE_GESTURES_OCCUPIED: {
     if (leme_public_kind(value) != LEME_PUBLIC_BOOLEAN) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected boolean value");
     }
     bool bval = false;
@@ -856,13 +830,13 @@ enum leme_control_code leme_config_live_prepare_set(
   case LEME_LIVE_STYLE_BORDER_ACTIVE:
   case LEME_LIVE_STYLE_BORDER_INACTIVE: {
     if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected color string");
     }
     struct leme_public_text txt = {0};
     leme_public_as_text(value, &txt);
     if (!parse_hex_color(txt, prep->parsed.color_val)) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "invalid color format");
     }
@@ -870,7 +844,7 @@ enum leme_control_code leme_config_live_prepare_set(
   }
   case LEME_LIVE_STYLE_FULLSCREEN_COVERS: {
     if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR,
                      "expected string for fullscreen covers");
     }
@@ -883,7 +857,7 @@ enum leme_control_code leme_config_live_prepare_set(
     } else if (txt.length == 7 && memcmp(txt.data, "overlay", 7) == 0) {
       prep->parsed.int_val = LEME_FULLSCREEN_COVERS_OVERLAY;
     } else {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "invalid fullscreen covers enum");
     }
@@ -897,11 +871,11 @@ enum leme_control_code leme_config_live_prepare_set(
       leme_public_as_text(value, &txt);
       prep->parsed.str_val = strndup(txt.data, txt.length);
       if (prep->parsed.str_val == NULL) {
-        leme_control_free(prep);
+        free(prep);
         return set_err(error, LEME_CONTROL_OUT_OF_MEMORY, "out of memory");
       }
     } else {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR,
                      "expected string or null for cursor theme");
     }
@@ -909,7 +883,7 @@ enum leme_control_code leme_config_live_prepare_set(
   }
   case LEME_LIVE_POINTER_ACCEL_PROFILE: {
     if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR,
                      "expected string for accel profile");
     }
@@ -920,7 +894,7 @@ enum leme_control_code leme_config_live_prepare_set(
     } else if (txt.length == 4 && memcmp(txt.data, "flat", 4) == 0) {
       prep->parsed.int_val = LEME_POINTER_ACCEL_FLAT;
     } else {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "invalid accel profile enum");
     }
@@ -928,7 +902,7 @@ enum leme_control_code leme_config_live_prepare_set(
   }
   case LEME_LIVE_GESTURES_MODE: {
     if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR,
                      "expected string for gesture mode");
     }
@@ -941,7 +915,7 @@ enum leme_control_code leme_config_live_prepare_set(
     } else if (txt.length == 4 && memcmp(txt.data, "free", 4) == 0) {
       prep->parsed.int_val = LEME_WORKSPACE_GESTURE_FREE;
     } else {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "invalid gesture mode enum");
     }
@@ -949,7 +923,7 @@ enum leme_control_code leme_config_live_prepare_set(
   }
   case LEME_LIVE_PUBLICATION_ACTIVATION: {
     if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_TYPE_ERROR,
                      "expected string for activation policy");
     }
@@ -962,14 +936,14 @@ enum leme_control_code leme_config_live_prepare_set(
     } else if (txt.length == 6 && memcmp(txt.data, "ignore", 6) == 0) {
       prep->parsed.int_val = LEME_ACTIVATION_IGNORE;
     } else {
-      leme_control_free(prep);
+      free(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                      "invalid activation enum");
     }
     break;
   }
   default:
-    leme_control_free(prep);
+    free(prep);
     return set_err(error, LEME_CONTROL_UNSUPPORTED, "unsupported setting");
   }
 
@@ -1110,7 +1084,7 @@ enum leme_control_code leme_config_live_prepare_set(
   }
 
   struct leme_public_builder *b = NULL;
-  if (leme_public_builder_create_budget(account, 16384, &b) != LEME_PUBLIC_OK) {
+  if (leme_public_builder_create(16384, NULL, &b) != LEME_PUBLIC_OK) {
     cleanup_prepared_set(prep);
     return set_err(error, LEME_CONTROL_RESOURCE_LIMIT, "budget exceeded");
   }
@@ -1149,26 +1123,21 @@ enum leme_control_code leme_config_live_prepare_set(
     prep->path_count++;
   }
 
-  *out = (struct leme_control_prepared *)prep;
+  *out = prep;
   return LEME_CONTROL_OK;
 }
 
-enum leme_control_code leme_config_live_prepare(
-    struct leme_server *server, const struct leme_control_intent *intents,
-    size_t count, struct leme_public_budget *account,
-    struct leme_control_prepared **out, struct leme_control_error *error) {
-  if (count != 1 || intents == NULL) {
-    return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                   "invalid intent count");
-  }
-  const struct leme_public_value *args_val = intents[0].args;
-  if (args_val == NULL || leme_public_kind(args_val) != LEME_PUBLIC_ARRAY ||
-      leme_public_length(args_val) != 2) {
+enum leme_control_code
+leme_config_live_run(struct leme_server *server,
+                     const struct leme_control_call *call, bool *applied,
+                     struct leme_control_error *error) {
+  *applied = false;
+  if (call->count != 2) {
     return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
                    "set-config requires [path, value]");
   }
-  const struct leme_public_value *path_val = leme_public_at(args_val, 0);
-  const struct leme_public_value *new_val = leme_public_at(args_val, 1);
+  const struct leme_public_value *path_val = call->args[0];
+  const struct leme_public_value *new_val = call->args[1];
   if (path_val == NULL || leme_public_kind(path_val) != LEME_PUBLIC_ARRAY) {
     return set_err(error, LEME_CONTROL_TYPE_ERROR,
                    "expected array for config path");
@@ -1200,8 +1169,8 @@ enum leme_control_code leme_config_live_prepare(
     }
   }
 
-  code = leme_config_live_prepare_set(server, (const char *const *)p_strs,
-                                      p_len, new_val, account, out, error);
+  code = leme_config_live_set(server, (const char *const *)p_strs, p_len,
+                              new_val, applied, error);
 cleanup:
   for (size_t i = 0; i < p_len; i++) {
     free(p_strs[i]);
@@ -1209,22 +1178,11 @@ cleanup:
   return code;
 }
 
-enum leme_control_code
-leme_config_live_execute_one(struct leme_server *server,
-                             struct leme_control_prepared *prepared,
-                             size_t index, enum leme_control_outcome *outcome,
-                             struct leme_control_error *error) {
-  (void)index;
-  if (server == NULL || prepared == NULL || outcome == NULL) {
-    if (outcome != NULL)
-      *outcome = LEME_CONTROL_FAILED;
-    return set_err(error, LEME_CONTROL_INVALID_ARGUMENT, "invalid arguments");
-  }
-  struct leme_config_prepared_set *prep =
-      (struct leme_config_prepared_set *)prepared;
-
+static enum leme_control_code apply(struct leme_server *server,
+                                    struct leme_config_prepared_set *prep,
+                                    bool *applied,
+                                    struct leme_control_error *error) {
   if (prep->is_noop) {
-    *outcome = LEME_CONTROL_NOOP;
     return LEME_CONTROL_OK;
   }
 
@@ -1400,12 +1358,20 @@ leme_config_live_execute_one(struct leme_server *server,
   }
 
   leme_public_server_invalidate(server);
-  *outcome = LEME_CONTROL_APPLIED;
+  *applied = true;
   return LEME_CONTROL_OK;
 }
 
-void leme_config_live_discard(struct leme_server *server,
-                              struct leme_control_prepared *prepared) {
-  (void)server;
-  cleanup_prepared_set((struct leme_config_prepared_set *)prepared);
+enum leme_control_code
+leme_config_live_set(struct leme_server *server, const char *const *path,
+                     size_t path_count, const struct leme_public_value *value,
+                     bool *applied, struct leme_control_error *error) {
+  *applied = false;
+  struct leme_config_prepared_set *prep = NULL;
+  enum leme_control_code code =
+      prepare_set(server, path, path_count, value, &prep, error);
+  if (code == LEME_CONTROL_OK)
+    code = apply(server, prep, applied, error);
+  cleanup_prepared_set(prep);
+  return code;
 }

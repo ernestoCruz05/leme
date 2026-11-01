@@ -20,10 +20,6 @@ void leme_public_server_view_urgent(struct leme_view *view);
 enum leme_public_status
 leme_public_server_capture(struct leme_server *server, uint32_t requested_roots,
                            struct leme_public_snapshot **out);
-enum leme_public_status
-leme_public_server_capture_work(struct leme_server *server, uint32_t roots,
-                                const struct leme_public_work *work,
-                                struct leme_public_snapshot **out);
 struct leme_public_source leme_public_server_source(struct leme_server *server);
 
 #endif

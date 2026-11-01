@@ -1,7 +1,6 @@
 #include "config/live.h"
 #include "config/config.h"
 #include "control/error.h"
-#include "public/budget.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -14,9 +13,10 @@ static struct leme_config *unconst_config(const struct leme_config *p) {
   return (struct leme_config *)out;
 }
 
-enum leme_control_code leme_config_effective_copy(
-    const struct leme_config *baseline, struct leme_public_budget *account,
-    struct leme_config **out, struct leme_control_error *error) {
+enum leme_control_code
+leme_config_effective_copy(const struct leme_config *baseline,
+                           struct leme_config **out,
+                           struct leme_control_error *error) {
   if (out == NULL) {
     if (error != NULL) {
       error->code = LEME_CONTROL_INVALID_ARGUMENT;
@@ -36,23 +36,8 @@ enum leme_control_code leme_config_effective_copy(
     }
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
-  if (account != NULL) {
-    if (leme_public_budget_reserve(account, sizeof(struct leme_config)) !=
-        LEME_PUBLIC_OK) {
-      if (error != NULL) {
-        error->code = LEME_CONTROL_RESOURCE_LIMIT;
-        error->phase = LEME_CONTROL_PREFLIGHT;
-        (void)snprintf(error->message, sizeof(error->message), "%s",
-                       "budget exceeded for effective config copy");
-      }
-      return LEME_CONTROL_RESOURCE_LIMIT;
-    }
-  }
   struct leme_config *effective = calloc(1, sizeof(*effective));
   if (effective == NULL) {
-    if (account != NULL) {
-      leme_public_budget_release(account, sizeof(struct leme_config));
-    }
     if (error != NULL) {
       error->code = LEME_CONTROL_OUT_OF_MEMORY;
       error->phase = LEME_CONTROL_PREFLIGHT;
@@ -71,9 +56,6 @@ enum leme_control_code leme_config_effective_copy(
     effective->cursor.theme = strdup(baseline->cursor.theme);
     if (effective->cursor.theme == NULL) {
       leme_config_destroy(effective);
-      if (account != NULL) {
-        leme_public_budget_release(account, sizeof(struct leme_config));
-      }
       if (error != NULL) {
         error->code = LEME_CONTROL_OUT_OF_MEMORY;
         error->phase = LEME_CONTROL_PREFLIGHT;
@@ -87,9 +69,6 @@ enum leme_control_code leme_config_effective_copy(
     effective->path = strdup(baseline->path);
     if (effective->path == NULL) {
       leme_config_destroy(effective);
-      if (account != NULL) {
-        leme_public_budget_release(account, sizeof(struct leme_config));
-      }
       if (error != NULL) {
         error->code = LEME_CONTROL_OUT_OF_MEMORY;
         error->phase = LEME_CONTROL_PREFLIGHT;

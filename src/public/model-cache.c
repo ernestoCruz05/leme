@@ -61,29 +61,12 @@ void leme_public_model_sync_source(struct leme_public_model *model,
   }
 }
 
-static bool has_references(const struct leme_public_schema *schema,
-                           size_t depth) {
-  if (schema == NULL)
-    return false;
-  if (depth > LEME_PUBLIC_MAX_DEPTH || schema->related != NULL)
-    return true;
-  if (schema->rule == LEME_RULE_ANY)
-    return false;
-  if (has_references(schema->primary, depth + 1) ||
-      has_references(schema->alternative, depth + 1) ||
-      has_references(schema->items, depth + 1))
-    return true;
-  for (size_t i = 0; i < schema->field_count; ++i)
-    if (has_references(schema->fields[i].type, depth + 1))
-      return true;
-  return false;
-}
-
-enum leme_public_status leme_public_model_cached_root(
-    struct leme_public_model *model, const struct leme_public_source *source,
-    enum leme_public_root root, const struct leme_public_work *work,
-    struct leme_public_capture_diagnostic *diagnostic,
-    struct leme_public_cached_root **out) {
+enum leme_public_status
+leme_public_model_cached_root(struct leme_public_model *model,
+                              const struct leme_public_source *source,
+                              enum leme_public_root root,
+                              struct leme_public_capture_diagnostic *diagnostic,
+                              struct leme_public_cached_root **out) {
   *out = NULL;
   if (source->root_generation == NULL ||
       (root != LEME_PUBLIC_CONFIG && root != LEME_PUBLIC_RUNTIME))
@@ -95,14 +78,12 @@ enum leme_public_status leme_public_model_cached_root(
     *out = model->cached[root];
     return LEME_PUBLIC_OK;
   }
-  const bool reference_free = !has_references(leme_public_root_schema(root), 1);
   struct leme_public_builder *b = NULL;
   diagnostic->stage = "builder";
   enum leme_public_status status =
       leme_public_model_builder_create(model, model->snapshot_limit, &b);
   if (status != LEME_PUBLIC_OK)
     return status;
-  leme_public_builder_set_work(b, work);
   struct leme_public_cached_root *cached = leme_public_allocate(
       b, 1, sizeof(*cached), alignof(struct leme_public_cached_root));
   if (cached == NULL) {
@@ -118,10 +99,6 @@ enum leme_public_status leme_public_model_cached_root(
     status = LEME_PUBLIC_INVALID;
     goto fail;
   }
-  diagnostic->stage = "schema";
-  status = leme_public_schema_validate(leme_public_root_schema(root), value);
-  if (status != LEME_PUBLIC_OK)
-    goto fail;
   diagnostic->stage = "seal";
   const struct leme_public_value *roots[] = {value};
   status = leme_public_builder_seal(b, roots, 1);
@@ -139,12 +116,8 @@ enum leme_public_status leme_public_model_cached_root(
     status = LEME_PUBLIC_UNAVAILABLE;
     goto fail;
   }
-  leme_public_builder_set_work(b, NULL);
-  *cached = (struct leme_public_cached_root){.references = 1,
-                                             .generation = generation,
-                                             .reference_free = reference_free,
-                                             .builder = b,
-                                             .value = value};
+  *cached = (struct leme_public_cached_root){
+      .references = 1, .generation = generation, .builder = b, .value = value};
   model->cached[root] = cached;
   *out = cached;
   return LEME_PUBLIC_OK;
@@ -169,8 +142,8 @@ void leme_public_model_warm(struct leme_public_model *model,
 
     if (roots[i] == LEME_PUBLIC_CONFIG && source->locked(source->context))
       continue;
-    (void)leme_public_model_cached_root(model, source, roots[i], NULL,
-                                        &diagnostic, &cached);
+    (void)leme_public_model_cached_root(model, source, roots[i], &diagnostic,
+                                        &cached);
   }
 }
 
@@ -211,7 +184,6 @@ leme_public_snapshot_project(struct leme_public_model *model, uint32_t roots,
   memcpy(snapshot->roots, baseline->roots, sizeof(snapshot->roots));
   memcpy(snapshot->indexes, baseline->indexes, sizeof(snapshot->indexes));
   memcpy(snapshot->instance, baseline->instance, sizeof(snapshot->instance));
-  memcpy(snapshot->revision, baseline->revision, sizeof(snapshot->revision));
   leme_public_snapshot_ref(baseline);
   *out = snapshot;
   return LEME_PUBLIC_OK;

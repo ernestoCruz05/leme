@@ -184,15 +184,12 @@ limits_value(struct leme_public_builder *b,
              const struct leme_public_model *model,
              struct leme_public_value **out) {
   *out = NULL;
-  if (model->snapshot_limit > (uint64_t)LEME_PUBLIC_SAFE_INTEGER ||
-      model->total_limit > (uint64_t)LEME_PUBLIC_SAFE_INTEGER)
+  if (model->snapshot_limit > (uint64_t)LEME_PUBLIC_SAFE_INTEGER)
     return leme_public_fail(b, LEME_PUBLIC_LIMIT);
   struct leme_public_value *limits = NULL;
-  if (leme_public_object(b, 4, &limits) != LEME_PUBLIC_OK ||
+  if (leme_public_object(b, 3, &limits) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, limits, LEME_PUBLIC_TEXT("snapshot_bytes"),
                           (int64_t)model->snapshot_limit) != LEME_PUBLIC_OK ||
-      leme_public_put_int(b, limits, LEME_PUBLIC_TEXT("total_bytes"),
-                          (int64_t)model->total_limit) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, limits, LEME_PUBLIC_TEXT("value_depth"),
                           LEME_PUBLIC_MAX_DEPTH) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, limits, LEME_PUBLIC_TEXT("field_depth"),
@@ -227,13 +224,11 @@ runtime_value(struct leme_public_builder *b, const struct leme_server *server,
               const struct leme_public_model *model,
               struct leme_public_value **out) {
   *out = NULL;
-  const struct leme_public_features facts = leme_public_server_features(server);
   struct leme_public_value *runtime = NULL, *capabilities = NULL,
-                           *limits = NULL, *schema = NULL;
-  if (leme_public_object(b, 5, &runtime) != LEME_PUBLIC_OK ||
+                           *limits = NULL;
+  if (leme_public_object(b, 4, &runtime) != LEME_PUBLIC_OK ||
       capabilities_value(b, server, &capabilities) != LEME_PUBLIC_OK ||
       limits_value(b, model, &limits) != LEME_PUBLIC_OK ||
-      leme_public_schema_value(b, &facts, NULL, 0, &schema) != LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, runtime, LEME_PUBLIC_TEXT("version"),
                            LEME_VERSION) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, runtime, LEME_PUBLIC_TEXT("api_version"),
@@ -241,8 +236,6 @@ runtime_value(struct leme_public_builder *b, const struct leme_server *server,
       leme_public_object_set(b, runtime, LEME_PUBLIC_TEXT("capabilities"),
                              capabilities) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, runtime, LEME_PUBLIC_TEXT("limits"), limits) !=
-          LEME_PUBLIC_OK ||
-      leme_public_object_set(b, runtime, LEME_PUBLIC_TEXT("schema"), schema) !=
           LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = runtime;
@@ -335,23 +328,17 @@ source_root(void *context, const struct leme_public_model *model,
   return LEME_PUBLIC_INVALID;
 }
 
-enum leme_public_status leme_public_server_capture_work(
-    struct leme_server *server, uint32_t requested_roots,
-    const struct leme_public_work *work, struct leme_public_snapshot **out) {
+enum leme_public_status
+leme_public_server_capture(struct leme_server *server, uint32_t requested_roots,
+                           struct leme_public_snapshot **out) {
   if (out == NULL)
     return LEME_PUBLIC_INVALID;
   *out = NULL;
   if (server == NULL)
     return LEME_PUBLIC_INVALID;
   const struct leme_public_source source = leme_public_server_source(server);
-  return leme_public_model_capture_work(server->public_model, &source,
-                                        requested_roots, work, out);
-}
-
-enum leme_public_status
-leme_public_server_capture(struct leme_server *server, uint32_t requested_roots,
-                           struct leme_public_snapshot **out) {
-  return leme_public_server_capture_work(server, requested_roots, NULL, out);
+  return leme_public_model_capture(server->public_model, &source,
+                                   requested_roots, out);
 }
 
 static uint64_t source_generation(void *context, enum leme_public_root root) {

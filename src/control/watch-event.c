@@ -6,18 +6,10 @@
 #include <inttypes.h>
 #include <stdio.h>
 
-static bool json_work(void *context, size_t units) {
-  return leme_control_charge(context, units) == LEME_CONTROL_OK;
-}
-
-static enum leme_public_status value_work(void *context, size_t units) {
-  return json_work(context, units) ? LEME_PUBLIC_OK : LEME_PUBLIC_LIMIT;
-}
-
-enum leme_control_code leme_control_watch_event_create(
-    struct leme_public_budget *account, size_t maximum,
-    const struct leme_control_watch_event *event,
-    struct leme_control_meter *meter, struct leme_control_frame **out) {
+enum leme_control_code
+leme_control_watch_event_create(size_t maximum,
+                                const struct leme_control_watch_event *event,
+                                struct leme_control_frame **out) {
   if (out == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *out = NULL;
@@ -45,8 +37,7 @@ enum leme_control_code leme_control_watch_event_create(
     return LEME_CONTROL_RESOURCE_LIMIT;
 
   struct leme_json json = {0};
-  leme_json_init_budget(&json, account, maximum + 1);
-  leme_json_set_meter(&json, meter, meter != NULL ? json_work : NULL);
+  leme_json_init_limit(&json, maximum + 1);
   leme_json_object_begin(&json);
   leme_json_key(&json, "type");
   leme_json_string(&json, "event");
@@ -64,16 +55,10 @@ enum leme_control_code leme_control_watch_event_create(
   leme_json_string_n(&json, sequence, (size_t)sequence_length);
   leme_json_key(&json, "instance");
   leme_json_string_n(&json, event->instance.data, event->instance.length);
-  leme_json_key(&json, "revision");
-  if (!terminal && !suspended && event->sensitive &&
-      event->revision.data != NULL)
-    leme_json_string_n(&json, event->revision.data, event->revision.length);
-  else
-    leme_json_null(&json);
   bool serialized = false;
   if (terminal) {
     leme_json_key(&json, "error");
-    serialized = leme_control_error_write_json(&json, event->error, meter);
+    serialized = leme_control_error_write_json(&json, event->error);
   } else if (suspended) {
     leme_json_key(&json, "reason");
     leme_json_string(&json, "session_locked");
@@ -84,10 +69,7 @@ enum leme_control_code leme_control_watch_event_create(
       leme_json_string(&json, "unlock");
     }
     leme_json_key(&json, "value");
-    const struct leme_public_work work = {.context = meter, .step = value_work};
-    serialized = leme_public_write_json_work(event->value, &json,
-                                             meter != NULL ? &work : NULL) ==
-                 LEME_PUBLIC_OK;
+    serialized = leme_public_write_json(event->value, &json) == LEME_PUBLIC_OK;
   }
   leme_json_object_end(&json);
 
@@ -95,10 +77,9 @@ enum leme_control_code leme_control_watch_event_create(
   if (!serialized || json.failed || json.length > maximum)
     goto cleanup;
   leme_json_append(&json, "\n", 1);
-  if (json.failed ||
-      leme_control_charge(meter, json.length / 128 + 1) != LEME_CONTROL_OK)
+  if (json.failed)
     goto cleanup;
-  code = leme_control_frame_create(account, json.data, json.length, out);
+  code = leme_control_frame_create(json.data, json.length, out);
   if (code == LEME_CONTROL_OK) {
     leme_control_frame_set_metadata(*out,
                                     terminal ? LEME_CONTROL_FRAME_TERMINAL_EVENT

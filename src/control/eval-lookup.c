@@ -356,84 +356,6 @@ static enum leme_control_code eval_by_id(struct evaluator *ev,
   return LEME_CONTROL_OK;
 }
 
-static enum leme_control_code
-eval_describe(struct evaluator *ev, const struct leme_control_node *node,
-              const struct leme_public_value **out) {
-  const struct leme_public_value *arg0 = NULL;
-  enum leme_control_code code =
-      eval_node(ev, node->as.call.arg_indices[0], &arg0);
-  if (code != LEME_CONTROL_OK)
-    return code;
-  const struct leme_public_value *arg1 = NULL;
-  code = eval_node(ev, node->as.call.arg_indices[1], &arg1);
-  if (code != LEME_CONTROL_OK)
-    return code;
-
-  if (arg0 == NULL || leme_public_kind(arg0) != LEME_PUBLIC_STRING)
-    return eval_set_error(ev, "/expr", LEME_CONTROL_TYPE_ERROR,
-                          "describe category must be a string");
-  if (arg1 == NULL || leme_public_kind(arg1) != LEME_PUBLIC_STRING)
-    return eval_set_error(ev, "/expr", LEME_CONTROL_TYPE_ERROR,
-                          "describe target must be a string");
-
-  struct leme_public_text cat = {0};
-  leme_public_as_text(arg0, &cat);
-  struct leme_public_text target = {0};
-  leme_public_as_text(arg1, &target);
-
-  struct leme_public_value *res = NULL;
-  if (cat.length == 8 && memcmp(cat.data, "operator", 8) == 0) {
-    const struct leme_public_operation *op =
-        leme_control_operation_find(target);
-    if (op == NULL)
-      return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
-                            "operator not found");
-    enum leme_public_status st =
-        leme_public_operation_value(ev->builder, op, &res);
-    if (st != LEME_PUBLIC_OK) {
-      enum leme_control_code c =
-          (st == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
-                                   : LEME_CONTROL_OUT_OF_MEMORY);
-      return eval_set_error(ev, "/expr", c,
-                            "operation descriptor build failed");
-    }
-  } else if (cat.length == 4 && memcmp(cat.data, "root", 4) == 0) {
-    enum leme_public_status st =
-        leme_public_root_describe(ev->builder, target, &res);
-    if (st == LEME_PUBLIC_NOT_FOUND)
-      return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
-                            "root not found");
-    if (st != LEME_PUBLIC_OK) {
-      enum leme_control_code c =
-          (st == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
-                                   : LEME_CONTROL_OUT_OF_MEMORY);
-      return eval_set_error(ev, "/expr", c, "root descriptor build failed");
-    }
-  } else if (cat.length == 4 && memcmp(cat.data, "type", 4) == 0) {
-    enum leme_public_status st =
-        leme_public_type_describe(ev->builder, target, NULL, &res);
-    if (st == LEME_PUBLIC_NOT_FOUND)
-      return eval_set_error(ev, "/expr", LEME_CONTROL_NOT_FOUND,
-                            "type not found");
-    if (st != LEME_PUBLIC_OK) {
-      enum leme_control_code c =
-          (st == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
-                                   : LEME_CONTROL_OUT_OF_MEMORY);
-      return eval_set_error(ev, "/expr", c, "type descriptor build failed");
-    }
-  } else {
-    return eval_set_error(ev, "/expr", LEME_CONTROL_INVALID_ARGUMENT,
-                          "invalid describe category");
-  }
-
-  if (leme_control_charge(&ev->meter, 1) != LEME_CONTROL_OK)
-    return eval_set_error(ev, "/expr", LEME_CONTROL_RESOURCE_LIMIT,
-                          "work limit exceeded");
-
-  *out = res;
-  return LEME_CONTROL_OK;
-}
-
 enum leme_control_code eval_lookup_call(struct evaluator *ev,
                                         const struct leme_control_node *node,
                                         const struct leme_public_value **out) {
@@ -455,8 +377,6 @@ enum leme_control_code eval_lookup_call(struct evaluator *ev,
     return eval_tag(ev, node, out);
   case LEME_CONTROL_OP_BY_ID:
     return eval_by_id(ev, node, out);
-  case LEME_CONTROL_OP_DESCRIBE:
-    return eval_describe(ev, node, out);
   default:
     return eval_set_error(ev, "/expr", LEME_CONTROL_UNSUPPORTED,
                           "unsupported lookup operator");

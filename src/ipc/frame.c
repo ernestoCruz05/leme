@@ -1,11 +1,8 @@
 
 #include "ipc/frame.h"
 #include "control/error.h"
-#include "control/memory.h"
-#include "public/budget.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -13,7 +10,6 @@
 #include <string.h>
 
 struct leme_control_frame {
-  struct leme_public_budget *account;
   size_t length;
   size_t capacity;
   char *bytes;
@@ -25,39 +21,14 @@ struct leme_control_frame {
 };
 
 struct leme_control_framer {
-  struct leme_public_budget *account;
   size_t max_record_bytes;
   char *buffer;
   size_t capacity;
   size_t length;
 };
 
-static void *frame_alloc(struct leme_public_budget *account, size_t bytes) {
-  if (account != NULL) {
-    return leme_control_alloc(account, bytes);
-  }
-  return malloc(bytes);
-}
-
-static void frame_free(struct leme_public_budget *account, void *ptr) {
-  if (ptr == NULL) {
-    return;
-  }
-  if (account != NULL) {
-    leme_control_free(ptr);
-  } else {
-    free(ptr);
-  }
-}
-
-static enum leme_control_code allocation_error(void) {
-  return errno == ENOSPC || errno == EOVERFLOW ? LEME_CONTROL_RESOURCE_LIMIT
-                                               : LEME_CONTROL_OUT_OF_MEMORY;
-}
-
 enum leme_control_code
-leme_control_frame_create_capacity(struct leme_public_budget *account,
-                                   size_t capacity,
+leme_control_frame_create_capacity(size_t capacity,
                                    struct leme_control_frame **out) {
   if (out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
@@ -67,21 +38,18 @@ leme_control_frame_create_capacity(struct leme_public_budget *account,
   if (capacity == SIZE_MAX)
     return LEME_CONTROL_RESOURCE_LIMIT;
 
-  struct leme_control_frame *frame = frame_alloc(account, sizeof(*frame));
+  struct leme_control_frame *frame = malloc(sizeof(*frame));
   if (frame == NULL) {
-    return allocation_error();
+    return LEME_CONTROL_OUT_OF_MEMORY;
   }
 
-  size_t alloc_bytes = capacity + 1;
-  char *copy = frame_alloc(account, alloc_bytes);
+  char *copy = malloc(capacity + 1);
   if (copy == NULL) {
-    const enum leme_control_code code = allocation_error();
-    frame_free(account, frame);
-    return code;
+    free(frame);
+    return LEME_CONTROL_OUT_OF_MEMORY;
   }
   copy[0] = '\0';
 
-  frame->account = account;
   frame->length = 0;
   frame->capacity = capacity;
   frame->bytes = copy;
@@ -95,10 +63,9 @@ leme_control_frame_create_capacity(struct leme_public_budget *account,
 }
 
 enum leme_control_code
-leme_control_frame_create(struct leme_public_budget *account, const char *bytes,
-                          size_t length, struct leme_control_frame **out) {
-  enum leme_control_code code =
-      leme_control_frame_create_capacity(account, length, out);
+leme_control_frame_create(const char *bytes, size_t length,
+                          struct leme_control_frame **out) {
+  enum leme_control_code code = leme_control_frame_create_capacity(length, out);
   if (code != LEME_CONTROL_OK) {
     return code;
   }
@@ -114,9 +81,8 @@ void leme_control_frame_destroy(struct leme_control_frame *frame) {
   if (frame == NULL) {
     return;
   }
-  struct leme_public_budget *account = frame->account;
-  frame_free(account, frame->bytes);
-  frame_free(account, frame);
+  free(frame->bytes);
+  free(frame);
 }
 
 const char *leme_control_frame_bytes(const struct leme_control_frame *frame) {
@@ -201,20 +167,18 @@ const char *leme_control_frame_id(const struct leme_control_frame *frame,
 }
 
 enum leme_control_code
-leme_control_framer_create(struct leme_public_budget *account,
-                           size_t max_record_bytes,
+leme_control_framer_create(size_t max_record_bytes,
                            struct leme_control_framer **out) {
   if (out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
   *out = NULL;
 
-  struct leme_control_framer *framer = frame_alloc(account, sizeof(*framer));
+  struct leme_control_framer *framer = malloc(sizeof(*framer));
   if (framer == NULL) {
-    return allocation_error();
+    return LEME_CONTROL_OUT_OF_MEMORY;
   }
 
-  framer->account = account;
   framer->max_record_bytes = max_record_bytes;
   framer->buffer = NULL;
   framer->capacity = 0;
@@ -227,9 +191,8 @@ void leme_control_framer_destroy(struct leme_control_framer *framer) {
   if (framer == NULL) {
     return;
   }
-  struct leme_public_budget *account = framer->account;
-  frame_free(account, framer->buffer);
-  frame_free(account, framer);
+  free(framer->buffer);
+  free(framer);
 }
 
 size_t
@@ -267,13 +230,13 @@ leme_control_framer_feed(struct leme_control_framer *framer, const char *bytes,
     struct leme_control_frame *frame = NULL;
     if (framer->length == 0) {
       enum leme_control_code code =
-          leme_control_frame_create(framer->account, bytes, chunk_len, &frame);
+          leme_control_frame_create(bytes, chunk_len, &frame);
       if (code != LEME_CONTROL_OK) {
         return code;
       }
     } else {
-      enum leme_control_code code = leme_control_frame_create(
-          framer->account, NULL, total_record_len, &frame);
+      enum leme_control_code code =
+          leme_control_frame_create(NULL, total_record_len, &frame);
       if (code != LEME_CONTROL_OK) {
         return code;
       }
@@ -303,18 +266,9 @@ leme_control_framer_feed(struct leme_control_framer *framer, const char *bytes,
     while (new_cap < new_len) {
       new_cap *= 2;
     }
-    char *new_buf = NULL;
-    if (framer->account != NULL) {
-      if (framer->buffer != NULL) {
-        new_buf = leme_control_realloc(framer->buffer, new_cap);
-      } else {
-        new_buf = leme_control_alloc(framer->account, new_cap);
-      }
-    } else {
-      new_buf = realloc(framer->buffer, new_cap);
-    }
+    char *new_buf = realloc(framer->buffer, new_cap);
     if (new_buf == NULL) {
-      return allocation_error();
+      return LEME_CONTROL_OUT_OF_MEMORY;
     }
     framer->buffer = new_buf;
     framer->capacity = new_cap;

@@ -1,13 +1,12 @@
 #include "control/watch-internal.h"
 #include "control/watch-event.h"
-#include "control/memory.h"
 #include "control/reply.h"
 #include "public/json.h"
 
 #include <assert.h>
-#include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static enum leme_control_code fail(struct leme_control_error *error,
@@ -24,32 +23,6 @@ static enum leme_control_code fail(struct leme_control_error *error,
     }
   }
   return code;
-}
-
-static enum leme_public_status work_step(void *context, size_t units) {
-  return leme_control_charge(context, units) == LEME_CONTROL_OK
-             ? LEME_PUBLIC_OK
-             : LEME_PUBLIC_LIMIT;
-}
-
-static enum leme_public_status capture_step(void *context, size_t units) {
-  const size_t chunks = units / 128 + (units % 128 != 0 ? 1u : 0u);
-  return work_step(context, chunks);
-}
-
-static struct leme_control_meter
-meter_for(const struct leme_control_watch_set *set,
-          const struct leme_control_context *context) {
-  const uint64_t now = leme_control_now_ns(NULL);
-  uint64_t deadline = set->limits.deadline_ns > UINT64_MAX - now
-                          ? UINT64_MAX
-                          : now + set->limits.deadline_ns;
-  const uint64_t outer = leme_control_context_deadline(context);
-  if (outer != 0 && outer < deadline)
-    deadline = outer;
-  return (struct leme_control_meter){.remaining = set->limits.work_units,
-                                     .deadline_ns = deadline,
-                                     .now_ns = leme_control_now_ns};
 }
 
 static void remove_slot(struct leme_control_watch_set *set,
@@ -77,26 +50,21 @@ static void close_set(struct leme_control_watch_set *set) {
 }
 
 enum leme_control_code
-leme_control_watch_set_create(struct leme_public_budget *account,
-                              const struct leme_control_limits *limits,
+leme_control_watch_set_create(const struct leme_control_limits *limits,
                               const struct leme_control_watch_sink *sink,
                               struct leme_control_watch_set **out) {
   if (out == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *out = NULL;
-  if (account == NULL || limits == NULL || sink == NULL ||
-      sink->publish == NULL || sink->discard == NULL || sink->close == NULL ||
+  if (limits == NULL || sink == NULL || sink->publish == NULL ||
+      sink->discard == NULL || sink->close == NULL ||
       limits->subscriptions > LEME_CONTROL_WATCH_MAX)
     return LEME_CONTROL_INVALID_ARGUMENT;
-  struct leme_control_watch_set *set =
-      leme_control_alloc(account, sizeof(*set));
+  struct leme_control_watch_set *set = malloc(sizeof(*set));
   if (set == NULL)
-    return errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
-                           : LEME_CONTROL_OUT_OF_MEMORY;
-  *set = (struct leme_control_watch_set){.account = account,
-                                         .limits = *limits,
-                                         .sink = *sink,
-                                         .next_subscription = 1};
+    return LEME_CONTROL_OUT_OF_MEMORY;
+  *set = (struct leme_control_watch_set){
+      .limits = *limits, .sink = *sink, .next_subscription = 1};
   *out = set;
   return LEME_CONTROL_OK;
 }
@@ -108,27 +76,24 @@ void leme_control_watch_set_destroy(struct leme_control_watch_set *set) {
     assert(!set->slots[i].busy);
     remove_slot(set, &set->slots[i]);
   }
-  leme_control_free(set);
+  free(set);
 }
 
 static enum leme_control_code
 acknowledgement(struct leme_control_watch_set *set,
                 const struct leme_control_request *request,
                 struct leme_public_text instance, uint64_t subscription,
-                struct leme_control_meter *meter,
                 struct leme_control_frame **out) {
   const struct leme_public_text id = leme_control_request_id(request);
   struct leme_public_builder *builder = NULL;
   struct leme_public_value *value = NULL;
   enum leme_control_code code = LEME_CONTROL_OK;
-  const struct leme_public_work work = {.context = meter, .step = work_step};
   if (subscription != 0) {
     enum leme_public_status status =
-        leme_public_builder_create_budget(set->account, 2048, &builder);
+        leme_public_builder_create(2048, NULL, &builder);
     if (status != LEME_PUBLIC_OK)
       return status == LEME_PUBLIC_OOM ? LEME_CONTROL_OUT_OF_MEMORY
                                        : LEME_CONTROL_RESOURCE_LIMIT;
-    leme_public_builder_set_work(builder, &work);
     char token[32] = {0};
     const int length =
         snprintf(token, sizeof(token), "sub:%" PRIu64, subscription);
@@ -150,9 +115,9 @@ acknowledgement(struct leme_control_watch_set *set,
       goto cleanup;
     }
   }
-  code = leme_control_reply_create_value_metered(
-      set->account, set->limits.response_bytes, id.data, id.length,
-      instance.data, instance.length, NULL, 0, value, meter, out);
+  code = leme_control_reply_create_value(set->limits.response_bytes, id.data,
+                                         id.length, instance.data,
+                                         instance.length, value, out);
   if (code == LEME_CONTROL_OK)
     leme_control_frame_set_metadata(*out, LEME_CONTROL_FRAME_OTHER, false,
                                     id.data, id.length);
@@ -195,11 +160,10 @@ unwatch(struct leme_control_watch_set *set,
     break;
   }
   struct leme_control_frame *frame = NULL;
-  struct leme_control_meter meter = meter_for(set, context);
   enum leme_control_code code = acknowledgement(
       set, request,
       leme_public_model_instance(leme_control_context_model(context)), 0,
-      &meter, &frame);
+      &frame);
   if (code == LEME_CONTROL_OK)
     code = set->sink.publish(set->sink.context, &frame, 1);
   leme_control_frame_destroy(frame);
@@ -218,8 +182,7 @@ enum leme_control_code leme_control_watch_request(
   if (error == NULL)
     error = &local_error;
   *error = (struct leme_control_error){0};
-  if (set == NULL || context == NULL || request == NULL || set->closed ||
-      leme_control_context_account(context) != set->account)
+  if (set == NULL || context == NULL || request == NULL || set->closed)
     return fail(error, LEME_CONTROL_INVALID_ARGUMENT,
                 LEME_PUBLIC_TEXT("invalid watch context"));
   const enum leme_control_request_op operation =
@@ -255,22 +218,19 @@ enum leme_control_code leme_control_watch_request(
   leme_control_request_ref(request);
   const uint64_t epoch = set->dirty_epoch;
   const uint64_t privacy = set->privacy_epoch;
-  struct leme_control_meter meter = meter_for(set, context);
-  const struct leme_public_work work = {.context = &meter,
-                                        .step = capture_step};
   struct leme_public_snapshot *snapshot = NULL;
   struct leme_control_evaluation *candidate = NULL;
   struct leme_control_frame *frames[2] = {0};
-  enum leme_control_code code = leme_control_compile_work(
-      context, request, &meter, &slot->program, error);
+  enum leme_control_code code =
+      leme_control_compile(context, request, &slot->program, error);
   if (code != LEME_CONTROL_OK)
     goto cleanup;
   slot->roots = leme_control_program_roots(slot->program);
   slot->sensitive = (slot->roots & ~LEME_PUBLIC_SAFE_ROOTS) != 0;
   if (slot->roots != 0) {
-    const enum leme_public_status status = leme_public_model_capture_work(
+    const enum leme_public_status status = leme_public_model_capture(
         leme_control_context_model(context),
-        leme_control_context_source(context), slot->roots, &work, &snapshot);
+        leme_control_context_source(context), slot->roots, &snapshot);
     if (status != LEME_PUBLIC_OK) {
       code = fail(error,
                   status == LEME_PUBLIC_LOCKED ? LEME_CONTROL_SESSION_LOCKED
@@ -285,14 +245,14 @@ enum leme_control_code leme_control_watch_request(
                 LEME_PUBLIC_TEXT("watch interrupted by session lock"));
     goto cleanup;
   }
-  code = leme_control_evaluate_work(context, slot->program, snapshot, &meter,
-                                    &candidate, error);
+  code = leme_control_evaluate(context, slot->program, snapshot, &candidate,
+                               error);
   if (code != LEME_CONTROL_OK)
     goto cleanup;
   const struct leme_public_text instance =
       leme_public_model_instance(leme_control_context_model(context));
-  code = acknowledgement(set, request, instance, slot->subscription, &meter,
-                         &frames[0]);
+  code =
+      acknowledgement(set, request, instance, slot->subscription, &frames[0]);
   if (code != LEME_CONTROL_OK)
     goto cleanup;
   const struct leme_control_watch_event event = {
@@ -300,16 +260,14 @@ enum leme_control_code leme_control_watch_request(
       .subscription = slot->subscription,
       .sequence = 1,
       .instance = instance,
-      .revision = leme_public_snapshot_revision(snapshot),
       .value = leme_control_evaluation_value(candidate),
       .sensitive = slot->sensitive};
-  code = leme_control_watch_event_create(
-      set->account, set->limits.response_bytes, &event, &meter, &frames[1]);
+  code = leme_control_watch_event_create(set->limits.response_bytes, &event,
+                                         &frames[1]);
   if (code != LEME_CONTROL_OK)
     goto cleanup;
   if (set->closed || slot->state != LEME_WATCH_ARMING ||
-      (slot->sensitive && privacy != set->privacy_epoch) ||
-      leme_control_charge(&meter, 0) != LEME_CONTROL_OK) {
+      (slot->sensitive && privacy != set->privacy_epoch)) {
     code = fail(error, LEME_CONTROL_RESOURCE_LIMIT,
                 LEME_PUBLIC_TEXT("watch publication interrupted"));
     goto cleanup;
@@ -415,8 +373,7 @@ bool leme_control_watch_has_work(const struct leme_control_watch_set *set) {
 
 void leme_control_watch_step(struct leme_control_watch_set *set,
                              struct leme_control_context *context) {
-  if (set == NULL || context == NULL || set->closed ||
-      leme_control_context_account(context) != set->account)
+  if (set == NULL || context == NULL || set->closed)
     return;
   struct leme_control_watch_slot *slot = NULL;
   for (size_t offset = 0; offset < set->limits.subscriptions; ++offset) {
@@ -441,10 +398,6 @@ void leme_control_watch_step(struct leme_control_watch_set *set,
   struct leme_public_snapshot *snapshot = NULL;
   struct leme_control_frame *frame = NULL;
   struct leme_control_error error = {0};
-  struct leme_control_meter meter = meter_for(set, context);
-  const struct leme_public_work work = {.context = &meter, .step = work_step};
-  const struct leme_public_work capture_work = {.context = &meter,
-                                                .step = capture_step};
   enum leme_control_code code = LEME_CONTROL_OK;
   if (slot->suspension_pending) {
     if (slot->sequence == UINT64_MAX) {
@@ -464,8 +417,8 @@ void leme_control_watch_step(struct leme_control_watch_set *set,
         .sequence = slot->sequence + 1,
         .instance =
             leme_public_model_instance(leme_control_context_model(context))};
-    code = leme_control_watch_event_create(
-        set->account, set->limits.response_bytes, &notice, &meter, &frame);
+    code = leme_control_watch_event_create(set->limits.response_bytes, &notice,
+                                           &frame);
     if (code == LEME_CONTROL_OK)
       code = set->sink.publish(set->sink.context, &frame, 1);
     if (code != LEME_CONTROL_OK || set->closed ||
@@ -480,10 +433,9 @@ void leme_control_watch_step(struct leme_control_watch_set *set,
     goto cleanup;
   }
   if (slot->roots != 0) {
-    const enum leme_public_status status =
-        leme_public_model_capture_work(leme_control_context_model(context),
-                                       leme_control_context_source(context),
-                                       slot->roots, &capture_work, &snapshot);
+    const enum leme_public_status status = leme_public_model_capture(
+        leme_control_context_model(context),
+        leme_control_context_source(context), slot->roots, &snapshot);
     if (status == LEME_PUBLIC_LOCKED && !slot->sensitive && !set->closed &&
         slot->state == LEME_WATCH_ACTIVE) {
       slot->baseline = previous;
@@ -500,28 +452,16 @@ void leme_control_watch_step(struct leme_control_watch_set *set,
       goto terminal;
     }
   }
-  code = leme_control_evaluate_work(context, slot->program, snapshot, &meter,
-                                    &candidate, &error);
+  code = leme_control_evaluate(context, slot->program, snapshot, &candidate,
+                               &error);
   if (code != LEME_CONTROL_OK)
     goto terminal;
   if (set->closed || slot->state != LEME_WATCH_ACTIVE ||
       (slot->sensitive && privacy != set->privacy_epoch))
     goto cleanup;
-  bool same = false;
-  const enum leme_public_status equal_status =
-      slot->reset
-          ? LEME_PUBLIC_OK
-          : leme_public_equal_checked(leme_control_evaluation_value(previous),
-                                      leme_control_evaluation_value(candidate),
-                                      &work, &same);
-  if (equal_status != LEME_PUBLIC_OK) {
-    code = fail(&error,
-                equal_status == LEME_PUBLIC_OOM ? LEME_CONTROL_OUT_OF_MEMORY
-                                                : LEME_CONTROL_RESOURCE_LIMIT,
-                LEME_PUBLIC_TEXT("watch comparison failed"));
-    error.phase = LEME_CONTROL_EVALUATE;
-    goto terminal;
-  }
+  const bool same = !slot->reset &&
+                    leme_public_equal(leme_control_evaluation_value(previous),
+                                      leme_control_evaluation_value(candidate));
   if (same) {
     slot->baseline = previous;
     previous = NULL;
@@ -540,22 +480,15 @@ void leme_control_watch_step(struct leme_control_watch_set *set,
       .sequence = slot->sequence + 1,
       .instance =
           leme_public_model_instance(leme_control_context_model(context)),
-      .revision = leme_public_snapshot_revision(snapshot),
       .value = leme_control_evaluation_value(candidate),
       .sensitive = slot->sensitive};
-  code = leme_control_watch_event_create(
-      set->account, set->limits.response_bytes, &event, &meter, &frame);
+  code = leme_control_watch_event_create(set->limits.response_bytes, &event,
+                                         &frame);
   if (code != LEME_CONTROL_OK)
     goto terminal;
   if (set->closed || slot->state != LEME_WATCH_ACTIVE ||
       (slot->sensitive && privacy != set->privacy_epoch))
     goto cleanup;
-  if (leme_control_charge(&meter, 0) != LEME_CONTROL_OK) {
-    code = fail(&error, LEME_CONTROL_RESOURCE_LIMIT,
-                LEME_PUBLIC_TEXT("watch budget exceeded"));
-    error.phase = LEME_CONTROL_EVALUATE;
-    goto terminal;
-  }
   code = set->sink.publish(set->sink.context, &frame, 1);
   if (code != LEME_CONTROL_OK || set->closed ||
       slot->state != LEME_WATCH_ACTIVE ||
@@ -590,8 +523,8 @@ terminal:
           leme_public_model_instance(leme_control_context_model(context)),
       .error = &error,
       .sensitive = slot->sensitive};
-  code = leme_control_watch_event_create(
-      set->account, set->limits.response_bytes, &failure, NULL, &frame);
+  code = leme_control_watch_event_create(set->limits.response_bytes, &failure,
+                                         &frame);
   if (code == LEME_CONTROL_OK)
     code = set->sink.publish(set->sink.context, &frame, 1);
   if (code != LEME_CONTROL_OK || set->closed ||

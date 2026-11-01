@@ -117,11 +117,8 @@ leme_config_public_capture(struct leme_public_builder *b,
   const struct leme_config *effective = server->config_store != NULL
                                             ? server->config_store->effective
                                             : server->config;
-  const struct leme_public_features features =
-      leme_public_server_features(server);
   struct leme_public_value *loaded_settings = NULL;
   struct leme_public_value *effective_settings = NULL;
-  struct leme_public_value *metadata = NULL;
   struct leme_public_value *diagnostics = NULL;
   struct leme_public_value *overrides = NULL;
   struct leme_public_value *record = NULL;
@@ -137,10 +134,8 @@ leme_config_public_capture(struct leme_public_builder *b,
   }
   if (leme_config_public_diagnostics(b, baseline, &diagnostics) !=
           LEME_PUBLIC_OK ||
-      leme_public_settings_schema_value(b, effective_settings, &features,
-                                        &metadata) != LEME_PUBLIC_OK ||
       capture_overrides(b, server, &overrides) != LEME_PUBLIC_OK ||
-      leme_public_object(b, 6, &record) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 5, &record) != LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("path"),
                            baseline->path) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("loaded"),
@@ -150,15 +145,8 @@ leme_config_public_capture(struct leme_public_builder *b,
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("overrides"),
                              overrides) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("diagnostics"),
-                             diagnostics) != LEME_PUBLIC_OK ||
-      leme_public_object_set(b, record, LEME_PUBLIC_TEXT("settings_schema"),
-                             metadata) != LEME_PUBLIC_OK) {
+                             diagnostics) != LEME_PUBLIC_OK) {
     return leme_public_builder_status(b);
-  }
-  const enum leme_public_status status = leme_public_schema_validate(
-      leme_public_root_schema(LEME_PUBLIC_CONFIG), record);
-  if (status != LEME_PUBLIC_OK) {
-    return leme_public_fail(b, status);
   }
   *out = record;
   return LEME_PUBLIC_OK;
@@ -260,9 +248,6 @@ enum leme_public_status leme_config_public_merge(
   struct leme_public_value *record = NULL;
   if (merge_records(b, lhs, rhs, true, &record) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
-  const enum leme_public_status status = leme_public_settings_validate(record);
-  if (status != LEME_PUBLIC_OK)
-    return leme_public_fail(b, status);
   *out = record;
   return LEME_PUBLIC_OK;
 }

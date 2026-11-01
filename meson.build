@@ -67,7 +67,6 @@ leme_public_core_sources = files(
   'src/public/value.c',
   'src/public/arena.c',
   'src/public/utf8.c',
-  'src/public/budget.c',
 )
 
 leme_sources = files(
@@ -165,7 +164,7 @@ leme_sources = files(
 leme_sources += [output_power_header]
 leme_sources += leme_public_core_sources
 leme_public_model_sources = files('src/public/schema.c', 'src/public/model.c', 'src/public/model-cache.c', 'src/public/identity.c')
-leme_control_core_sources = files('src/control/limits.c', 'src/control/memory.c', 'src/control/decode.c', 'src/control/number.c', 'src/control/source.c', 'src/control/request.c', 'src/control/registry.c', 'src/control/registry-value.c', 'src/control/types.c', 'src/control/control.c', 'src/control/expr.c', 'src/control/validate.c', 'src/control/eval.c', 'src/control/eval-scalar.c', 'src/control/eval-lookup.c', 'src/control/eval-collection.c', 'src/control/action.c', 'src/control/targets.c', 'src/control/execute.c', 'src/control/command.c', 'src/core/command_parse.c')
+leme_control_core_sources = files('src/control/limits.c', 'src/control/decode.c', 'src/control/number.c', 'src/control/source.c', 'src/control/request.c', 'src/control/registry.c', 'src/control/types.c', 'src/control/control.c', 'src/control/expr.c', 'src/control/validate.c', 'src/control/eval.c', 'src/control/eval-scalar.c', 'src/control/eval-lookup.c', 'src/control/eval-collection.c', 'src/control/act.c', 'src/core/command_parse.c')
 leme_control_ipc_sources = files('src/control/reply.c', 'src/ipc/frame.c', 'src/ipc/queue.c', 'src/ipc/connection.c', 'src/ipc/schedule.c', 'src/control/dispatch.c', 'src/control/watch.c', 'src/control/watch-event.c', 'src/ipc/watch-peer.c')
 leme_sources += files('src/public/json.c', 'src/public/server.c') + leme_public_model_sources + leme_control_core_sources + leme_control_ipc_sources
 

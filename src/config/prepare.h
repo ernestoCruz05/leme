@@ -3,7 +3,6 @@
 
 #include "control/action.h"
 #include "control/error.h"
-#include "public/budget.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -14,7 +13,6 @@ struct leme_config_reload;
 
 enum leme_control_code
 leme_config_reload_prepare(struct leme_server *server, struct leme_config *next,
-                           struct leme_public_budget *account,
                            struct leme_config_reload **out,
                            struct leme_control_error *error);
 

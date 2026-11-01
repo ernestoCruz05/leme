@@ -344,6 +344,8 @@ void leme_config_tag_settings(const struct leme_config *config, uint16_t id,
                               struct leme_tag_settings *settings);
 const struct leme_scratchpad_config *
 leme_config_scratchpad(const struct leme_config *config, const char *name);
+bool leme_config_validate_command(const struct leme_config *config,
+                                  const struct leme_command *command);
 const char *leme_config_path(void);
 void leme_config_launch_startup(struct leme_server *server);
 

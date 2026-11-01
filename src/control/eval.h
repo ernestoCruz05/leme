@@ -16,14 +16,6 @@ leme_control_evaluate(struct leme_control_context *context,
                       struct leme_control_evaluation **out,
                       struct leme_control_error *error);
 
-enum leme_control_code
-leme_control_evaluate_work(struct leme_control_context *context,
-                           const struct leme_control_program *program,
-                           const struct leme_public_snapshot *snapshot,
-                           struct leme_control_meter *meter,
-                           struct leme_control_evaluation **out,
-                           struct leme_control_error *error);
-
 const struct leme_public_value *
 leme_control_evaluation_value(const struct leme_control_evaluation *evaluation);
 

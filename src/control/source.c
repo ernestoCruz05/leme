@@ -289,17 +289,15 @@ static enum leme_control_code read_expr(struct reader *r, size_t level,
 }
 
 enum leme_control_code leme_control_source_read(
-    struct leme_public_budget *account, struct leme_public_text source,
-    const struct leme_control_limits *limits,
+    struct leme_public_text source, const struct leme_control_limits *limits,
     struct leme_public_builder **owner, const struct leme_public_value **out,
     struct leme_control_error *error) {
   *owner = NULL;
   *out = NULL;
   struct reader r = {.text = source, .error = error};
-  enum leme_control_code code =
-      built(&r, 0,
-            leme_public_builder_create_budget(account, limits->retained_bytes,
-                                              &r.builder));
+  enum leme_control_code code = built(
+      &r, 0,
+      leme_public_builder_create(limits->retained_bytes, NULL, &r.builder));
   if (code != LEME_CONTROL_OK)
     return code;
   struct leme_public_value *root = NULL;

@@ -1,22 +1,14 @@
 #include "control/expr.h"
 
 #include "control/control.h"
-#include "control/memory.h"
 #include "control/validate.h"
 #include "public/schema.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-
-static uint64_t monotonic_now_ns(void *context) {
-  return leme_control_now_ns(context);
-}
 
 struct leme_control_program {
-  struct leme_public_budget *account;
   const struct leme_control_request *request;
   struct leme_control_node *nodes;
   size_t node_count;
@@ -31,7 +23,6 @@ struct leme_control_program {
 
 struct compiler {
   struct leme_control_context *context;
-  struct leme_public_budget *account;
   const struct leme_control_limits *limits;
   enum leme_control_request_op request_op;
   struct leme_control_program *program;
@@ -99,14 +90,11 @@ static enum leme_control_code reserve_node(struct compiler *c,
 
     struct leme_control_node *new_nodes =
         c->program->nodes == NULL
-            ? leme_control_alloc(c->account,
-                                 new_cap * sizeof(struct leme_control_node))
-            : leme_control_realloc(c->program->nodes,
-                                   new_cap * sizeof(struct leme_control_node));
+            ? malloc(new_cap * sizeof(struct leme_control_node))
+            : realloc(c->program->nodes,
+                      new_cap * sizeof(struct leme_control_node));
     if (new_nodes == NULL) {
-      enum leme_control_code code = errno == ENOSPC
-                                        ? LEME_CONTROL_RESOURCE_LIMIT
-                                        : LEME_CONTROL_OUT_OF_MEMORY;
+      enum leme_control_code code = LEME_CONTROL_OUT_OF_MEMORY;
       return set_error(c, code, "node allocation failed");
     }
     c->program->nodes = new_nodes;
@@ -133,13 +121,10 @@ static enum leme_control_code reserve_args(struct compiler *c, size_t count,
 
     uint32_t *new_pool =
         c->program->arg_pool == NULL
-            ? leme_control_alloc(c->account, new_cap * sizeof(uint32_t))
-            : leme_control_realloc(c->program->arg_pool,
-                                   new_cap * sizeof(uint32_t));
+            ? malloc(new_cap * sizeof(uint32_t))
+            : realloc(c->program->arg_pool, new_cap * sizeof(uint32_t));
     if (new_pool == NULL) {
-      enum leme_control_code code = errno == ENOSPC
-                                        ? LEME_CONTROL_RESOURCE_LIMIT
-                                        : LEME_CONTROL_OUT_OF_MEMORY;
+      enum leme_control_code code = LEME_CONTROL_OUT_OF_MEMORY;
       return set_error(c, code, "arg allocation failed");
     }
     c->program->arg_pool = new_pool;
@@ -567,15 +552,6 @@ leme_control_compile(struct leme_control_context *context,
                      const struct leme_control_request *request,
                      struct leme_control_program **out,
                      struct leme_control_error *error) {
-  return leme_control_compile_work(context, request, NULL, out, error);
-}
-
-enum leme_control_code
-leme_control_compile_work(struct leme_control_context *context,
-                          const struct leme_control_request *request,
-                          struct leme_control_meter *meter,
-                          struct leme_control_program **out,
-                          struct leme_control_error *error) {
   if (out == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *out = NULL;
@@ -587,17 +563,15 @@ leme_control_compile_work(struct leme_control_context *context,
   if (expr == NULL)
     return LEME_CONTROL_INVALID_REQUEST;
 
-  struct leme_public_budget *account = leme_control_context_account(context);
   const struct leme_control_limits *limits =
       leme_control_context_limits(context);
   if (limits == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
 
   struct leme_control_program *prog =
-      leme_control_alloc(account, sizeof(struct leme_control_program));
+      malloc(sizeof(struct leme_control_program));
   if (prog == NULL) {
-    enum leme_control_code code = errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
-                                                  : LEME_CONTROL_OUT_OF_MEMORY;
+    enum leme_control_code code = LEME_CONTROL_OUT_OF_MEMORY;
     if (error != NULL) {
       error->code = code;
       error->phase = LEME_CONTROL_VALIDATE;
@@ -605,32 +579,15 @@ leme_control_compile_work(struct leme_control_context *context,
     return code;
   }
   memset(prog, 0, sizeof(*prog));
-  prog->account = account;
   prog->request = request;
-
-  uint64_t deadline = leme_control_context_deadline(context);
-  if (meter == NULL && deadline == 0 && limits->deadline_ns > 0) {
-    const uint64_t now = monotonic_now_ns(NULL);
-    deadline = limits->deadline_ns > UINT64_MAX - now
-                   ? UINT64_MAX
-                   : now + limits->deadline_ns;
-  }
 
   struct compiler c = {0};
   c.context = context;
-  c.account = account;
   c.limits = limits;
   c.request_op = leme_control_request_operation(request);
   c.program = prog;
   c.error = error;
-  c.meter = (struct leme_control_meter){
-      .remaining = limits != NULL ? limits->work_units : 100000,
-      .deadline_ns = deadline,
-      .context = NULL,
-      .now_ns = monotonic_now_ns,
-  };
-  if (meter != NULL)
-    c.meter = *meter;
+  c.meter = (struct leme_control_meter){.remaining = limits->work_units};
   memcpy(c.path_buf, "/expr", 5);
   c.path_len = 5;
   c.path_buf[5] = '\0';
@@ -638,8 +595,6 @@ leme_control_compile_work(struct leme_control_context *context,
   uint32_t root_idx = 0;
   enum leme_control_code code =
       compile_node(&c, expr, NULL, 1, true, &root_idx);
-  if (meter != NULL)
-    *meter = c.meter;
   if (code != LEME_CONTROL_OK) {
     leme_control_program_destroy(prog);
     return code;
@@ -662,10 +617,10 @@ void leme_control_program_destroy(struct leme_control_program *program) {
   if (program == NULL)
     return;
   if (program->nodes != NULL)
-    leme_control_free(program->nodes);
+    free(program->nodes);
   if (program->arg_pool != NULL)
-    leme_control_free(program->arg_pool);
-  leme_control_free(program);
+    free(program->arg_pool);
+  free(program);
 }
 
 size_t

@@ -19,15 +19,11 @@ struct leme_control_limits leme_control_limits_default(void) {
       .json_depth = 64,
       .expression_depth = 64,
       .expression_nodes = 4096,
-      .field_depth = 16,
       .outstanding = 16,
       .subscriptions = 32,
       .targets = 256,
       .work_units = 100000,
       .output_bytes = 2097152,
       .retained_bytes = 8388608,
-      .snapshot_bytes = 33554432,
-      .total_bytes = 67108864,
-      .deadline_ns = 5000000,
   };
 }

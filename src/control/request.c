@@ -1,8 +1,6 @@
 #include "control/request.h"
-#include "control/memory.h"
 #include "control/source.h"
 
-#include <errno.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -202,19 +200,15 @@ leme_control_request_create(struct leme_control_document **document,
       return LEME_CONTROL_INVALID_REQUEST;
     }
     const enum leme_control_code code = leme_control_source_read(
-        leme_control_document_account(*document), source, limits, &source_owner,
-        &expr_val, error);
+        source, limits, &source_owner, &expr_val, error);
     if (code != LEME_CONTROL_OK)
       return code;
   }
 
-  struct leme_control_request *req = leme_control_alloc(
-      leme_control_document_account(*document), sizeof(*req));
+  struct leme_control_request *req = malloc(sizeof(*req));
   if (req == NULL) {
     leme_public_builder_destroy(source_owner);
-    const enum leme_control_code code = errno == ENOSPC
-                                            ? LEME_CONTROL_RESOURCE_LIMIT
-                                            : LEME_CONTROL_OUT_OF_MEMORY;
+    const enum leme_control_code code = LEME_CONTROL_OUT_OF_MEMORY;
     set_error(error, code, "request allocation failed");
     return code;
   }
@@ -251,7 +245,7 @@ void leme_control_request_destroy(struct leme_control_request *request) {
     return;
   struct leme_control_document *doc = request->document;
   leme_public_builder_destroy(request->source_owner);
-  leme_control_free(request);
+  free(request);
   leme_control_document_destroy(doc);
 }
 

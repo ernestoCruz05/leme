@@ -6,7 +6,6 @@
 #include "ipc/connection.h"
 #include "ipc/connection-internal.h"
 #include "ipc/schedule.h"
-#include "public/budget.h"
 #include "public/model.h"
 #include "public/server.h"
 #include "shell/control.h"
@@ -251,29 +250,9 @@ bool leme_ipc_init(struct leme_server *server) {
   ipc->public_source = leme_public_server_source(server);
   ipc->control_domain = leme_server_control_domain(server);
 
-  struct leme_public_budget *account = NULL;
-  struct leme_public_budget *model_budget =
-      server->public_model != NULL
-          ? leme_public_model_budget_ref(server->public_model)
-          : NULL;
-  if (model_budget != NULL) {
-    if (leme_public_budget_child(model_budget, ipc->limits.total_bytes,
-                                 &account) != LEME_PUBLIC_OK) {
-      leme_public_budget_unref(model_budget);
-      goto fail;
-    }
-    leme_public_budget_unref(model_budget);
-  } else {
-    if (leme_public_budget_create(ipc->limits.total_bytes, NULL, &account) !=
-        LEME_PUBLIC_OK) {
-      goto fail;
-    }
-  }
-
   enum leme_control_code code = leme_control_context_create(
-      server, server->public_model, &ipc->public_source, account, &ipc->limits,
+      server, server->public_model, &ipc->public_source, &ipc->limits,
       &ipc->control_domain, &ipc->context);
-  leme_public_budget_unref(account);
   if (code != LEME_CONTROL_OK) {
     goto fail;
   }

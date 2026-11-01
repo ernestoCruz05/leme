@@ -1,15 +1,11 @@
 #include "control/eval-internal.h"
-#include "control/memory.h"
 #include "public/value-internal.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 struct leme_control_evaluation {
-  struct leme_public_budget *account;
   struct leme_public_builder *builder;
   const struct leme_public_value *value;
 };
@@ -121,7 +117,7 @@ enum leme_control_code eval_node(struct evaluator *ev, uint32_t node_idx,
   }
   case LEME_CONTROL_NODE_CALL: {
     enum leme_control_opcode op = node->as.call.op->opcode;
-    if (op <= LEME_CONTROL_OP_BY_ID || op == LEME_CONTROL_OP_DESCRIBE)
+    if (op <= LEME_CONTROL_OP_BY_ID)
       return eval_lookup_call(ev, node, out);
     if (op >= LEME_CONTROL_OP_WHERE && op <= LEME_CONTROL_OP_FIRST)
       return eval_collection_call(ev, node, out);
@@ -133,49 +129,25 @@ enum leme_control_code eval_node(struct evaluator *ev, uint32_t node_idx,
   }
 }
 
-static uint64_t monotonic_now_ns(void *context) {
-  return leme_control_now_ns(context);
-}
-
-static enum leme_public_status evaluation_work(void *context, size_t units) {
-  return leme_control_charge(context, units) == LEME_CONTROL_OK
-             ? LEME_PUBLIC_OK
-             : LEME_PUBLIC_LIMIT;
-}
-
 enum leme_control_code
 leme_control_evaluate(struct leme_control_context *context,
                       const struct leme_control_program *program,
                       const struct leme_public_snapshot *snapshot,
                       struct leme_control_evaluation **out,
                       struct leme_control_error *error) {
-  return leme_control_evaluate_work(context, program, snapshot, NULL, out,
-                                    error);
-}
-
-enum leme_control_code
-leme_control_evaluate_work(struct leme_control_context *context,
-                           const struct leme_control_program *program,
-                           const struct leme_public_snapshot *snapshot,
-                           struct leme_control_meter *meter,
-                           struct leme_control_evaluation **out,
-                           struct leme_control_error *error) {
   if (out == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
   *out = NULL;
   if (context == NULL || program == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;
 
-  struct leme_public_budget *account = leme_control_context_account(context);
   const struct leme_control_limits *limits =
       leme_control_context_limits(context);
 
   struct leme_control_evaluation *eval =
-      leme_control_alloc(account, sizeof(struct leme_control_evaluation));
+      malloc(sizeof(struct leme_control_evaluation));
   if (eval == NULL) {
-    const enum leme_control_code code = errno == ENOSPC
-                                            ? LEME_CONTROL_RESOURCE_LIMIT
-                                            : LEME_CONTROL_OUT_OF_MEMORY;
+    const enum leme_control_code code = LEME_CONTROL_OUT_OF_MEMORY;
     if (error != NULL) {
       error->code = code;
       error->phase = LEME_CONTROL_EVALUATE;
@@ -183,13 +155,12 @@ leme_control_evaluate_work(struct leme_control_context *context,
     return code;
   }
   memset(eval, 0, sizeof(*eval));
-  eval->account = account;
 
   size_t max_bytes = limits != NULL && limits->response_bytes > 0
                          ? limits->response_bytes
                          : 1048576;
   enum leme_public_status status =
-      leme_public_builder_create_budget(account, max_bytes, &eval->builder);
+      leme_public_builder_create(max_bytes, NULL, &eval->builder);
   if (status != LEME_PUBLIC_OK) {
     enum leme_control_code code =
         (status == LEME_PUBLIC_LIMIT ? LEME_CONTROL_RESOURCE_LIMIT
@@ -198,7 +169,7 @@ leme_control_evaluate_work(struct leme_control_context *context,
       error->code = code;
       error->phase = LEME_CONTROL_EVALUATE;
     }
-    leme_control_free(eval);
+    free(eval);
     return code;
   }
 
@@ -207,30 +178,12 @@ leme_control_evaluate_work(struct leme_control_context *context,
   ev.program = program;
   ev.snapshot = snapshot;
   ev.builder = eval->builder;
-  ev.account = account;
   ev.limits = limits;
-  uint64_t deadline = leme_control_context_deadline(context);
-  if (meter == NULL && deadline == 0 && limits != NULL &&
-      limits->deadline_ns > 0) {
-    const uint64_t now = monotonic_now_ns(NULL);
-    deadline = limits->deadline_ns > UINT64_MAX - now
-                   ? UINT64_MAX
-                   : now + limits->deadline_ns;
-  }
   ev.meter = (struct leme_control_meter){
-      .remaining = limits != NULL ? limits->work_units : 100000,
-      .deadline_ns = deadline,
-      .context = NULL,
-      .now_ns = monotonic_now_ns,
-  };
-  if (meter != NULL)
-    ev.meter = *meter;
+      .remaining = limits != NULL ? limits->work_units : 100000};
   struct leme_control_error local_error = {0};
   ev.error = error != NULL ? error : &local_error;
   ev.current_item = NULL;
-  const struct leme_public_work work = {.context = &ev.meter,
-                                        .step = evaluation_work};
-  leme_public_builder_set_work(eval->builder, &work);
 
   const struct leme_public_value *res = NULL;
   uint32_t root_idx = leme_control_program_root_index(program);
@@ -268,9 +221,6 @@ leme_control_evaluate_work(struct leme_control_context *context,
 
   eval->value = res;
 done:
-  if (meter != NULL)
-    *meter = ev.meter;
-  leme_public_builder_set_work(eval->builder, NULL);
   if (code != LEME_CONTROL_OK) {
     leme_control_evaluation_destroy(eval);
     return code;
@@ -290,5 +240,5 @@ void leme_control_evaluation_destroy(
     return;
   if (evaluation->builder != NULL)
     leme_public_builder_destroy(evaluation->builder);
-  leme_control_free(evaluation);
+  free(evaluation);
 }

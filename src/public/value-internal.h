@@ -4,7 +4,6 @@
 #include "public/value.h"
 
 struct leme_public_chunk;
-struct leme_public_budget;
 struct leme_public_member {
   struct leme_public_text key;
   const struct leme_public_value *value;
@@ -38,20 +37,13 @@ struct leme_public_builder {
   size_t maximum;
   size_t bytes;
   struct leme_public_allocator allocator;
-  struct leme_public_budget *budget;
   struct leme_public_chunk *chunks;
   struct leme_public_value *values;
   enum leme_public_status status;
   bool sealed;
-  struct leme_public_work work;
 };
 
 struct leme_public_allocator leme_public_default_allocator(void);
-enum leme_public_status
-leme_public_builder_with_budget(size_t maximum_bytes,
-                                struct leme_public_budget *budget,
-                                const struct leme_public_allocator *allocator,
-                                struct leme_public_builder **out);
 enum leme_public_status leme_public_clone(struct leme_public_builder *b,
                                           const struct leme_public_value *input,
                                           struct leme_public_value **out);

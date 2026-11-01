@@ -1,12 +1,10 @@
 #ifndef LEME_PUBLIC_MODEL_H
 #define LEME_PUBLIC_MODEL_H
 
-#include "public/budget.h"
 #include "public/schema.h"
 
 #define LEME_PUBLIC_API_VERSION 1u
 #define LEME_PUBLIC_SNAPSHOT_BYTES ((size_t)33554432)
-#define LEME_PUBLIC_TOTAL_BYTES ((size_t)67108864)
 
 struct leme_public_model;
 struct leme_public_snapshot;
@@ -22,7 +20,6 @@ enum leme_public_change {
 };
 struct leme_public_options {
   size_t snapshot_limit;
-  size_t total_limit;
   struct leme_public_allocator allocator;
   void *entropy_context;
   enum leme_public_status (*entropy)(void *context, unsigned char *out,
@@ -44,8 +41,6 @@ enum leme_public_status
 leme_public_model_create(const struct leme_public_options *options,
                          struct leme_public_model **out);
 void leme_public_model_destroy(struct leme_public_model *model);
-struct leme_public_budget *
-leme_public_model_budget_ref(struct leme_public_model *model);
 enum leme_public_status
 leme_public_model_builder_create(struct leme_public_model *model,
                                  size_t maximum_bytes,
@@ -81,14 +76,9 @@ void leme_public_model_lock_changed(struct leme_public_model *model,
 enum leme_public_status leme_public_model_capture(
     struct leme_public_model *model, const struct leme_public_source *source,
     uint32_t requested_roots, struct leme_public_snapshot **out);
-enum leme_public_status leme_public_model_capture_work(
+enum leme_public_status leme_public_model_capture_diagnostic(
     struct leme_public_model *model, const struct leme_public_source *source,
-    uint32_t roots, const struct leme_public_work *work,
-    struct leme_public_snapshot **out);
-enum leme_public_status leme_public_model_capture_work_diagnostic(
-    struct leme_public_model *model, const struct leme_public_source *source,
-    uint32_t roots, const struct leme_public_work *work,
-    struct leme_public_capture_diagnostic *diagnostic,
+    uint32_t roots, struct leme_public_capture_diagnostic *diagnostic,
     struct leme_public_snapshot **out);
 void leme_public_snapshot_ref(struct leme_public_snapshot *snapshot);
 void leme_public_snapshot_unref(struct leme_public_snapshot *snapshot);
@@ -97,8 +87,6 @@ leme_public_snapshot_root(const struct leme_public_snapshot *snapshot,
                           enum leme_public_root root);
 struct leme_public_text
 leme_public_snapshot_instance(const struct leme_public_snapshot *snapshot);
-struct leme_public_text
-leme_public_snapshot_revision(const struct leme_public_snapshot *snapshot);
 enum leme_public_status leme_public_snapshot_find(
     const struct leme_public_snapshot *snapshot, enum leme_public_entity kind,
     struct leme_public_text id, const struct leme_public_value **out);

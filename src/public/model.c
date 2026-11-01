@@ -38,38 +38,21 @@ leme_public_model_create(const struct leme_public_options *options,
       selected.allocator.allocate == NULL && selected.allocator.release == NULL
           ? leme_public_default_allocator()
           : selected.allocator;
-  struct leme_public_budget *budget = NULL;
-  enum leme_public_status status = leme_public_budget_create(
-      selected.total_limit == 0 ? LEME_PUBLIC_TOTAL_BYTES
-                                : selected.total_limit,
-      &allocator, &budget);
-  if (status != LEME_PUBLIC_OK)
-    return status;
-  status = leme_public_budget_reserve(budget, sizeof(struct leme_public_model));
-  if (status != LEME_PUBLIC_OK) {
-    leme_public_budget_unref(budget);
-    return status;
-  }
   struct leme_public_model *model =
       allocator.allocate(allocator.context, sizeof(*model));
-  if (model == NULL) {
-    leme_public_budget_release(budget, sizeof(*model));
-    leme_public_budget_unref(budget);
+  if (model == NULL)
     return LEME_PUBLIC_OOM;
-  }
-  *model = (struct leme_public_model){
-      .allocator = allocator,
-      .budget = budget,
-      .snapshot_limit = selected.snapshot_limit == 0
-                            ? LEME_PUBLIC_SNAPSHOT_BYTES
-                            : selected.snapshot_limit,
-      .total_limit = selected.total_limit == 0 ? LEME_PUBLIC_TOTAL_BYTES
-                                               : selected.total_limit};
+  *model = (struct leme_public_model){.allocator = allocator,
+                                      .snapshot_limit =
+                                          selected.snapshot_limit == 0
+                                              ? LEME_PUBLIC_SNAPSHOT_BYTES
+                                              : selected.snapshot_limit};
   unsigned char entropy[16] = {0};
-  status = selected.entropy == NULL
-               ? leme_public_system_entropy(NULL, entropy, sizeof(entropy))
-               : selected.entropy(selected.entropy_context, entropy,
-                                  sizeof(entropy));
+  const enum leme_public_status status =
+      selected.entropy == NULL
+          ? leme_public_system_entropy(NULL, entropy, sizeof(entropy))
+          : selected.entropy(selected.entropy_context, entropy,
+                             sizeof(entropy));
   if (status != LEME_PUBLIC_OK) {
     leme_public_model_destroy(model);
     return status;
@@ -90,11 +73,8 @@ void leme_public_model_destroy(struct leme_public_model *model) {
     return;
   leme_public_snapshot_unref(model->baseline);
   leme_public_model_clear_cache(model, LEME_PUBLIC_ALL_ROOTS);
-  struct leme_public_budget *budget = model->budget;
   const struct leme_public_allocator allocator = model->allocator;
   allocator.release(allocator.context, model);
-  leme_public_budget_release(budget, sizeof(*model));
-  leme_public_budget_unref(budget);
 }
 
 bool leme_public_model_available(const struct leme_public_model *model) {
@@ -151,14 +131,6 @@ void leme_public_model_lock_changed(struct leme_public_model *model,
                                                 : LEME_PUBLIC_UNLOCKED_CHANGED);
 }
 
-struct leme_public_budget *
-leme_public_model_budget_ref(struct leme_public_model *model) {
-  if (model == NULL)
-    return NULL;
-  leme_public_budget_ref(model->budget);
-  return model->budget;
-}
-
 enum leme_public_status
 leme_public_model_builder_create(struct leme_public_model *model,
                                  size_t maximum_bytes,
@@ -168,8 +140,7 @@ leme_public_model_builder_create(struct leme_public_model *model,
   *out = NULL;
   if (!leme_public_model_available(model))
     return LEME_PUBLIC_UNAVAILABLE;
-  return leme_public_builder_with_budget(maximum_bytes, model->budget,
-                                         &model->allocator, out);
+  return leme_public_builder_create(maximum_bytes, &model->allocator, out);
 }
 
 void leme_public_snapshot_ref(struct leme_public_snapshot *snapshot) {
@@ -209,14 +180,6 @@ leme_public_snapshot_instance(const struct leme_public_snapshot *snapshot) {
                                 .data = snapshot->instance, .length = 32};
 }
 
-struct leme_public_text
-leme_public_snapshot_revision(const struct leme_public_snapshot *snapshot) {
-  return snapshot == NULL || snapshot->revision[0] == '\0'
-             ? (struct leme_public_text){0}
-             : (struct leme_public_text){.data = snapshot->revision,
-                                         .length = strlen(snapshot->revision)};
-}
-
 static int compare_entries(const void *lhs, const void *rhs) {
   const struct leme_public_index_entry *left = lhs;
   const struct leme_public_index_entry *right = rhs;
@@ -237,12 +200,6 @@ static enum leme_public_status index_root(struct leme_public_snapshot *snapshot,
   if (index->entries == NULL)
     return leme_public_builder_status(snapshot->builder);
   for (size_t i = 0; i < index->count; ++i) {
-    if (snapshot->builder->work.step != NULL) {
-      enum leme_public_status st =
-          snapshot->builder->work.step(snapshot->builder->work.context, 1);
-      if (st != LEME_PUBLIC_OK)
-        return st;
-    }
     const struct leme_public_value *row = leme_public_at(array, i);
     const struct leme_public_text id = record_text(row, LEME_PUBLIC_TEXT("id"));
     struct leme_public_id serial = {0};
@@ -268,12 +225,6 @@ static enum leme_public_status index_root(struct leme_public_snapshot *snapshot,
         return LEME_PUBLIC_INVALID;
     }
     index->entries[i] = (struct leme_public_index_entry){.id = id, .row = row};
-  }
-  if (snapshot->builder->work.step != NULL && index->count > 0) {
-    enum leme_public_status st = snapshot->builder->work.step(
-        snapshot->builder->work.context, index->count);
-    if (st != LEME_PUBLIC_OK)
-      return st;
   }
   qsort(index->entries, index->count, sizeof(*index->entries), compare_entries);
   for (size_t i = 0; i < index->count; ++i) {
@@ -319,10 +270,6 @@ resolve_reference(const struct leme_public_snapshot *snapshot,
                   const struct leme_public_value *value,
                   const struct leme_public_value **out) {
   *out = NULL;
-  const enum leme_public_status status =
-      leme_public_schema_validate(schema, value);
-  if (status != LEME_PUBLIC_OK)
-    return status;
   if (compare_text(record_text(value, LEME_PUBLIC_TEXT("instance")),
                    leme_public_snapshot_instance(snapshot)) != 0)
     return LEME_PUBLIC_INVALID;
@@ -337,85 +284,10 @@ resolve_reference(const struct leme_public_snapshot *snapshot,
 }
 
 static enum leme_public_status
-validate_references(const struct leme_public_snapshot *snapshot,
-                    const struct leme_public_schema *schema,
-                    const struct leme_public_value *value, size_t depth) {
-  if (depth > LEME_PUBLIC_MAX_DEPTH)
-    return LEME_PUBLIC_LIMIT;
-  if (snapshot->builder->work.step != NULL) {
-    enum leme_public_status st =
-        snapshot->builder->work.step(snapshot->builder->work.context, 1);
-    if (st != LEME_PUBLIC_OK)
-      return st;
-  }
-  if (leme_public_kind(value) == LEME_PUBLIC_NULL ||
-      schema->rule == LEME_RULE_ANY)
-    return LEME_PUBLIC_OK;
-  if (schema->primary != NULL) {
-    const struct leme_public_schema *selected =
-        leme_public_schema_validate(schema->primary, value) == LEME_PUBLIC_OK
-            ? schema->primary
-            : schema->alternative;
-    return validate_references(snapshot, selected, value, depth + 1);
-  }
-  if (schema->related != NULL) {
-    const struct leme_public_value *target = NULL;
-    return resolve_reference(snapshot, schema, value, &target) == LEME_PUBLIC_OK
-               ? LEME_PUBLIC_OK
-               : LEME_PUBLIC_INVALID;
-  }
-  if (schema->kind == LEME_PUBLIC_ARRAY) {
-    for (size_t i = 0; i < leme_public_length(value); ++i) {
-      const enum leme_public_status status = validate_references(
-          snapshot, schema->items, leme_public_at(value, i), depth + 1);
-      if (status != LEME_PUBLIC_OK)
-        return status;
-    }
-  } else if (schema->kind == LEME_PUBLIC_OBJECT) {
-    for (size_t i = 0; i < schema->field_count; ++i) {
-      const struct leme_public_field *field = &schema->fields[i];
-      const struct leme_public_value *child =
-          leme_public_get(value, field->name);
-      if (child == NULL)
-        continue;
-      const enum leme_public_status status =
-          validate_references(snapshot, field->type, child, depth + 1);
-      if (status != LEME_PUBLIC_OK)
-        return status;
-    }
-  }
-  return LEME_PUBLIC_OK;
-}
-
-static enum leme_public_status
-same_roots_checked(const struct leme_public_snapshot *lhs,
-                   const struct leme_public_snapshot *rhs,
-                   const struct leme_public_work *work, bool *out_same) {
-  if (lhs == NULL || rhs == NULL) {
-    *out_same = false;
-    return LEME_PUBLIC_OK;
-  }
-  for (unsigned i = 0; i < (unsigned)LEME_PUBLIC_ROOT_COUNT; ++i) {
-    bool equal = false;
-    enum leme_public_status st =
-        leme_public_equal_checked(lhs->roots[i], rhs->roots[i], work, &equal);
-    if (st != LEME_PUBLIC_OK)
-      return st;
-    if (!equal) {
-      *out_same = false;
-      return LEME_PUBLIC_OK;
-    }
-  }
-  *out_same = true;
-  return LEME_PUBLIC_OK;
-}
-
-static enum leme_public_status
-capture_work(struct leme_public_model *model,
-             const struct leme_public_source *source, uint32_t requested_roots,
-             const struct leme_public_work *work,
-             struct leme_public_capture_diagnostic *diagnostic,
-             struct leme_public_snapshot **out) {
+capture(struct leme_public_model *model,
+        const struct leme_public_source *source, uint32_t requested_roots,
+        struct leme_public_capture_diagnostic *diagnostic,
+        struct leme_public_snapshot **out) {
   if (out == NULL)
     return LEME_PUBLIC_INVALID;
   *out = NULL;
@@ -430,12 +302,6 @@ capture_work(struct leme_public_model *model,
   const bool sensitive = (requested_roots & ~LEME_PUBLIC_SAFE_ROOTS) != 0;
   if (locked && sensitive)
     return LEME_PUBLIC_LOCKED;
-  diagnostic->stage = "work";
-  if (work != NULL && work->step != NULL) {
-    const enum leme_public_status status = work->step(work->context, 1);
-    if (status != LEME_PUBLIC_OK)
-      return status;
-  }
   if (sensitive && source->cache_snapshots && !model->dirty &&
       model->baseline != NULL) {
     diagnostic->stage = "reuse";
@@ -453,7 +319,6 @@ capture_work(struct leme_public_model *model,
       leme_public_model_builder_create(model, model->snapshot_limit, &b);
   if (status != LEME_PUBLIC_OK)
     return status;
-  leme_public_builder_set_work(b, work);
   diagnostic->stage = "allocate";
   struct leme_public_snapshot *snapshot = leme_public_allocate(
       b, 1, sizeof(*snapshot), alignof(struct leme_public_snapshot));
@@ -484,15 +349,9 @@ capture_work(struct leme_public_model *model,
       status = LEME_PUBLIC_LOCKED;
       goto cleanup;
     }
-    diagnostic->stage = "work";
-    if (work != NULL && work->step != NULL) {
-      status = work->step(work->context, 1);
-      if (status != LEME_PUBLIC_OK)
-        goto cleanup;
-    }
     struct leme_public_cached_root *cached = NULL;
-    status = leme_public_model_cached_root(model, source, root, work,
-                                           diagnostic, &cached);
+    status =
+        leme_public_model_cached_root(model, source, root, diagnostic, &cached);
     if (status != LEME_PUBLIC_OK)
       goto cleanup;
     if (cached != NULL) {
@@ -510,10 +369,6 @@ capture_work(struct leme_public_model *model,
       status = LEME_PUBLIC_INVALID;
       goto cleanup;
     }
-    diagnostic->stage = "schema";
-    status = leme_public_schema_validate(leme_public_root_schema(root), value);
-    if (status != LEME_PUBLIC_OK)
-      goto cleanup;
     snapshot->roots[i] = value;
     seal_roots[root_count++] = value;
     if (i < LEME_PUBLIC_ENTITY_COUNT) {
@@ -564,45 +419,11 @@ capture_work(struct leme_public_model *model,
     expanded += units;
   }
   if (sensitive) {
-    diagnostic->stage = "references";
-    for (unsigned i = 0; i < (unsigned)LEME_PUBLIC_ROOT_COUNT; ++i) {
-      diagnostic->root = (enum leme_public_root)i;
-      if (snapshot->cached[i] != NULL && snapshot->cached[i]->reference_free)
-        continue;
-      status = validate_references(
-          snapshot, leme_public_root_schema((enum leme_public_root)i),
-          snapshot->roots[i], 1);
-      if (status != LEME_PUBLIC_OK)
-        goto cleanup;
-    }
-    bool same = false;
-    diagnostic->root = LEME_PUBLIC_ROOT_COUNT;
-    diagnostic->stage = "compare";
-    status = same_roots_checked(snapshot, model->baseline, work, &same);
-    if (status != LEME_PUBLIC_OK)
-      goto cleanup;
-    const bool changed = !same;
-    diagnostic->stage = "revision";
-    if (changed && model->revision == UINT64_MAX) {
-      leme_public_model_disable(model);
-      status = LEME_PUBLIC_LIMIT;
-      goto cleanup;
-    }
-    const uint64_t revision =
-        model->revision + (changed ? UINT64_C(1) : UINT64_C(0));
-    const int written = snprintf(snapshot->revision, sizeof(snapshot->revision),
-                                 "%" PRIu64, revision);
-    if (written < 0 || (size_t)written >= sizeof(snapshot->revision)) {
-      status = LEME_PUBLIC_INVALID;
-      goto cleanup;
-    }
-    model->revision = revision;
     leme_public_snapshot_unref(model->baseline);
     model->baseline = snapshot;
     leme_public_snapshot_ref(snapshot);
     model->dirty = false;
   }
-  leme_public_builder_set_work(b, NULL);
   *out = snapshot;
   diagnostic->root = LEME_PUBLIC_ROOT_COUNT;
   diagnostic->stage = "complete";
@@ -612,33 +433,24 @@ cleanup:
   return status;
 }
 
-enum leme_public_status leme_public_model_capture_work_diagnostic(
+enum leme_public_status leme_public_model_capture_diagnostic(
     struct leme_public_model *model, const struct leme_public_source *source,
-    uint32_t requested_roots, const struct leme_public_work *work,
-    struct leme_public_capture_diagnostic *diagnostic,
+    uint32_t requested_roots, struct leme_public_capture_diagnostic *diagnostic,
     struct leme_public_snapshot **out) {
   struct leme_public_capture_diagnostic local = {
       .stage = "setup", .root = LEME_PUBLIC_ROOT_COUNT};
   const enum leme_public_status status =
-      capture_work(model, source, requested_roots, work, &local, out);
+      capture(model, source, requested_roots, &local, out);
   if (diagnostic != NULL)
     *diagnostic = local;
   return status;
 }
 
-enum leme_public_status leme_public_model_capture_work(
-    struct leme_public_model *model, const struct leme_public_source *source,
-    uint32_t requested_roots, const struct leme_public_work *work,
-    struct leme_public_snapshot **out) {
-  return leme_public_model_capture_work_diagnostic(
-      model, source, requested_roots, work, NULL, out);
-}
-
 enum leme_public_status leme_public_model_capture(
     struct leme_public_model *model, const struct leme_public_source *source,
     uint32_t requested_roots, struct leme_public_snapshot **out) {
-  return leme_public_model_capture_work(model, source, requested_roots, NULL,
-                                        out);
+  return leme_public_model_capture_diagnostic(model, source, requested_roots,
+                                              NULL, out);
 }
 
 enum leme_public_status
@@ -678,11 +490,6 @@ leme_public_snapshot_field(const struct leme_public_snapshot *snapshot,
     if (current == NULL)
       return LEME_PUBLIC_NOT_FOUND;
     schema = field->type;
-    if (leme_public_kind(current) != LEME_PUBLIC_NULL || !field->nullable) {
-      status = leme_public_schema_validate(schema, current);
-      if (status != LEME_PUBLIC_OK)
-        return status;
-    }
   }
   *out = leme_public_kind(current) == LEME_PUBLIC_NULL ? snapshot->null_value
                                                        : current;

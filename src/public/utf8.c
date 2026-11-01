@@ -49,11 +49,6 @@ enum leme_public_status leme_public_utf8_copy(struct leme_public_builder *b,
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
   if (input.length >= b->maximum)
     return leme_public_fail(b, LEME_PUBLIC_LIMIT);
-  if (b->work.step != NULL && input.length > 0) {
-    status = b->work.step(b->work.context, input.length);
-    if (status != LEME_PUBLIC_OK)
-      return leme_public_fail(b, status);
-  }
   const unsigned char *source = (const unsigned char *)input.data;
   size_t length = 0;
   for (size_t offset = 0; offset < input.length;) {

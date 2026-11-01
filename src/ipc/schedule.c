@@ -182,20 +182,10 @@ void leme_control_scheduler_step(struct leme_control_scheduler *scheduler) {
     }
   }
   scheduler->in_step = true;
-  const struct leme_control_limits *limits =
-      leme_control_context_limits(scheduler->context);
-  const uint64_t duration = limits != NULL ? limits->deadline_ns : 5000000ULL;
-  const uint64_t start = leme_control_now_ns(NULL);
-  const uint64_t previous = leme_control_context_deadline(scheduler->context);
-  uint64_t deadline =
-      duration > UINT64_MAX - start ? UINT64_MAX : start + duration;
-  if (previous != 0 && previous < deadline)
-    deadline = previous;
-  leme_control_context_set_deadline(scheduler->context, deadline);
   bool serviced = false;
-  while (!wl_list_empty(&scheduler->runnable_peers)) {
-    if (leme_control_now_ns(NULL) >= deadline)
-      break;
+  for (size_t jobs = 0; jobs < LEME_CONTROL_STEP_JOBS &&
+                        !wl_list_empty(&scheduler->runnable_peers);
+       ++jobs) {
     struct leme_control_peer *peer =
         wl_container_of(scheduler->runnable_peers.next, peer, runnable_link);
     if (serviced && leme_control_peer_needs_fresh_turn(peer))
@@ -211,6 +201,5 @@ void leme_control_scheduler_step(struct leme_control_scheduler *scheduler) {
     }
   }
   scheduler->in_step = false;
-  leme_control_context_set_deadline(scheduler->context, previous);
   arm(scheduler);
 }

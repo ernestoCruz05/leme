@@ -24,26 +24,8 @@ enum leme_public_root {
 #define LEME_PUBLIC_ALL_ROOTS                                                  \
   ((UINT32_C(1) << (unsigned)LEME_PUBLIC_ROOT_COUNT) - UINT32_C(1))
 
-struct leme_public_registry;
 struct leme_public_schema;
 struct leme_public_field;
-struct leme_public_argument {
-  struct leme_public_text type;
-  struct leme_public_text scope;
-};
-struct leme_public_operation {
-  struct leme_public_text name;
-  struct leme_public_text documentation;
-  bool action;
-  bool available;
-  struct leme_public_text stability;
-  size_t min_args;
-  size_t max_args;
-  const struct leme_public_argument *arguments;
-  size_t argument_count;
-  struct leme_public_text result;
-  struct leme_public_text work;
-};
 struct leme_public_features {
   bool effects_build;
   bool effects_runtime_known;
@@ -55,7 +37,6 @@ struct leme_public_features {
   bool watch;
 };
 
-const struct leme_public_registry *leme_public_registry(void);
 const struct leme_public_schema *
 leme_public_root_schema(enum leme_public_root root);
 const struct leme_public_schema *
@@ -67,30 +48,6 @@ leme_public_schema_path(const struct leme_public_schema *schema,
 enum leme_public_status
 leme_public_schema_validate(const struct leme_public_schema *schema,
                             const struct leme_public_value *value);
-enum leme_public_status
-leme_public_settings_validate(const struct leme_public_value *settings);
-enum leme_public_status
-leme_public_settings_schema_value(struct leme_public_builder *b,
-                                  const struct leme_public_value *settings,
-                                  const struct leme_public_features *features,
-                                  struct leme_public_value **out);
-enum leme_public_status
-leme_public_operation_value(struct leme_public_builder *b,
-                            const struct leme_public_operation *operation,
-                            struct leme_public_value **out);
-enum leme_public_status leme_public_schema_value(
-    struct leme_public_builder *b, const struct leme_public_features *features,
-    const struct leme_public_operation *operations, size_t operation_count,
-    struct leme_public_value **out);
-enum leme_public_status
-leme_public_root_describe(struct leme_public_builder *b,
-                          struct leme_public_text name,
-                          struct leme_public_value **out);
-enum leme_public_status
-leme_public_type_describe(struct leme_public_builder *b,
-                          struct leme_public_text name,
-                          const struct leme_public_features *features,
-                          struct leme_public_value **out);
 
 const struct leme_public_schema *
 leme_public_field_schema(const struct leme_public_field *field);

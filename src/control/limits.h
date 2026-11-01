@@ -7,22 +7,16 @@
 
 struct leme_control_limits {
   size_t clients, request_bytes, response_bytes;
-  size_t json_depth, expression_depth, expression_nodes, field_depth;
+  size_t json_depth, expression_depth, expression_nodes;
   size_t outstanding, subscriptions, targets, work_units, output_bytes;
   size_t retained_bytes;
-  size_t snapshot_bytes, total_bytes;
-  uint64_t deadline_ns;
 };
 
-#define LEME_CONTROL_CLOCK_INTERVAL 1024
 #define LEME_CONTROL_WATCH_INTERVAL_NS 16000000ULL
+#define LEME_CONTROL_STEP_JOBS 64
 
 struct leme_control_meter {
   size_t remaining;
-  uint64_t deadline_ns;
-  void *context;
-  uint64_t (*now_ns)(void *context);
-  size_t clock_countdown;
 };
 
 struct leme_control_limits leme_control_limits_default(void);
@@ -35,15 +29,6 @@ leme_control_charge(struct leme_control_meter *meter, size_t units) {
   if (meter->remaining < units)
     return LEME_CONTROL_RESOURCE_LIMIT;
   meter->remaining -= units;
-  if (meter->now_ns == NULL || meter->deadline_ns == 0)
-    return LEME_CONTROL_OK;
-  if (meter->clock_countdown > units) {
-    meter->clock_countdown -= units;
-    return LEME_CONTROL_OK;
-  }
-  meter->clock_countdown = LEME_CONTROL_CLOCK_INTERVAL;
-  if (meter->now_ns(meter->context) >= meter->deadline_ns)
-    return LEME_CONTROL_RESOURCE_LIMIT;
   return LEME_CONTROL_OK;
 }
 

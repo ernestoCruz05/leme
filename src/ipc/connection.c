@@ -11,11 +11,9 @@
 #include "ipc/connection-internal.h"
 #include "ipc/frame.h"
 #include "ipc/schedule.h"
-#include "public/budget.h"
 #include "public/model.h"
 #include "public/value.h"
 
-#include "control/memory.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
@@ -37,27 +35,19 @@ struct leme_control_pending_req {
   struct wl_list link;
 };
 
-static uint64_t monotonic_now_ns(void *context) {
-  return leme_control_now_ns(context);
-}
-
 static struct leme_control_pending_req *
 pending_req_create(struct leme_control_peer *peer) {
   if (peer == NULL) {
     return NULL;
   }
-  struct leme_control_pending_req *preq =
-      peer->account != NULL ? leme_control_alloc(peer->account, sizeof(*preq))
-                            : malloc(sizeof(*preq));
+  struct leme_control_pending_req *preq = calloc(1, sizeof(*preq));
   if (preq != NULL) {
-    memset(preq, 0, sizeof(*preq));
     wl_list_init(&preq->link);
   }
   return preq;
 }
 
-static void pending_req_destroy(struct leme_control_peer *peer,
-                                struct leme_control_pending_req *preq) {
+static void pending_req_destroy(struct leme_control_pending_req *preq) {
   if (preq == NULL) {
     return;
   }
@@ -69,11 +59,7 @@ static void pending_req_destroy(struct leme_control_peer *peer,
     leme_control_frame_destroy(preq->preformed_frame);
     preq->preformed_frame = NULL;
   }
-  if (peer != NULL && peer->account != NULL) {
-    leme_control_free(preq);
-  } else {
-    free(preq);
-  }
+  free(preq);
 }
 
 static void on_peer_frame_complete(struct leme_control_frame *frame,
@@ -200,13 +186,11 @@ dispatch_peer_request(struct leme_control_peer *peer,
   enum leme_control_code code = leme_control_context_create(
       leme_control_context_server(peer->context),
       leme_control_context_model(peer->context),
-      leme_control_context_source(peer->context), peer->account, &peer->limits,
+      leme_control_context_source(peer->context), &peer->limits,
       leme_control_context_domain(peer->context), &context);
   if (code != LEME_CONTROL_OK) {
     return code;
   }
-  leme_control_context_set_deadline(
-      context, leme_control_context_deadline(peer->context));
   code = leme_control_dispatch_request(context, peer, request, out);
   leme_control_context_destroy(context);
   return code;
@@ -281,7 +265,7 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
       if (qcode != LEME_CONTROL_OK) {
         leme_control_frame_destroy(preq->preformed_frame);
         preq->preformed_frame = NULL;
-        pending_req_destroy(peer, preq);
+        pending_req_destroy(preq);
         peer_close_socket(peer);
         return;
       }
@@ -289,7 +273,7 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
       if (preq->fatal) {
         peer->state = LEME_PEER_STATE_DRAINING;
       }
-      pending_req_destroy(peer, preq);
+      pending_req_destroy(preq);
       leme_control_peer_flush(peer);
       return;
     }
@@ -310,9 +294,8 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
         };
         (void)snprintf(err.expr_path, sizeof(err.expr_path), "/op");
         leme_control_reply_create_error(
-            peer->account, peer->limits.response_bytes, req_id.data,
-            req_id.length, model_inst.data, model_inst.length, NULL, 0, &err,
-            &reply_frame);
+            peer->limits.response_bytes, req_id.data, req_id.length,
+            model_inst.data, model_inst.length, &err, &reply_frame);
       } else {
         enum leme_control_code disp_code =
             dispatch_peer_request(peer, preq->req, &reply_frame);
@@ -330,9 +313,8 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
         };
         (void)snprintf(err.expr_path, sizeof(err.expr_path), "/op");
         leme_control_reply_create_error(
-            peer->account, peer->limits.response_bytes, req_id.data,
-            req_id.length, model_inst.data, model_inst.length, NULL, 0, &err,
-            &reply_frame);
+            peer->limits.response_bytes, req_id.data, req_id.length,
+            model_inst.data, model_inst.length, &err, &reply_frame);
       } else {
         struct leme_public_text req_inst =
             leme_control_request_instance(preq->req);
@@ -345,9 +327,8 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
           };
           (void)snprintf(err.expr_path, sizeof(err.expr_path), "/instance");
           leme_control_reply_create_error(
-              peer->account, peer->limits.response_bytes, req_id.data,
-              req_id.length, model_inst.data, model_inst.length, NULL, 0, &err,
-              &reply_frame);
+              peer->limits.response_bytes, req_id.data, req_id.length,
+              model_inst.data, model_inst.length, &err, &reply_frame);
         } else if (op == LEME_CONTROL_WATCH || op == LEME_CONTROL_UNWATCH) {
           watch_published = leme_control_watch_peer_request(
                                 peer, preq->req, preq->slot) == LEME_CONTROL_OK;
@@ -359,13 +340,13 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
 
     if (watch_published || peer->state == LEME_PEER_STATE_CLOSED) {
       leme_control_frame_destroy(reply_frame);
-      pending_req_destroy(peer, preq);
+      pending_req_destroy(preq);
       leme_control_peer_flush(peer);
       return;
     }
 
     if (reply_frame == NULL && op == LEME_CONTROL_ACT) {
-      pending_req_destroy(peer, preq);
+      pending_req_destroy(preq);
       peer_close_socket(peer);
       return;
     }
@@ -376,10 +357,9 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
           .message = "response limit exceeded",
       };
       (void)snprintf(fb_err.expr_path, sizeof(fb_err.expr_path), "/expr");
-      leme_control_reply_create_error(
-          peer->account, peer->limits.response_bytes, req_id.data,
-          req_id.length, model_inst.data, model_inst.length, NULL, 0, &fb_err,
-          &reply_frame);
+      leme_control_reply_create_error(peer->limits.response_bytes, req_id.data,
+                                      req_id.length, model_inst.data,
+                                      model_inst.length, &fb_err, &reply_frame);
     }
 
     if (reply_frame != NULL) {
@@ -403,7 +383,7 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
           }
         }
         leme_control_frame_destroy(reply_frame);
-        pending_req_destroy(peer, preq);
+        pending_req_destroy(preq);
         peer_close_socket(peer);
         return;
       }
@@ -417,12 +397,12 @@ void leme_control_peer_step(struct leme_control_peer *peer) {
           peer->outstanding_count--;
         }
       }
-      pending_req_destroy(peer, preq);
+      pending_req_destroy(preq);
       peer_close_socket(peer);
       return;
     }
 
-    pending_req_destroy(peer, preq);
+    pending_req_destroy(preq);
   }
 
   leme_control_peer_flush(peer);
@@ -457,15 +437,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
     bool should_stop = false;
     struct leme_public_model *model = leme_control_context_model(peer->context);
     struct leme_public_text model_inst = leme_public_model_instance(model);
-    uint64_t loop_start_ns = monotonic_now_ns(NULL);
-    uint64_t loop_deadline_ns = (peer->limits.deadline_ns > 0)
-                                    ? loop_start_ns + peer->limits.deadline_ns
-                                    : 0;
 
     while (!should_stop) {
-      if (loop_deadline_ns > 0 && monotonic_now_ns(NULL) >= loop_deadline_ns) {
-        break;
-      }
       if (peer->outstanding_count >= peer->limits.outstanding) {
         break;
       }
@@ -487,8 +460,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
             };
             struct leme_control_frame *err_frame = NULL;
             leme_control_reply_create_error(
-                peer->account, peer->limits.response_bytes, NULL, 0,
-                model_inst.data, model_inst.length, NULL, 0, &err, &err_frame);
+                peer->limits.response_bytes, NULL, 0, model_inst.data,
+                model_inst.length, &err, &err_frame);
             if (err_frame != NULL) {
               struct leme_control_pending_req *preq = pending_req_create(peer);
               if (preq != NULL) {
@@ -518,22 +491,14 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
 
           struct leme_control_document *doc = NULL;
           struct leme_control_error err = {0};
-          struct leme_control_meter dmeter = {
-              .remaining = peer->limits.work_units > 0 ? peer->limits.work_units
-                                                       : 100000,
-              .deadline_ns = loop_deadline_ns,
-              .context = NULL,
-              .now_ns = monotonic_now_ns,
-          };
           enum leme_control_code dcode = leme_control_decode(
-              peer->account,
               (struct leme_public_text){.data = fbytes, .length = flen},
-              &peer->limits, &dmeter, &doc, &err);
+              &peer->limits, &doc, &err);
           if (dcode != LEME_CONTROL_OK) {
             struct leme_control_frame *err_frame = NULL;
             leme_control_reply_create_error(
-                peer->account, peer->limits.response_bytes, NULL, 0,
-                model_inst.data, model_inst.length, NULL, 0, &err, &err_frame);
+                peer->limits.response_bytes, NULL, 0, model_inst.data,
+                model_inst.length, &err, &err_frame);
             if (err_frame != NULL) {
               struct leme_control_pending_req *preq = pending_req_create(peer);
               if (preq != NULL) {
@@ -573,8 +538,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
             }
             struct leme_control_frame *err_frame = NULL;
             leme_control_reply_create_error(
-                peer->account, peer->limits.response_bytes, id_ptr, id_len,
-                model_inst.data, model_inst.length, NULL, 0, &err, &err_frame);
+                peer->limits.response_bytes, id_ptr, id_len, model_inst.data,
+                model_inst.length, &err, &err_frame);
             if (err_frame != NULL) {
               struct leme_control_pending_req *preq = pending_req_create(peer);
               if (preq != NULL) {
@@ -614,9 +579,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
             };
             struct leme_control_frame *dup_frame = NULL;
             leme_control_reply_create_error(
-                peer->account, peer->limits.response_bytes, NULL, 0,
-                model_inst.data, model_inst.length, NULL, 0, &dup_err,
-                &dup_frame);
+                peer->limits.response_bytes, NULL, 0, model_inst.data,
+                model_inst.length, &dup_err, &dup_frame);
             if (dup_frame != NULL) {
               struct leme_control_pending_req *preq = pending_req_create(peer);
               if (preq != NULL) {
@@ -645,9 +609,8 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
             };
             struct leme_control_frame *lim_frame = NULL;
             leme_control_reply_create_error(
-                peer->account, peer->limits.response_bytes, req_id.data,
-                req_id.length, model_inst.data, model_inst.length, NULL, 0,
-                &lim_err, &lim_frame);
+                peer->limits.response_bytes, req_id.data, req_id.length,
+                model_inst.data, model_inst.length, &lim_err, &lim_frame);
             if (lim_frame != NULL) {
               struct leme_control_pending_req *preq = pending_req_create(peer);
               if (preq != NULL) {
@@ -699,13 +662,7 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
 
     if (peer->state != LEME_PEER_STATE_CLOSED &&
         !wl_list_empty(&peer->pending_requests)) {
-      const uint64_t previous = leme_control_context_deadline(peer->context);
-      const uint64_t deadline = previous != 0 && previous < loop_deadline_ns
-                                    ? previous
-                                    : loop_deadline_ns;
-      leme_control_context_set_deadline(peer->context, deadline);
       leme_control_peer_ready(peer);
-      leme_control_context_set_deadline(peer->context, previous);
     }
   }
 
@@ -726,30 +683,14 @@ leme_control_peer_open(struct leme_control_context *context,
   struct leme_control_limits limits =
       ctx_limits != NULL ? *ctx_limits : leme_control_limits_default();
 
-  struct leme_public_budget *ctx_account =
-      leme_control_context_account(context);
-  struct leme_public_budget *peer_account = NULL;
-  enum leme_public_status bst = LEME_PUBLIC_INVALID;
-  if (ctx_account != NULL) {
-    bst = leme_public_budget_child(ctx_account, limits.retained_bytes,
-                                   &peer_account);
-  } else {
-    bst = leme_public_budget_create(limits.retained_bytes, NULL, &peer_account);
-  }
-  if (bst != LEME_PUBLIC_OK) {
-    return LEME_CONTROL_OUT_OF_MEMORY;
-  }
-
   struct leme_control_peer *peer = calloc(1, sizeof(*peer));
   if (peer == NULL) {
-    leme_public_budget_unref(peer_account);
     return LEME_CONTROL_OUT_OF_MEMORY;
   }
 
   peer->context = context;
   peer->loop = loop;
   peer->fd = fd;
-  peer->account = peer_account;
   peer->limits = limits;
   peer->state = LEME_PEER_STATE_NEGOTIATING;
   peer->negotiated = false;
@@ -757,15 +698,14 @@ leme_control_peer_open(struct leme_control_context *context,
   wl_list_init(&peer->runnable_link);
   wl_list_init(&peer->pending_requests);
 
-  enum leme_control_code code = leme_control_framer_create(
-      peer->account, peer->limits.request_bytes, &peer->framer);
+  enum leme_control_code code =
+      leme_control_framer_create(peer->limits.request_bytes, &peer->framer);
   if (code != LEME_CONTROL_OK) {
     leme_control_peer_destroy(peer);
     return code;
   }
 
-  code = leme_control_queue_create(peer->account, peer->limits.output_bytes,
-                                   &peer->queue);
+  code = leme_control_queue_create(peer->limits.output_bytes, &peer->queue);
   if (code != LEME_CONTROL_OK) {
     leme_control_peer_destroy(peer);
     return code;
@@ -816,7 +756,7 @@ void leme_control_peer_destroy(struct leme_control_peer *peer) {
   struct leme_control_pending_req *tmp = NULL;
   wl_list_for_each_safe(preq, tmp, &peer->pending_requests, link) {
     wl_list_remove(&preq->link);
-    pending_req_destroy(peer, preq);
+    pending_req_destroy(preq);
   }
   wl_list_init(&peer->pending_requests);
   if (peer->queue != NULL) {
@@ -826,10 +766,6 @@ void leme_control_peer_destroy(struct leme_control_peer *peer) {
   if (peer->framer != NULL) {
     leme_control_framer_destroy(peer->framer);
     peer->framer = NULL;
-  }
-  if (peer->account != NULL) {
-    leme_public_budget_unref(peer->account);
-    peer->account = NULL;
   }
   free(peer);
 }

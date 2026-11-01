@@ -75,7 +75,8 @@ objects with `(object KEY VALUE ...)`.
 | arithmetic | `+` `-` `*` `/` |
 | logic | `and` `or` `not` `if` |
 
-An `act` expression has one action at its root:
+An `act` expression has one action at its root, and `timao` prints
+`{"affected":N}`, the number of targets it changed:
 
 | Action | Effect |
 | --- | --- |

@@ -47,13 +47,6 @@ leme_control_compile(struct leme_control_context *context,
                      struct leme_control_program **out,
                      struct leme_control_error *error);
 
-enum leme_control_code
-leme_control_compile_work(struct leme_control_context *context,
-                          const struct leme_control_request *request,
-                          struct leme_control_meter *meter,
-                          struct leme_control_program **out,
-                          struct leme_control_error *error);
-
 uint32_t leme_control_program_roots(const struct leme_control_program *program);
 void leme_control_program_destroy(struct leme_control_program *program);
 

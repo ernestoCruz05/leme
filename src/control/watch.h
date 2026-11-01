@@ -17,8 +17,7 @@ struct leme_control_watch_sink {
 struct leme_control_watch_set;
 
 enum leme_control_code
-leme_control_watch_set_create(struct leme_public_budget *account,
-                              const struct leme_control_limits *limits,
+leme_control_watch_set_create(const struct leme_control_limits *limits,
                               const struct leme_control_watch_sink *sink,
                               struct leme_control_watch_set **out);
 void leme_control_watch_set_destroy(struct leme_control_watch_set *set);

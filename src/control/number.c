@@ -8,7 +8,6 @@
 
 struct number_scan {
   struct leme_public_text raw;
-  const struct leme_public_work *work;
   size_t pos;
   size_t digits;
   size_t integers;
@@ -16,22 +15,11 @@ struct number_scan {
   char significant[16];
   size_t significant_count;
   bool tail_nonzero;
-  enum leme_public_status status;
 };
 
 static bool digit(char c) { return c >= '0' && c <= '9'; }
 
-static bool advance(struct number_scan *s) {
-  if (s->pos % 128 == 0 && s->work != NULL && s->work->step != NULL) {
-    s->status = s->work->step(s->work->context, 1);
-    if (s->status != LEME_PUBLIC_OK)
-      return false;
-  }
-  ++s->pos;
-  return true;
-}
-
-static bool mantissa_digit(struct number_scan *s) {
+static void mantissa_digit(struct number_scan *s) {
   const char c = s->raw.data[s->pos];
   if (s->first == SIZE_MAX && c != '0')
     s->first = s->digits;
@@ -42,61 +30,44 @@ static bool mantissa_digit(struct number_scan *s) {
       s->tail_nonzero = true;
   }
   ++s->digits;
-  return advance(s);
+  ++s->pos;
 }
 
-static void *number_allocate(void *context, size_t size) {
-  (void)context;
-  return malloc(size);
-}
-
-static void number_release(void *context, void *allocation) {
-  (void)context;
-  free(allocation);
-}
-
-enum leme_public_status leme_control_parse_number_checked(
-    struct leme_public_text raw, const struct leme_public_allocator *allocator,
-    const struct leme_public_work *work, double *out) {
+enum leme_public_status
+leme_control_parse_number_checked(struct leme_public_text raw, double *out) {
   if (raw.data == NULL || raw.length == 0 || out == NULL)
     return LEME_PUBLIC_INVALID;
   if (raw.length > (size_t)INT64_MAX - 1024 || raw.length == SIZE_MAX)
     return LEME_PUBLIC_LIMIT;
-  struct number_scan s = {
-      .raw = raw, .work = work, .first = SIZE_MAX, .status = LEME_PUBLIC_OK};
-  if (raw.data[s.pos] == '-' && !advance(&s))
-    return s.status;
+  struct number_scan s = {.raw = raw, .first = SIZE_MAX};
+  if (raw.data[s.pos] == '-')
+    ++s.pos;
   if (s.pos == raw.length || !digit(raw.data[s.pos]))
     return LEME_PUBLIC_INVALID;
   const bool leading_zero = raw.data[s.pos] == '0';
   do {
     if (leading_zero && s.digits != 0)
       return LEME_PUBLIC_INVALID;
-    if (!mantissa_digit(&s))
-      return s.status;
+    mantissa_digit(&s);
   } while (s.pos < raw.length && digit(raw.data[s.pos]));
   s.integers = s.digits;
   if (s.pos < raw.length && raw.data[s.pos] == '.') {
-    if (!advance(&s))
-      return s.status;
+    ++s.pos;
     if (s.pos == raw.length || !digit(raw.data[s.pos]))
       return LEME_PUBLIC_INVALID;
     do {
-      if (!mantissa_digit(&s))
-        return s.status;
+      mantissa_digit(&s);
     } while (s.pos < raw.length && digit(raw.data[s.pos]));
   }
   int64_t exponent = 0;
   if (s.pos < raw.length &&
       (raw.data[s.pos] == 'e' || raw.data[s.pos] == 'E')) {
-    if (!advance(&s))
-      return s.status;
+    ++s.pos;
     bool negative = false;
     if (s.pos < raw.length &&
         (raw.data[s.pos] == '+' || raw.data[s.pos] == '-')) {
       negative = raw.data[s.pos] == '-';
-      if (!advance(&s))
-        return s.status;
+      ++s.pos;
     }
     if (s.pos == raw.length || !digit(raw.data[s.pos]))
       return LEME_PUBLIC_INVALID;
@@ -104,8 +75,7 @@ enum leme_public_status leme_control_parse_number_checked(
     do {
       const int64_t d = raw.data[s.pos] - '0';
       exponent = exponent > (cap - d) / 10 ? cap : exponent * 10 + d;
-      if (!advance(&s))
-        return s.status;
+      ++s.pos;
     } while (s.pos < raw.length && digit(raw.data[s.pos]));
     if (negative)
       exponent = -exponent;
@@ -126,27 +96,11 @@ enum leme_public_status leme_control_parse_number_checked(
     if (order > 0 || (order == 0 && s.tail_nonzero))
       return LEME_PUBLIC_INVALID;
   }
-  const struct leme_public_allocator selected =
-      allocator == NULL
-          ? (struct leme_public_allocator){.allocate = number_allocate,
-                                           .release = number_release}
-          : *allocator;
-  if (selected.allocate == NULL || selected.release == NULL)
-    return LEME_PUBLIC_INVALID;
-  char *buffer = selected.allocate(selected.context, raw.length + 1);
+  char *buffer = malloc(raw.length + 1);
   if (buffer == NULL)
     return LEME_PUBLIC_OOM;
   enum leme_public_status status = LEME_PUBLIC_OK;
-  for (size_t offset = 0; offset < raw.length;) {
-    if (work != NULL && work->step != NULL) {
-      status = work->step(work->context, 1);
-      if (status != LEME_PUBLIC_OK)
-        goto done;
-    }
-    const size_t count = raw.length - offset > 128 ? 128 : raw.length - offset;
-    memcpy(buffer + offset, raw.data + offset, count);
-    offset += count;
-  }
+  memcpy(buffer, raw.data, raw.length);
   buffer[raw.length] = '\0';
   const locale_t locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
   if (locale == (locale_t)0) {
@@ -170,17 +124,13 @@ enum leme_public_status leme_control_parse_number_checked(
     status = LEME_PUBLIC_INVALID;
     goto done;
   }
-  if (work != NULL && work->step != NULL)
-    status = work->step(work->context, 1);
-  if (status == LEME_PUBLIC_OK)
-    *out = value;
+  *out = value;
 done:
-  selected.release(selected.context, buffer);
+  free(buffer);
   return status;
 }
 
 bool leme_control_parse_number(const char *raw, size_t len, double *out_value) {
   return leme_control_parse_number_checked((struct leme_public_text){raw, len},
-                                           NULL, NULL,
                                            out_value) == LEME_PUBLIC_OK;
 }

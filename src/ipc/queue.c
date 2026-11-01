@@ -1,29 +1,10 @@
 #include "ipc/connection-internal.h"
-#include "control/memory.h"
 
 #include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
-
-static void *queue_alloc(struct leme_public_budget *account, size_t bytes) {
-  if (account != NULL) {
-    return leme_control_alloc(account, bytes);
-  }
-  return malloc(bytes);
-}
-
-static void queue_free(struct leme_public_budget *account, void *ptr) {
-  if (ptr == NULL) {
-    return;
-  }
-  if (account != NULL) {
-    leme_control_free(ptr);
-  } else {
-    free(ptr);
-  }
-}
 
 enum leme_control_code
 leme_control_queue_push_batch(struct leme_control_queue *queue,
@@ -48,10 +29,9 @@ leme_control_queue_push_batch(struct leme_control_queue *queue,
   struct leme_control_queue_node *nodes[2] = {0};
   enum leme_control_code code = LEME_CONTROL_OK;
   for (size_t i = 0; i < count; ++i) {
-    nodes[i] = queue_alloc(queue->account, sizeof(*nodes[i]));
+    nodes[i] = malloc(sizeof(*nodes[i]));
     if (nodes[i] == NULL) {
-      code = errno == ENOSPC ? LEME_CONTROL_RESOURCE_LIMIT
-                             : LEME_CONTROL_OUT_OF_MEMORY;
+      code = LEME_CONTROL_OUT_OF_MEMORY;
       goto cleanup;
     }
     *nodes[i] = (struct leme_control_queue_node){.frame = frames[i]};
@@ -70,7 +50,7 @@ leme_control_queue_push_batch(struct leme_control_queue *queue,
 
 cleanup:
   for (size_t i = 0; i < count; ++i)
-    queue_free(queue->account, nodes[i]);
+    free(nodes[i]);
   return code;
 }
 
@@ -113,7 +93,7 @@ bool leme_control_queue_discard_watch(
         queue->tail = previous;
       queue->queued_bytes -= leme_control_frame_length(node->frame);
       leme_control_frame_destroy(node->frame);
-      queue_free(queue->account, node);
+      free(node);
     } else {
       previous = node;
     }
@@ -123,20 +103,18 @@ bool leme_control_queue_discard_watch(
 }
 
 enum leme_control_code
-leme_control_queue_create(struct leme_public_budget *account, size_t max_bytes,
-                          struct leme_control_queue **out) {
+leme_control_queue_create(size_t max_bytes, struct leme_control_queue **out) {
   if (out == NULL) {
     return LEME_CONTROL_INVALID_ARGUMENT;
   }
   *out = NULL;
 
-  struct leme_control_queue *queue = queue_alloc(account, sizeof(*queue));
+  struct leme_control_queue *queue = malloc(sizeof(*queue));
   if (queue == NULL) {
     return LEME_CONTROL_OUT_OF_MEMORY;
   }
   memset(queue, 0, sizeof(*queue));
 
-  queue->account = account;
   queue->max_bytes = max_bytes;
   queue->queued_bytes = 0;
   queue->reserved_bytes = 0;
@@ -153,9 +131,8 @@ void leme_control_queue_destroy(struct leme_control_queue *queue) {
   if (queue == NULL) {
     return;
   }
-  struct leme_public_budget *account = queue->account;
   if (queue->reserved_node != NULL) {
-    queue_free(account, queue->reserved_node);
+    free(queue->reserved_node);
     queue->reserved_node = NULL;
   }
   struct leme_control_queue_node *cur = queue->head;
@@ -165,10 +142,10 @@ void leme_control_queue_destroy(struct leme_control_queue *queue) {
       queue->completion_cb(cur->frame, queue->completion_data);
     }
     leme_control_frame_destroy(cur->frame);
-    queue_free(account, cur);
+    free(cur);
     cur = next;
   }
-  queue_free(account, queue);
+  free(queue);
 }
 
 void leme_control_queue_set_completion(
@@ -192,8 +169,7 @@ leme_control_queue_reserve(struct leme_control_queue *queue, size_t bytes) {
     return LEME_CONTROL_RESOURCE_LIMIT;
   }
   if (queue->reserved_node == NULL) {
-    queue->reserved_node =
-        queue_alloc(queue->account, sizeof(*queue->reserved_node));
+    queue->reserved_node = malloc(sizeof(*queue->reserved_node));
     if (queue->reserved_node == NULL) {
       return LEME_CONTROL_OUT_OF_MEMORY;
     }
@@ -213,7 +189,7 @@ void leme_control_queue_cancel_reservation(struct leme_control_queue *queue,
     queue->reserved_bytes -= bytes;
   }
   if (queue->reserved_bytes == 0 && queue->reserved_node != NULL) {
-    queue_free(queue->account, queue->reserved_node);
+    free(queue->reserved_node);
     queue->reserved_node = NULL;
   }
 }
@@ -231,8 +207,7 @@ leme_control_queue_push(struct leme_control_queue *queue,
     return LEME_CONTROL_RESOURCE_LIMIT;
   }
 
-  struct leme_control_queue_node *node =
-      queue_alloc(queue->account, sizeof(*node));
+  struct leme_control_queue_node *node = malloc(sizeof(*node));
   if (node == NULL) {
     return LEME_CONTROL_OUT_OF_MEMORY;
   }
@@ -264,7 +239,7 @@ leme_control_queue_push_reserved(struct leme_control_queue *queue,
   if (node != NULL) {
     queue->reserved_node = NULL;
   } else {
-    node = queue_alloc(queue->account, sizeof(*node));
+    node = malloc(sizeof(*node));
     if (node == NULL) {
       return LEME_CONTROL_OUT_OF_MEMORY;
     }
@@ -324,7 +299,7 @@ leme_control_queue_flush(struct leme_control_queue *queue, int fd,
           queue->completion_cb(node->frame, queue->completion_data);
         }
         leme_control_frame_destroy(node->frame);
-        queue_free(queue->account, node);
+        free(node);
       }
     } else if (ret == 0) {
       return LEME_CONTROL_FLUSH_CLOSED;

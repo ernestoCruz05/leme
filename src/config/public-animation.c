@@ -200,9 +200,6 @@ leme_config_public_animation(struct leme_public_builder *b,
       leme_public_object_set(b, wrapper, LEME_PUBLIC_TEXT("animation"),
                              record) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
-  const enum leme_public_status status = leme_public_settings_validate(wrapper);
-  if (status != LEME_PUBLIC_OK)
-    return leme_public_fail(b, status);
   *out = record;
   return LEME_PUBLIC_OK;
 }

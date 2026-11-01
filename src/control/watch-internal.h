@@ -30,7 +30,6 @@ struct leme_control_watch_slot {
 };
 
 struct leme_control_watch_set {
-  struct leme_public_budget *account;
   struct leme_control_limits limits;
   struct leme_control_watch_sink sink;
   struct leme_control_watch_slot slots[LEME_CONTROL_WATCH_MAX];
