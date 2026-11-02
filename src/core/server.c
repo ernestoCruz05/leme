@@ -11,6 +11,7 @@
 #include "ipc/ipc.h"
 #include "protocols/capture.h"
 #include "protocols/data.h"
+#include "protocols/decoration.h"
 #include "protocols/desktop.h"
 #include "protocols/publication.h"
 #include "public/server.h"
@@ -279,6 +280,10 @@ bool leme_server_init(struct leme_server *server) {
   if (!leme_publication_init(server)) {
     return false;
   }
+  if (!leme_decoration_protocol_init(server)) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to create the decoration global");
+    return false;
+  }
 
   for (size_t index = 0; index < LEME_ARRAY_LENGTH(leme_server_signals);
        index++) {
@@ -354,6 +359,7 @@ void leme_server_finish(struct leme_server *server) {
   leme_view_finish(server);
   leme_layer_finish(server);
   leme_ipc_finish(server);
+  leme_decoration_protocol_finish(server);
   leme_publication_finish(server);
   leme_output_power_finish(server);
   leme_output_finish(server);

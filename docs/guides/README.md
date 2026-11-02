@@ -6,6 +6,8 @@
   layer-shell programs and data for a custom bar.
 - [Locking and idle](locking-and-idle.md): lockers, idle timeouts, turning
   outputs off.
+- [Shell decorations](shell-decorations.md): titlebars and other decorations
+  drawn by a shell.
 - [Screen sharing](screen-sharing.md): capture, portals, PipeWire, remote
   desktop.
 - [XWayland](xwayland.md): X11 apps.

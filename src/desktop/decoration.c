@@ -1,6 +1,7 @@
 #include "desktop/decoration.h"
 #include "desktop/frame.h"
 
+#include "protocols/decoration.h"
 #include "protocols/desktop.h"
 #include "core/server.h"
 #include "config/config.h"
@@ -45,7 +46,8 @@ bool leme_desk_decoration_eligible_for_state(const struct leme_view *view,
                                              bool fullscreen) {
   if (view == NULL || view->server == NULL || !view->mapped ||
       view->unmanaged || fullscreen || view->detached ||
-      leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER) {
+      leme_view_geometry_owner(view) == LEME_VIEW_GEOMETRY_CONTAINER ||
+      leme_view_has_shell_decoration(view, fullscreen)) {
     return false;
   }
   const struct leme_tag *tag = leme_ownership_tag(view);

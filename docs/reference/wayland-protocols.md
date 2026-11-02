@@ -5,7 +5,7 @@ Leme only advertises a global when the backend and renderer support it.
 | Area | Protocols |
 | --- | --- |
 | windows | `xdg-shell` v6, `xdg-decoration`, KDE `server-decoration`, `xdg-dialog-v1`, `xdg-foreign` v1 and v2, `xdg-activation-v1` |
-| shell | `wlr-layer-shell` v5, `ext-session-lock-v1`, `ext-idle-notify-v1`, `idle-inhibit-unstable-v1` |
+| shell | `wlr-layer-shell` v5, `ext-session-lock-v1`, `ext-idle-notify-v1`, `idle-inhibit-unstable-v1`, `leme-decoration-v1` |
 | input | `relative-pointer`, `pointer-constraints`, `keyboard-shortcuts-inhibit`, `cursor-shape`, `virtual-keyboard-unstable-v1`, `wlr-virtual-pointer-unstable-v1` |
 | clipboard | primary selection, `wlr-data-control`, `ext-data-control` |
 | outputs | `xdg-output`, `wlr-output-management`, `wlr-output-power-management`, `viewporter`, `fractional-scale` |
@@ -26,6 +26,9 @@ told they are suspended, so they can stop drawing.
 
 Maximize and minimize are only offered on desktop tags. Tearing is only honored
 for the focused fullscreen window.
+
+`leme-decoration-v1` is Leme's own protocol for shells that draw window
+decorations, see [shell decorations](../guides/shell-decorations.md).
 
 ## Activation
 

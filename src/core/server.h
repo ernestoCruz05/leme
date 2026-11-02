@@ -22,6 +22,7 @@
 struct leme_capture;
 struct leme_ipc;
 struct leme_data;
+struct leme_decoration_protocol;
 struct leme_desktop;
 struct leme_desk;
 struct leme_desk_strip;
@@ -153,6 +154,7 @@ struct leme_server {
   uint64_t public_config_generation;
   struct wl_event_source *public_warm_idle;
   struct leme_data *data;
+  struct leme_decoration_protocol *decoration_protocol;
   struct leme_desktop *desktop;
   struct leme_desk *desk;
   struct leme_desk_strip *desk_strip;

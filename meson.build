@@ -61,6 +61,19 @@ output_power_header = custom_target(
   output: 'wlr-output-power-management-unstable-v1-protocol.h',
   command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'],
 )
+decoration_xml = files('protocols/leme-decoration-v1.xml')
+decoration_header = custom_target(
+  'leme-decoration-server-header',
+  input: decoration_xml,
+  output: 'leme-decoration-v1-protocol.h',
+  command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'],
+)
+decoration_code = custom_target(
+  'leme-decoration-code',
+  input: decoration_xml,
+  output: 'leme-decoration-v1-protocol.c',
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
+)
 
 leme_public_math_dep = cc.find_library('m', required: true)
 leme_public_core_sources = files(
@@ -138,6 +151,7 @@ leme_sources = files(
   'src/shell/xwayland.c',
   'src/shell/rules.c',
   'src/protocols/data.c',
+  'src/protocols/decoration.c',
   'src/protocols/desktop.c',
   'src/protocols/input.c',
   'src/protocols/capture.c',
@@ -161,7 +175,7 @@ leme_sources = files(
   'src/ipc/request.c',
   'src/ipc/state.c',
 )
-leme_sources += [output_power_header]
+leme_sources += [output_power_header, decoration_header, decoration_code]
 leme_sources += leme_public_core_sources
 leme_public_model_sources = files('src/public/schema.c', 'src/public/model.c', 'src/public/model-cache.c', 'src/public/identity.c')
 leme_control_core_sources = files('src/control/limits.c', 'src/control/decode.c', 'src/control/number.c', 'src/control/source.c', 'src/control/request.c', 'src/control/registry.c', 'src/control/types.c', 'src/control/control.c', 'src/control/expr.c', 'src/control/validate.c', 'src/control/eval.c', 'src/control/eval-scalar.c', 'src/control/eval-lookup.c', 'src/control/eval-collection.c', 'src/control/act.c', 'src/core/command_parse.c')

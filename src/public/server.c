@@ -3,6 +3,7 @@
 #include "public/value-internal.h"
 #include "core/server.h"
 #include "config/public.h"
+#include "protocols/decoration.h"
 #include "protocols/session.h"
 #include "shell/public.h"
 #include "shell/view.h"
@@ -61,8 +62,10 @@ void leme_public_server_finish(struct leme_server *server) {
 }
 
 void leme_public_server_invalidate(struct leme_server *server) {
-  if (server != NULL)
-    leme_public_model_invalidate(server->public_model);
+  if (server == NULL)
+    return;
+  leme_public_model_invalidate(server->public_model);
+  leme_decoration_protocol_schedule(server);
 }
 
 static void leme_public_server_handle_warm(void *data) {

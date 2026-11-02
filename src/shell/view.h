@@ -14,6 +14,7 @@
 
 struct leme_container;
 struct leme_output;
+struct leme_decoration_window;
 struct leme_desk_decoration;
 struct leme_publication_toplevel;
 struct leme_render_view_state;
@@ -68,6 +69,7 @@ struct leme_view {
   struct wlr_xdg_toplevel *xdg_toplevel;
   struct wlr_xwayland_surface *xwayland_surface;
   struct leme_desk_decoration *desk_decoration;
+  struct leme_decoration_window *decoration_window;
   struct wlr_scene_tree *render_tree;
   struct leme_render_owner render_owner;
   struct wlr_scene_tree *scene_tree;

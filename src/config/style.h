@@ -2,6 +2,7 @@
 #define LEME_CONFIG_STYLE_H
 
 #include "config/config.h"
+#include "desktop/theme.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -44,7 +45,7 @@ enum leme_desk_property {
 #undef LEME_STYLE_ELEMENT
 
 #define LEME_DESK_STATE_BIT(state) (UINT32_C(1) << (state))
-#define LEME_DESK_STYLE_ICON_THEME "Adwaita"
+#define LEME_DESK_STYLE_ICON_THEME LEME_DESK_THEME_DEFAULT
 
 struct leme_desk_style;
 

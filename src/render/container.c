@@ -5,6 +5,7 @@
 #include "desktop/decoration.h"
 #include "desktop/frame.h"
 #include "output/output.h"
+#include "protocols/decoration.h"
 #include "shell/container.h"
 #include "shell/container-policy.h"
 #include "shell/view.h"
@@ -20,6 +21,11 @@ struct leme_render_container_animation {
   struct wlr_scene_tree *snapshot;
   struct leme_render_view_frame_nodes nodes;
   struct wl_array colors;
+  struct wl_array shell_bases;
+  int shell_x[LEME_RENDER_VIEW_SHELL_MAX];
+  int shell_y[LEME_RENDER_VIEW_SHELL_MAX];
+  struct leme_box natural;
+  int border;
   bool flying;
   bool visible;
 };
@@ -68,7 +74,8 @@ leme_render_container_resize_edges(const struct leme_container *container,
                                    double lx, double ly) {
   if (container == NULL || container->minimized ||
       container->placement.kind == LEME_VIEW_PLACEMENT_MAXIMIZED ||
-      !leme_container_member_eligible(container->focused)) {
+      !leme_container_member_eligible(container->focused) ||
+      leme_decoration_protocol_container_decorated(container)) {
     return 0;
   }
   const struct leme_config *config =
@@ -162,7 +169,13 @@ void leme_render_container_set_box(struct leme_container *container,
   container->render_box = box;
   struct leme_server *server = leme_render_container_server(container);
   const double scale = leme_output_scale(container->tag->owner->output);
-  const int border = server->config == NULL ? 0 : server->config->border_width;
+  const bool decorated =
+      leme_decoration_protocol_container_decorated(container);
+  const int border =
+      server->config == NULL ||
+              leme_decoration_protocol_container_replaces_border(container)
+          ? 0
+          : server->config->border_width;
   const struct leme_box content = leme_container_content_box(container, box);
   wlr_scene_node_set_position(&container->render_tree->node, box.x, box.y);
   leme_render_container_layout_border(container, box, border);
@@ -180,8 +193,10 @@ void leme_render_container_set_box(struct leme_container *container,
                                     scale);
   }
   leme_desk_frame_layout(container->frame.tree, box, border,
-                         container->frame.style.height, content.width,
-                         &container->frame.style, 0);
+                         decorated ? 0 : container->frame.style.height,
+                         content.width, &container->frame.style, 0);
+  leme_decoration_protocol_container_arrange(container, content.x - box.x,
+                                             content.y - box.y);
   leme_desk_frame_set_maximized(&container->frame,
                                 container->placement.kind ==
                                     LEME_VIEW_PLACEMENT_MAXIMIZED);
@@ -224,6 +239,7 @@ static void leme_render_container_move_done(void *data) {
         state->container, state->visible && !state->container->minimized);
   }
   wl_array_release(&state->colors);
+  wl_array_release(&state->shell_bases);
   free(state);
 }
 
@@ -306,11 +322,26 @@ leme_render_container_fly_apply(void *data,
   const int side = frame->box.width < frame->box.height ? frame->box.width
                                                         : frame->box.height;
   const int limit = side > 0 ? (side - 1) / 2 : 0;
-  const int border =
-      config->border_width < limit ? config->border_width : limit;
+  const int border = state->border < limit ? state->border : limit;
   struct leme_titlebar_style style = {0};
   leme_desk_style_titlebar(config, &style);
   leme_render_view_layout_frame(&state->nodes, frame->box, border, 0, &style);
+  const double ratio_x = state->natural.width > 0
+                             ? (double)frame->box.width / state->natural.width
+                             : 1.0;
+  const double ratio_y = state->natural.height > 0
+                             ? (double)frame->box.height / state->natural.height
+                             : 1.0;
+  for (size_t index = 0; index < LEME_ARRAY_LENGTH(state->nodes.shell);
+       index++) {
+    struct wlr_scene_tree *shell = state->nodes.shell[index];
+    if (shell != NULL) {
+      wlr_scene_node_set_position(
+          &shell->node, (int)((double)state->shell_x[index] * ratio_x),
+          (int)((double)state->shell_y[index] * ratio_y));
+    }
+  }
+  leme_render_view_scale_nodes(&state->shell_bases, ratio_x, ratio_y);
   leme_render_view_fade_nodes(&state->colors, (float)frame->opacity);
 }
 
@@ -344,29 +375,77 @@ void leme_render_container_fly(struct leme_container *container,
       .flying = true,
       .visible = container->render_tree->node.enabled};
   wl_array_init(&state->colors);
-  state->snapshot =
-      leme_animation_snapshot(container->render_tree, server->scene_floating);
+  wl_array_init(&state->shell_bases);
+  enum {
+    LEME_RENDER_CONTAINER_PART_FRAME = LEME_ARRAY_LENGTH(container->border),
+    LEME_RENDER_CONTAINER_PART_SHELL,
+    LEME_RENDER_CONTAINER_PART_COUNT =
+        LEME_RENDER_CONTAINER_PART_SHELL + LEME_RENDER_VIEW_SHELL_MAX,
+  };
+  struct leme_animation_part parts[LEME_RENDER_CONTAINER_PART_COUNT] = {0};
+  for (size_t i = 0; i < LEME_ARRAY_LENGTH(container->border); i++) {
+    parts[i].source = &container->border[i]->node;
+  }
+  if (container->frame.tree != NULL) {
+    parts[LEME_RENDER_CONTAINER_PART_FRAME].source =
+        &container->frame.tree->node;
+  }
+  struct wlr_scene_tree *shells[LEME_RENDER_VIEW_SHELL_MAX] = {0};
+  const size_t shell_count = leme_decoration_protocol_container_trees(
+      container, shells, LEME_ARRAY_LENGTH(shells));
+  for (size_t i = 0; i < shell_count; i++) {
+    parts[LEME_RENDER_CONTAINER_PART_SHELL + i].source = &shells[i]->node;
+  }
+  state->snapshot = leme_animation_snapshot_parts(container->render_tree,
+                                                  server->scene_floating, parts,
+                                                  LEME_ARRAY_LENGTH(parts));
   if (state->snapshot == NULL || !leme_render_view_collect_content(
                                      &state->colors, state->snapshot, 0, 0)) {
     leme_animation_snapshot_destroy(state->snapshot);
     wl_array_release(&state->colors);
+    wl_array_release(&state->shell_bases);
     free(state);
     return;
   }
-  struct wlr_scene_node *node = NULL;
-  size_t side = 0;
-  wl_list_for_each(node, &state->snapshot->children, link) {
-    if (node->type == WLR_SCENE_NODE_RECT && side < 4) {
-      struct wlr_scene_rect *rect = wl_container_of(node, rect, node);
-      state->nodes.border[side++] = rect;
-    } else if (node->type == WLR_SCENE_NODE_TREE) {
-      state->nodes.decoration =
-          wl_container_of(node, state->nodes.decoration, node);
+  for (size_t i = 0; i < LEME_ARRAY_LENGTH(container->border); i++) {
+    if (parts[i].copy != NULL) {
+      state->nodes.border[i] = wlr_scene_rect_from_node(parts[i].copy);
     }
   }
+  const bool decorated =
+      leme_decoration_protocol_container_decorated(container);
+  if (!decorated && parts[LEME_RENDER_CONTAINER_PART_FRAME].copy != NULL) {
+    state->nodes.decoration =
+        wlr_scene_tree_from_node(parts[LEME_RENDER_CONTAINER_PART_FRAME].copy);
+  }
+  for (size_t i = 0; i < shell_count; i++) {
+    struct wlr_scene_node *copy =
+        parts[LEME_RENDER_CONTAINER_PART_SHELL + i].copy;
+    if (copy == NULL) {
+      continue;
+    }
+    state->nodes.shell[i] = wlr_scene_tree_from_node(copy);
+    state->shell_x[i] = copy->x;
+    state->shell_y[i] = copy->y;
+    if (!leme_render_view_collect_content(&state->shell_bases,
+                                          state->nodes.shell[i], 0, 0)) {
+      leme_animation_snapshot_destroy(state->snapshot);
+      wl_array_release(&state->colors);
+      wl_array_release(&state->shell_bases);
+      free(state);
+      return;
+    }
+  }
+  state->natural = container->box;
   const struct leme_config *config =
       leme_render_container_server(container)->config;
-  state->nodes.titlebar_height = leme_desk_style_titlebar_height(config);
+  state->border =
+      config == NULL ||
+              leme_decoration_protocol_container_replaces_border(container)
+          ? 0
+          : config->border_width;
+  state->nodes.titlebar_height =
+      decorated ? 0 : leme_desk_style_titlebar_height(config);
   state->nodes.button_width = leme_desk_style_button_width(config);
   state->nodes.titlebar_width =
       leme_container_content_box(container, container->box).width;

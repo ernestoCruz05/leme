@@ -61,6 +61,7 @@ nav:
       - Multi-monitor: guides/multi-monitor.md
       - Bars, launchers, and notifications: guides/bars-launchers-and-notifications.md
       - Locking and idle: guides/locking-and-idle.md
+      - Shell decorations: guides/shell-decorations.md
       - Screen sharing: guides/screen-sharing.md
       - XWayland: guides/xwayland.md
       - Gentoo/OpenRC: guides/gentoo-openrc.md

@@ -2667,6 +2667,7 @@ leme_config_parse_desktop(struct leme_config *config,
                           const struct leme_scfg_directive *directive,
                           const char *path, char **error) {
   const struct leme_scfg_directive *previous_strip = NULL;
+  const struct leme_scfg_directive *previous_launchers = NULL;
   const struct leme_scfg_directive *previous_modifier = NULL;
   if (directive->params_len != 0) {
     leme_config_set_error(error, "%s:%d: desktop block takes no parameters",
@@ -2684,15 +2685,19 @@ leme_config_parse_desktop(struct leme_config *config,
       continue;
     }
     const bool strip = strcmp(entry->name, "minimized_strip") == 0;
-    if (!strip && strcmp(entry->name, "container_modifier") != 0) {
+    const bool launchers = strcmp(entry->name, "launchers") == 0;
+    if (!strip && !launchers &&
+        strcmp(entry->name, "container_modifier") != 0) {
       if (!leme_config_reject(config, entry, -1, "unknown desktop property %s",
                               entry->name)) {
         return false;
       }
       continue;
     }
-    const struct leme_scfg_directive *previous =
-        strip ? previous_strip : previous_modifier;
+    const struct leme_scfg_directive *previous = strip ? previous_strip
+                                                 : launchers
+                                                     ? previous_launchers
+                                                     : previous_modifier;
     if (previous != NULL) {
       const struct leme_reject_extra extra = {
           .secondary = previous,
@@ -2716,6 +2721,19 @@ leme_config_parse_desktop(struct leme_config *config,
       }
       config->desktop_minimized_strip = value;
       previous_strip = entry;
+      continue;
+    }
+    if (launchers) {
+      bool value = false;
+      if (!leme_config_parse_boolean(entry->params[0], &value)) {
+        if (!leme_config_reject(config, entry, 0,
+                                "launchers must be true or false")) {
+          return false;
+        }
+        continue;
+      }
+      config->desktop_launchers = value;
+      previous_launchers = entry;
       continue;
     }
     uint32_t modifier = 0;
@@ -4613,6 +4631,7 @@ struct leme_config *leme_config_load(const char *path, char **error) {
   }
   config->initial_tags = 3;
   config->desktop_minimized_strip = true;
+  config->desktop_launchers = true;
   config->desktop_container_modifier = WLR_MODIFIER_SHIFT;
   if (!leme_config_desktop_menu_defaults(config)) {
     leme_config_set_error(error, "%s:1: out of memory", path);

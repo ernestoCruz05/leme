@@ -281,6 +281,7 @@ struct leme_config {
   struct leme_gaps gap_outer;
   bool smart_gaps;
   bool desktop_minimized_strip;
+  bool desktop_launchers;
   uint32_t desktop_container_modifier;
   int border_width;
   int corner_radius;

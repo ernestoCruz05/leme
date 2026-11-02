@@ -819,7 +819,8 @@ static const struct wlr_pointer_grab_interface leme_pointer_grab_interface = {
 
 static bool leme_input_pointer_container_start(struct leme_container *container,
                                                enum leme_grab_edge edges,
-                                               uint32_t button) {
+                                               uint32_t button,
+                                               bool requested) {
   if (container == NULL || !leme_container_action_allowed(container->focused)) {
     return false;
   }
@@ -828,12 +829,13 @@ static bool leme_input_pointer_container_start(struct leme_container *container,
   const bool resize = edges != LEME_GRAB_EDGE_NONE;
   enum leme_grab_edge checked = LEME_GRAB_EDGE_NONE;
   if (grab == NULL || server->seat == NULL || server->cursor == NULL ||
-      (resize && (!leme_input_pointer_edges(leme_input_pointer_wlr_edges(edges),
-                                            &checked) ||
-                  checked != edges ||
-                  leme_render_container_resize_edges(
-                      container, server->cursor->x, server->cursor->y) !=
-                      leme_input_pointer_wlr_edges(edges))) ||
+      (resize &&
+       (!leme_input_pointer_edges(leme_input_pointer_wlr_edges(edges),
+                                  &checked) ||
+        checked != edges ||
+        (!requested && leme_render_container_resize_edges(
+                           container, server->cursor->x, server->cursor->y) !=
+                           leme_input_pointer_wlr_edges(edges)))) ||
       !leme_desktop_cursor_override(server,
                                     leme_input_pointer_grab_cursor(edges))) {
     return false;
@@ -945,14 +947,14 @@ static bool leme_input_pointer_start_detach(struct leme_view *view,
 bool leme_input_pointer_grab_start_container(struct leme_container *container,
                                              uint32_t button) {
   return leme_input_pointer_container_start(container, LEME_GRAB_EDGE_NONE,
-                                            button);
+                                            button, false);
 }
 
 bool leme_input_pointer_grab_start_container_resize(
     struct leme_container *container, enum leme_grab_edge edges,
     uint32_t button) {
   return edges != LEME_GRAB_EDGE_NONE &&
-         leme_input_pointer_container_start(container, edges, button);
+         leme_input_pointer_container_start(container, edges, button, false);
 }
 
 static bool leme_input_pointer_grab_start(
@@ -1141,6 +1143,44 @@ bool leme_input_pointer_grab_start_xdg(
   }
   return leme_input_pointer_grab_start(view, resize, button, wlr_edges, false,
                                        false);
+}
+
+bool leme_input_pointer_grab_start_surface(
+    struct leme_view *view, struct wlr_surface *origin, bool resize,
+    uint32_t serial, // NOLINT(bugprone-easily-swappable-parameters)
+    uint32_t wlr_edges) {
+  if (view == NULL || view->server == NULL || origin == NULL) {
+    return false;
+  }
+  struct wlr_seat *seat = view->server->seat;
+  const uint32_t button = seat->pointer_state.grab_button;
+  if (seat->pointer_state.focused_surface != origin ||
+      !leme_input_pointer_button_held(seat, button) ||
+      !wlr_seat_validate_pointer_grab_serial(seat, origin, serial)) {
+    return false;
+  }
+  return leme_input_pointer_grab_start(view, resize, button, wlr_edges, false,
+                                       false);
+}
+
+bool leme_input_pointer_grab_start_container_surface(
+    struct leme_container *container, struct wlr_surface *origin, bool resize,
+    uint32_t serial, // NOLINT(bugprone-easily-swappable-parameters)
+    uint32_t wlr_edges) {
+  if (container == NULL || origin == NULL) {
+    return false;
+  }
+  struct wlr_seat *seat = container->tag->owner->server->seat;
+  const uint32_t button = seat->pointer_state.grab_button;
+  enum leme_grab_edge edges = LEME_GRAB_EDGE_NONE;
+  if (seat->pointer_state.focused_surface != origin ||
+      !leme_input_pointer_button_held(seat, button) ||
+      !wlr_seat_validate_pointer_grab_serial(seat, origin, serial) ||
+      (resize && (!leme_input_pointer_edges(wlr_edges, &edges) ||
+                  edges == LEME_GRAB_EDGE_NONE))) {
+    return false;
+  }
+  return leme_input_pointer_container_start(container, edges, button, true);
 }
 
 bool leme_input_pointer_grab_start_xwayland(struct leme_view *view, bool resize,

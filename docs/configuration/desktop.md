@@ -17,6 +17,7 @@ tags {
 desktop {
     minimized_strip true
     container_modifier shift
+    launchers true
 }
 ```
 
@@ -24,6 +25,7 @@ desktop {
 | --- | --- | --- | --- |
 | `minimized_strip` | `true`, `false` | `true` | shows minimized windows in a strip at the bottom of the output |
 | `container_modifier` | `shift`, `ctrl`, `alt`, `super` | `shift` | key held while dragging a window onto another to group them |
+| `launchers` | `true`, `false` | `true` | lets `.desktop` launchers run, see [file grid](#file-grid) |
 
 Turn the strip off when a bar or dock already lists minimized windows.
 
@@ -83,8 +85,10 @@ Changes to the folder show up on their own.
 
 - Click selects, Ctrl+click adds or removes, and dragging on empty space draws
   a selection box. The arrow keys move the selection.
-- Double-click or Enter opens the selection with `xdg-open`. Executables and
-  `.desktop` launchers are never run.
+- Double-click or Enter opens the selection with `xdg-open`. A `.desktop`
+  launcher runs instead if it is yours, executable and not writable by others,
+  and is then labelled with its `Name`. Other executables and terminal
+  launchers never run.
 - Drag icons to move them on the grid, onto a folder to move the files into it,
   or onto a window to drop them there as a copy.
 - Right-click empty space for New folder and Open desktop folder, or an icon for
@@ -177,7 +181,7 @@ style "close:hover" {
 | `layout` | `title` and up to three of `minimize`, `maximize`, `close` |
 | `shadow` | `true`, `false` |
 | `icon` | path to an `.svg` or `.png` |
-| `theme` | an icon theme, such as `Papirus` |
+| `theme` | an icon theme, such as `Papirus`, or a folder of icons |
 
 Sizes are logical pixels. States apply in this order, the later one winning:
 `inactive`, `maximized`, `hover`, `pressed`, `focus`, `selected`, `drop`,
@@ -194,6 +198,11 @@ set on a state.
 - `icon`: `size` is the icon, `spacing` the grid cell, `padding` the margin
   around the grid, `width` the label width and `gap` the space between icon
   and label. `theme` also applies to the strip and falls back to Adwaita.
+  A `theme` with a `/` in it is a folder of `.svg` or `.png` icons, relative to
+  the config file or `~/`. Files fall back to generic icons, so a few cover the
+  whole desktop: `folder`, `text-x-generic`, `image-x-generic`,
+  `audio-x-generic`, `video-x-generic`, `package-x-generic` and
+  `application-x-executable`. Missing icons come from Adwaita.
 
 The defaults are Breeze Dark:
 

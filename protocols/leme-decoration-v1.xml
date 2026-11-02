@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="leme_decoration_v1">
+  <copyright>
+    Copyright © 2026 Ernesto Cruz
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice (including the next
+    paragraph) shall be included in all copies or substantial portions of the
+    Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+    THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
+  </copyright>
+
+  <description summary="window decorations drawn by a shell">
+    Lets one client, usually a shell, draw the decorations of Leme's windows
+    with its own surfaces. Leme offers every managed window as a
+    leme_decoration_window_v1 with its state, and places the client's
+    decoration surfaces around it. Leme's built-in titlebar stays hidden on a
+    window while one of the client's decorations is visible there.
+  </description>
+
+  <interface name="leme_decoration_manager_v1" version="1">
+    <description summary="offers windows to decorate">
+      Only one manager is active at a time. A manager bound while another is
+      active receives unavailable and stays inert. When the active manager is
+      destroyed, its windows and decorations go inert and the next manager
+      bound becomes active.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="stop decorating">
+        Stops decorating. Window and decoration objects created through this
+        manager go inert, and Leme's built-in titlebars come back.
+      </description>
+    </request>
+
+    <event name="unavailable">
+      <description summary="another client is decorating">
+        Another manager is active. This manager stays inert and receives no
+        window events.
+      </description>
+    </event>
+
+    <event name="window">
+      <description summary="a window can be decorated">
+        Sent when a managed window maps or a window group forms, and for each
+        of them when the manager becomes active. A group carries the group
+        state, the title and app_id of its focused member and the size of its
+        content area; its decorations frame the whole group, and its requests
+        act on the group. The window's id, title, app_id, state and size
+        events follow, closed by done.
+      </description>
+      <arg name="window" type="new_id" interface="leme_decoration_window_v1"/>
+    </event>
+  </interface>
+
+  <interface name="leme_decoration_window_v1" version="1">
+    <description summary="a window offered for decoration">
+      State events come in batches closed by done. After closed, Leme ignores
+      requests on this object and its decorations, and the client should
+      destroy them.
+    </description>
+
+    <enum name="error">
+      <entry name="role" value="0"
+             summary="the surface already has a role or a buffer"/>
+    </enum>
+
+    <enum name="state" bitfield="true">
+      <entry name="activated" value="1"/>
+      <entry name="maximized" value="2"/>
+      <entry name="fullscreen" value="4"/>
+      <entry name="tiled" value="8" summary="placed by a tiling layout"/>
+      <entry name="client_decorated" value="16"
+             summary="the client draws its own titlebar"/>
+      <entry name="grouped" value="32"
+             summary="a member of a window group, decorations stay hidden"/>
+      <entry name="desktop" value="64" summary="on a desktop tag"/>
+      <entry name="group" value="128"
+             summary="a window group; its members report grouped"/>
+    </enum>
+
+    <enum name="layer">
+      <entry name="above" value="0" summary="above the window content"/>
+      <entry name="below" value="1" summary="below the window borders"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="destroy the window object">
+        Destroys the object. Its decorations go inert.
+      </description>
+    </request>
+
+    <request name="get_decoration">
+      <description summary="give a surface the decoration role">
+        Makes the surface a decoration of this window. The surface must have
+        no role and no buffer attached, or the role error is raised.
+      </description>
+      <arg name="id" type="new_id" interface="leme_decoration_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+      <arg name="layer" type="uint" enum="layer"/>
+    </request>
+
+    <request name="move">
+      <description summary="start an interactive move">
+        Starts moving the window with the pointer, as xdg_toplevel.move does.
+        The serial must be the seat's latest button press.
+      </description>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <request name="resize">
+      <description summary="start an interactive resize">
+        Starts resizing the window with the pointer, as xdg_toplevel.resize
+        does. Edges take the xdg_toplevel.resize_edge values.
+      </description>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="serial" type="uint"/>
+      <arg name="edges" type="uint"/>
+    </request>
+
+    <request name="show_window_menu">
+      <description summary="open Leme's window menu">
+        Opens Leme's window menu at a point relative to the content's top left
+        corner.
+      </description>
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="serial" type="uint"/>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+    </request>
+
+    <request name="close">
+      <description summary="ask the window to close"/>
+    </request>
+
+    <request name="set_minimized">
+      <description summary="minimize the window"/>
+    </request>
+
+    <request name="set_maximized">
+      <description summary="maximize the window"/>
+    </request>
+
+    <request name="unset_maximized">
+      <description summary="restore the window from maximized"/>
+    </request>
+
+    <request name="ack_configure">
+      <description summary="acknowledge a batch">
+        Tells Leme that the decorations for the batch ending in done(serial)
+        are committed, or that the client draws none for this window. Leme
+        holds a new window's open animation for a short time until the active
+        client acknowledges the window's first batch.
+      </description>
+      <arg name="serial" type="uint"/>
+    </request>
+
+    <event name="id">
+      <description summary="the window's IPC id">
+        The id Leme's control socket uses for this window. It stays the same
+        while Leme runs, across closed and a later window event.
+      </description>
+      <arg name="id" type="string"/>
+    </event>
+
+    <event name="title">
+      <arg name="title" type="string"/>
+    </event>
+
+    <event name="app_id">
+      <arg name="app_id" type="string"/>
+    </event>
+
+    <event name="state">
+      <arg name="state" type="uint" enum="state"/>
+    </event>
+
+    <event name="size">
+      <description summary="the window's content size">
+        The size Leme configured for the window content, in logical pixels,
+        without borders or decorations.
+      </description>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </event>
+
+    <event name="done">
+      <description summary="end of a batch">
+        Ends a batch of state events. The client answers with ack_configure
+        after committing its decorations for the new state.
+      </description>
+      <arg name="serial" type="uint"/>
+    </event>
+
+    <event name="closed">
+      <description summary="the window is gone">
+        The window unmapped or stopped being managed. A new window event
+        offers it again if it comes back.
+      </description>
+    </event>
+  </interface>
+
+  <interface name="leme_decoration_v1" version="1">
+    <description summary="a decoration surface">
+      Offset, margins, states and border are double-buffered and apply on the
+      surface's next commit. A decoration is visible when the window's state
+      is in its states mask and the window is not grouped. The window's state
+      is the first of fullscreen, maximized, tiled, desktop and floating that
+      holds. Below decorations stack under the window borders, above
+      decorations over the content and Leme's titlebar.
+    </description>
+
+    <enum name="error">
+      <entry name="invalid_margins" value="0" summary="a margin is negative"/>
+    </enum>
+
+    <enum name="states" bitfield="true">
+      <entry name="floating" value="1" summary="floating on a tiling tag"/>
+      <entry name="tiled" value="2"/>
+      <entry name="maximized" value="4"/>
+      <entry name="fullscreen" value="8"/>
+      <entry name="desktop" value="16" summary="on a desktop tag"/>
+    </enum>
+
+    <enum name="border">
+      <entry name="kept" value="0" summary="Leme draws the window border"/>
+      <entry name="replaced" value="1"
+             summary="the decoration draws the border instead"/>
+    </enum>
+
+    <request name="destroy" type="destructor">
+      <description summary="remove the decoration">
+        Removes the decoration and its margins from the window.
+      </description>
+    </request>
+
+    <request name="set_offset">
+      <description summary="place the surface">
+        Places the surface relative to the window content's top left corner.
+        The initial offset is 0, 0.
+      </description>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+    </request>
+
+    <request name="set_margins">
+      <description summary="reserve space around the content">
+        Reserves space between the window content and its borders while the
+        decoration is visible. Margins of visible decorations add up per edge.
+        The initial margins are 0.
+      </description>
+      <arg name="top" type="int"/>
+      <arg name="right" type="int"/>
+      <arg name="bottom" type="int"/>
+      <arg name="left" type="int"/>
+    </request>
+
+    <request name="set_states">
+      <description summary="choose when the decoration shows">
+        The window states in which the decoration is visible. The initial mask
+        is floating, tiled, maximized and desktop.
+      </description>
+      <arg name="states" type="uint" enum="states"/>
+    </request>
+
+    <request name="set_border">
+      <description summary="take over the window border">
+        With replaced, Leme draws no border on the window while the decoration
+        is visible, and the decoration's margins are the whole frame. The
+        initial value is kept.
+      </description>
+      <arg name="border" type="uint" enum="border"/>
+    </request>
+
+  </interface>
+</protocol>

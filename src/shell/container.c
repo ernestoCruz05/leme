@@ -14,6 +14,7 @@
 #include "shell/policy.h"
 #include "shell/ownership_internal.h"
 #include "protocols/capture.h"
+#include "protocols/decoration.h"
 #include "public/server.h"
 #include "render/render.h"
 #include "render/workspace_transition.h"
@@ -69,12 +70,49 @@ static int leme_container_border(const struct leme_container *container) {
   return server->config == NULL ? 0 : server->config->border_width;
 }
 
+static struct leme_gaps
+leme_container_shell_frame(const struct leme_container *container) {
+  const int border =
+      leme_decoration_protocol_container_replaces_border(container)
+          ? 0
+          : leme_container_border(container);
+  const struct leme_gaps insets =
+      leme_decoration_protocol_container_insets(container);
+  return (struct leme_gaps){
+      .top = insets.top + border,
+      .right = insets.right + border,
+      .bottom = insets.bottom + border,
+      .left = insets.left + border,
+  };
+}
+
+static struct leme_box leme_container_resize_box(struct leme_box box,
+                                                 struct leme_gaps by,
+                                                 int64_t sign) {
+  const int64_t x = (int64_t)box.x + sign * by.left;
+  const int64_t y = (int64_t)box.y + sign * by.top;
+  const int64_t width =
+      (int64_t)box.width - sign * ((int64_t)by.left + by.right);
+  const int64_t height =
+      (int64_t)box.height - sign * ((int64_t)by.top + by.bottom);
+  if (x < INT_MIN || y < INT_MIN || x > INT_MAX || y > INT_MAX || width <= 0 ||
+      width > INT_MAX || height <= 0 || height > INT_MAX ||
+      x + width > INT_MAX || y + height > INT_MAX) {
+    return (struct leme_box){0};
+  }
+  return (struct leme_box){(int)x, (int)y, (int)width, (int)height};
+}
+
 struct leme_box
 leme_container_content_box(const struct leme_container *container,
                            struct leme_box frame) {
   struct leme_desk_decoration_boxes boxes = {0};
   if (container == NULL) {
     return (struct leme_box){0};
+  }
+  if (leme_decoration_protocol_container_decorated(container)) {
+    return leme_container_resize_box(frame,
+                                     leme_container_shell_frame(container), 1);
   }
   const struct leme_config *config = leme_container_server(container)->config;
   if (!leme_desk_decoration_geometry(frame, leme_container_border(container),
@@ -89,6 +127,10 @@ leme_container_content_box(const struct leme_container *container,
 static struct leme_box
 leme_container_frame_box(const struct leme_container *container,
                          struct leme_box content) {
+  if (leme_decoration_protocol_container_decorated(container)) {
+    return leme_container_resize_box(content,
+                                     leme_container_shell_frame(container), -1);
+  }
   const int border = leme_container_border(container);
   const int titlebar =
       leme_desk_style_titlebar_height(leme_container_server(container)->config);
@@ -401,6 +443,7 @@ bool leme_container_apply_interactive_box(struct leme_container *container,
 }
 
 static void leme_container_destroy(struct leme_container *container) {
+  leme_decoration_protocol_container_destroy(container);
   leme_desk_buttons_invalidate_container(container);
   leme_container_invalidate(container);
   wl_list_remove(&container->link);

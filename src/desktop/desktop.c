@@ -239,18 +239,26 @@ static void leme_desk_handle_directory_changed(void *data) {
   }
 }
 
+#define LEME_DESK_ICON_NAMES 8
+
 static struct wlr_buffer *
 leme_desk_entry_image(struct leme_desk *desk,
                       const struct leme_desk_entry *entry, const char *theme,
                       int size, int pixels, int scale) {
-  const char *const names[] = {entry->icon,
-                               entry->directory ? "folder" : "text-x-generic"};
+  const char *names[LEME_DESK_ICON_NAMES] = {entry->icon};
+  size_t count = 1;
+  for (size_t i = 0; entry->fallbacks != NULL && entry->fallbacks[i] != NULL &&
+                     count < LEME_ARRAY_LENGTH(names) - 1;
+       i++) {
+    names[count++] = entry->fallbacks[i];
+  }
+  names[count++] = entry->directory ? "folder" : "text-x-generic";
   const char *const themes[] = {theme, LEME_DESK_STYLE_ICON_THEME};
   for (size_t t = 0; t < LEME_ARRAY_LENGTH(themes); t++) {
     if (t > 0 && strcmp(themes[t], theme) == 0) {
       break;
     }
-    for (size_t i = 0; i < LEME_ARRAY_LENGTH(names); i++) {
+    for (size_t i = 0; i < count; i++) {
       char *path = NULL;
       if (!leme_desk_theme_resolve(themes[t], names[i], size, scale, &path)) {
         continue;

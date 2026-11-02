@@ -575,8 +575,7 @@ static bool leme_render_at_filtered(struct leme_server *server, double lx,
       if (render_owner != NULL &&
           render_owner->kind == LEME_RENDER_OWNER_CONTAINER) {
         hit->container = render_owner->value.container;
-        hit->surface = NULL;
-        if (hit->resize_edges == 0) {
+        if (hit->surface == NULL && hit->resize_edges == 0) {
           hit->decoration_part =
               leme_desk_frame_hit(&hit->container->frame, node);
         }

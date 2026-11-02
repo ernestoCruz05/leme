@@ -47,6 +47,7 @@ static void leme_desk_entry_finish(struct leme_desk_entry *entry) {
   g_free(entry->path);
   g_free(entry->label);
   g_free(entry->icon);
+  g_strfreev(entry->fallbacks);
   *entry = (struct leme_desk_entry){0};
 }
 
@@ -71,7 +72,13 @@ void leme_desk_catalog_destroy(struct leme_desk_catalog *catalog) {
   free(catalog);
 }
 
-char *leme_desk_catalog_launcher_icon(const char *path) {
+static bool leme_desk_catalog_launcher_trusted(const struct stat *status) {
+  return status->st_uid == geteuid() &&
+         (status->st_mode & (S_IWGRP | S_IWOTH)) == 0 &&
+         (status->st_mode & S_IXUSR) != 0;
+}
+
+static char *leme_desk_catalog_launcher_read(const char *path, char **title) {
   const int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
   if (fd < 0) {
     return NULL;
@@ -109,29 +116,60 @@ char *leme_desk_catalog_launcher_icon(const char *path) {
     if (icon != NULL && icon[0] == '\0') {
       g_clear_pointer(&icon, g_free);
     }
+    if (title != NULL && leme_desk_catalog_launcher_trusted(&status)) {
+      *title = g_key_file_get_locale_string(key, "Desktop Entry", "Name", NULL,
+                                            NULL);
+      if (*title != NULL && (*title)[0] == '\0') {
+        g_clear_pointer(title, g_free);
+      }
+    }
   }
   g_key_file_unref(key);
 cleanup:
   if (close(fd) != 0) {
     g_clear_pointer(&icon, g_free);
+    if (title != NULL) {
+      g_clear_pointer(title, g_free);
+    }
   }
   return icon;
 }
 
-static char *leme_desk_file_icon(const char *name) {
+char *leme_desk_catalog_launcher_icon(const char *path) {
+  return leme_desk_catalog_launcher_read(path, NULL);
+}
+
+static void leme_desk_file_icon(struct leme_desk_entry *entry,
+                                const char *name) {
   gboolean uncertain = false;
   char *type = g_content_type_guess(name, NULL, 0, &uncertain);
   GIcon *icon = type == NULL ? NULL : g_content_type_get_icon(type);
-  char *result = NULL;
+  GPtrArray *names = g_ptr_array_new();
   if (icon != NULL && G_IS_THEMED_ICON(icon)) {
-    const char *const *names = g_themed_icon_get_names(G_THEMED_ICON(icon));
-    if (names != NULL && names[0] != NULL) {
-      result = strdup(names[0]);
+    const char *const *themed = g_themed_icon_get_names(G_THEMED_ICON(icon));
+    for (size_t i = 0; themed != NULL && themed[i] != NULL; i++) {
+      g_ptr_array_add(names, g_strdup(themed[i]));
     }
+  }
+  char *generic =
+      type == NULL ? NULL : g_content_type_get_generic_icon_name(type);
+  for (guint i = 0; generic != NULL && i < names->len; i++) {
+    if (strcmp(g_ptr_array_index(names, i), generic) == 0) {
+      g_clear_pointer(&generic, g_free);
+    }
+  }
+  if (generic != NULL) {
+    g_ptr_array_add(names, generic);
+  }
+  if (names->len > 0) {
+    entry->icon = g_ptr_array_steal_index(names, 0);
+    g_ptr_array_add(names, NULL);
+    entry->fallbacks = (char **)g_ptr_array_free(names, false);
+  } else {
+    g_ptr_array_free(names, true);
   }
   g_clear_object(&icon);
   g_free(type);
-  return result;
 }
 
 static bool leme_desk_entry_init(struct leme_desk_entry *entry,
@@ -141,11 +179,6 @@ static bool leme_desk_entry_init(struct leme_desk_entry *entry,
   entry->label = g_filename_display_name(name);
   if (entry->path == NULL || entry->label == NULL) {
     goto fail;
-  }
-  for (char *cursor = entry->label; *cursor != '\0'; cursor++) {
-    if ((unsigned char)*cursor < 32 || *cursor == 127) {
-      *cursor = ' ';
-    }
   }
   struct stat status = {0};
   const bool exists = stat(entry->path, &status) == 0;
@@ -157,9 +190,19 @@ static bool leme_desk_entry_init(struct leme_desk_entry *entry,
     entry->icon = strdup(entry->path);
   } else if (exists && S_ISREG(status.st_mode) &&
              g_str_has_suffix(name, ".desktop")) {
-    entry->icon = leme_desk_catalog_launcher_icon(entry->path);
+    char *title = NULL;
+    entry->icon = leme_desk_catalog_launcher_read(entry->path, &title);
+    if (title != NULL) {
+      g_free(entry->label);
+      entry->label = title;
+    }
   } else {
-    entry->icon = leme_desk_file_icon(name);
+    leme_desk_file_icon(entry, name);
+  }
+  for (char *cursor = entry->label; *cursor != '\0'; cursor++) {
+    if ((unsigned char)*cursor < 32 || *cursor == 127) {
+      *cursor = ' ';
+    }
   }
   if (entry->icon == NULL) {
     entry->icon = strdup(entry->directory ? "folder" : "text-x-generic");

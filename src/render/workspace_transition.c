@@ -154,8 +154,7 @@ struct leme_workspace_collection {
 static bool leme_workspace_collect_parent(
     struct leme_output *output, uint16_t tag_id,
     const struct leme_workspace_collection *collection,
-    const struct leme_view *active_view,
-    const struct leme_workspace_transition_ops *ops) {
+    const struct leme_view *active_view) {
   struct wlr_scene_node *node;
 
   wl_list_for_each(node, &collection->source->children, link) {
@@ -164,17 +163,18 @@ static bool leme_workspace_collect_parent(
         owner != NULL && owner->kind == LEME_RENDER_OWNER_VIEW
             ? owner->value.view
             : NULL;
-    struct wlr_scene_tree *copy;
+    struct leme_render_view_frame_nodes nodes;
 
     if (!leme_workspace_view_is_participant(view, output, tag_id) ||
         &view->render_tree->node != node) {
       continue;
     }
-    copy = ops->snapshot(view->render_tree, collection->destination);
+    struct wlr_scene_tree *copy =
+        leme_render_view_snapshot(view, collection->destination, &nodes);
     if (copy == NULL) {
       return false;
     }
-    leme_render_view_apply_snapshot(view, copy, view == active_view);
+    leme_render_view_apply_snapshot(view, &nodes, view == active_view);
     wlr_scene_node_set_position(
         &copy->node,
         leme_workspace_coordinate_subtract(copy->node.x, output->full_box.x),
@@ -183,11 +183,10 @@ static bool leme_workspace_collect_parent(
   return true;
 }
 
-static bool
-leme_workspace_collect_tag(struct leme_output *output, uint16_t tag_id,
-                           struct wlr_scene_tree *composition,
-                           const struct leme_view *active_view,
-                           const struct leme_workspace_transition_ops *ops) {
+static bool leme_workspace_collect_tag(struct leme_output *output,
+                                       uint16_t tag_id,
+                                       struct wlr_scene_tree *composition,
+                                       const struct leme_view *active_view) {
   if (!leme_workspace_tag_is_capturable(output, tag_id)) {
     return false;
   }
@@ -197,14 +196,14 @@ leme_workspace_collect_tag(struct leme_output *output, uint16_t tag_id,
                  .source = output->server->scene_tiled,
                  .destination = composition,
              },
-             active_view, ops) &&
+             active_view) &&
          leme_workspace_collect_parent(
              output, tag_id,
              &(struct leme_workspace_collection){
                  .source = output->server->scene_floating,
                  .destination = composition,
              },
-             active_view, ops);
+             active_view);
 }
 
 static void leme_workspace_transition_discard(
@@ -363,7 +362,7 @@ leme_workspace_transition_prepare_with_ops(
   }
   if (previous == NULL) {
     if (!leme_workspace_collect_tag(output, source_id, transition->outgoing,
-                                    NULL, ops)) {
+                                    NULL)) {
       goto fail;
     }
   } else {
@@ -382,7 +381,7 @@ leme_workspace_transition_prepare_with_ops(
     previous_finished = true;
   }
   if (!leme_workspace_collect_tag(output, destination_id, transition->incoming,
-                                  destination_focus, ops)) {
+                                  destination_focus)) {
     goto fail;
   }
   transition->cache[0] = (struct leme_workspace_snapshot_slot){
@@ -838,7 +837,7 @@ static struct wlr_scene_tree *leme_workspace_transition_get_or_create_slot(
   }
   wlr_scene_node_set_enabled(&scratch->node, false);
   if (!leme_workspace_collect_tag(transition->output, tag_id, scratch,
-                                  active_view, transition->ops)) {
+                                  active_view)) {
     wlr_scene_node_destroy(&scratch->node);
     return NULL;
   }

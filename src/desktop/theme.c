@@ -266,6 +266,10 @@ bool leme_desk_theme_resolve(const char *theme, const char *name,
   if (name[0] == '/') {
     return leme_desk_theme_image(name, path);
   }
+  if (theme != NULL && theme[0] == '/') {
+    return leme_desk_theme_component(name) &&
+           leme_desk_theme_candidate(theme, "", "", name, path);
+  }
   if (!leme_desk_theme_component(name) || !leme_desk_theme_component(theme)) {
     return false;
   }

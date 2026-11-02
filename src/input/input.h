@@ -65,6 +65,13 @@ bool leme_input_pointer_grab_start_decoration(struct leme_view *view,
                                               uint32_t button);
 bool leme_input_pointer_grab_start_xdg(struct leme_view *view, bool resize,
                                        uint32_t serial, uint32_t wlr_edges);
+bool leme_input_pointer_grab_start_container_surface(
+    struct leme_container *container, struct wlr_surface *origin, bool resize,
+    uint32_t serial, uint32_t wlr_edges);
+bool leme_input_pointer_grab_start_surface(struct leme_view *view,
+                                           struct wlr_surface *origin,
+                                           bool resize, uint32_t serial,
+                                           uint32_t wlr_edges);
 bool leme_input_pointer_grab_start_xwayland(struct leme_view *view, bool resize,
                                             uint32_t wlr_edges);
 void leme_input_pointer_grab_cancel(struct leme_server *server);

@@ -360,6 +360,7 @@ struct leme_config *leme_config_defaults(void) {
   config->refcount = 1;
   config->initial_tags = 3;
   config->desktop_minimized_strip = true;
+  config->desktop_launchers = true;
   config->desktop_container_modifier = WLR_MODIFIER_SHIFT;
   if (!leme_config_desktop_menu_defaults(config)) {
     leme_config_destroy(config);

@@ -5,6 +5,7 @@
 #include "desktop/buttons.h"
 
 #include "input/input.h"
+#include "protocols/decoration.h"
 #include "protocols/input.h"
 #include "protocols/publication.h"
 #include "public/server.h"
@@ -393,6 +394,7 @@ void leme_view_refresh_layout(struct leme_view *view,
       !view->floating && !view->detached &&
       tag->layout.kind == LEME_LAYOUT_DESKTOP &&
       (previous != LEME_LAYOUT_DESKTOP || view->fullscreen)) {
+    const struct leme_box from = view->box;
     (void)leme_desk_decoration_sync(view);
     struct leme_box box = view->fullscreen ? view->saved_box : view->box;
     if (view->desktop_box_valid) {
@@ -406,6 +408,9 @@ void leme_view_refresh_layout(struct leme_view *view,
     } else {
       view->box = box;
       leme_view_configure(view, leme_render_view_content_box(view, box));
+      if (!view->server->arrange_instant && !leme_box_equal(from, box)) {
+        leme_render_view_move(view, from, box);
+      }
     }
   }
   leme_view_update_tiled(view);
@@ -936,6 +941,7 @@ void leme_view_destroy_core(struct leme_view *view) {
     return;
   }
   leme_toplevel_untrack(view);
+  leme_decoration_protocol_view_destroy(view);
   leme_view_unmap(view);
   if (leme_ownership_tag(view) != NULL) {
     leme_tags_remove_view(view);
@@ -1587,7 +1593,8 @@ void leme_view_apply_layout_box(struct leme_view *view, struct leme_box box,
   view->box = box;
   if (from.x != box.x || from.y != box.y || from.width != box.width ||
       from.height != box.height) {
-    if (animate) {
+    struct leme_box current = {0};
+    if (animate || leme_render_view_animation_box(view, &current)) {
       leme_render_view_move(view, from, box);
     } else {
       leme_render_view_finish_move(view);

@@ -39,6 +39,8 @@ static bool leme_animation_hold_buffer(struct wlr_scene_buffer *node,
 struct leme_animation_copy_context {
   struct wlr_scene_tree *source;
   struct wlr_scene_tree *target;
+  struct leme_animation_part *parts;
+  size_t count;
 };
 
 static bool
@@ -111,30 +113,45 @@ leme_animation_copy_children(struct leme_animation_copy_context context) {
     }
     wlr_scene_node_set_position(copy, node->x, node->y);
     wlr_scene_node_set_enabled(copy, node->enabled);
+    for (size_t index = 0; index < context.count; index++) {
+      if (context.parts[index].source == node) {
+        context.parts[index].copy = copy;
+      }
+    }
   }
   return true;
 }
 
-struct wlr_scene_tree *leme_animation_snapshot(struct wlr_scene_tree *source,
-                                               struct wlr_scene_tree *parent) {
-  struct wlr_scene_tree *snapshot;
-
+struct wlr_scene_tree *
+leme_animation_snapshot_parts(struct wlr_scene_tree *source,
+                              struct wlr_scene_tree *parent,
+                              struct leme_animation_part *parts, size_t count) {
   if (source == NULL || parent == NULL) {
     return NULL;
   }
-  snapshot = wlr_scene_tree_create(parent);
+  for (size_t index = 0; index < count; index++) {
+    parts[index].copy = NULL;
+  }
+  struct wlr_scene_tree *snapshot = wlr_scene_tree_create(parent);
   if (snapshot == NULL) {
     return NULL;
   }
   if (!leme_animation_copy_children((struct leme_animation_copy_context){
           .source = source,
           .target = snapshot,
+          .parts = parts,
+          .count = count,
       })) {
     leme_animation_snapshot_destroy(snapshot);
     return NULL;
   }
   wlr_scene_node_set_position(&snapshot->node, source->node.x, source->node.y);
   return snapshot;
+}
+
+struct wlr_scene_tree *leme_animation_snapshot(struct wlr_scene_tree *source,
+                                               struct wlr_scene_tree *parent) {
+  return leme_animation_snapshot_parts(source, parent, NULL, 0);
 }
 
 void leme_animation_snapshot_destroy(struct wlr_scene_tree *snapshot) {

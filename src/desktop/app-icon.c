@@ -57,8 +57,8 @@ static bool leme_desk_app_icon_named(const char *name, const char *theme,
                              theme, name, LEME_DESK_STRIP_ICON, scale, path);
 }
 
-bool leme_desk_app_icon_resolve(const char *app_id, const char *theme,
-                                int scale, char **path) {
+static bool leme_desk_app_icon_lookup(const char *app_id, const char *theme,
+                                      int scale, char **path) {
   if (path == NULL) {
     return false;
   }
@@ -95,4 +95,12 @@ bool leme_desk_app_icon_resolve(const char *app_id, const char *theme,
   }
   return leme_desk_app_icon_named("application-x-executable", theme, scale,
                                   path);
+}
+
+bool leme_desk_app_icon_resolve(const char *app_id, const char *theme,
+                                int scale, char **path) {
+  return leme_desk_app_icon_lookup(app_id, theme, scale, path) ||
+         (theme != NULL && theme[0] == '/' &&
+          leme_desk_app_icon_lookup(app_id, LEME_DESK_THEME_DEFAULT, scale,
+                                    path));
 }

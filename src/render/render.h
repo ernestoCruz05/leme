@@ -29,10 +29,14 @@ struct leme_render_preview {
   struct leme_box current;
 };
 
+#define LEME_RENDER_VIEW_SHELL_MAX 8
+
 struct leme_render_view_frame_nodes {
   struct wlr_scene_rect *border[4];
   struct wlr_scene_tree *content;
   struct wlr_scene_tree *decoration;
+  struct wlr_scene_tree *shell[LEME_RENDER_VIEW_SHELL_MAX];
+  struct leme_gaps margins;
   int titlebar_height;
   int titlebar_width;
   int button_width;
@@ -141,6 +145,8 @@ bool leme_render_view_collect_content(struct wl_array *bases,
                                       struct wlr_scene_tree *tree, int origin_x,
                                       int origin_y);
 void leme_render_view_fade_nodes(struct wl_array *bases, float alpha);
+void leme_render_view_scale_nodes(struct wl_array *bases, double ratio_x,
+                                  double ratio_y);
 void leme_render_view_layout_frame(
     const struct leme_render_view_frame_nodes *nodes, struct leme_box box,
     int border_width, int corner_radius,
@@ -171,11 +177,13 @@ struct wlr_scene_node *
 leme_render_view_stack_above(struct leme_view *view,
                              struct wlr_scene_node *anchor);
 void leme_render_view_set_activated(struct leme_view *view, bool activated);
-void leme_render_view_apply_snapshot(const struct leme_view *view,
-                                     struct wlr_scene_tree *snapshot,
-                                     bool activated);
-void leme_render_view_apply_active_snapshot(const struct leme_view *view,
-                                            struct wlr_scene_tree *snapshot);
+struct wlr_scene_tree *
+leme_render_view_snapshot(const struct leme_view *view,
+                          struct wlr_scene_tree *parent,
+                          struct leme_render_view_frame_nodes *nodes);
+void leme_render_view_apply_snapshot(
+    const struct leme_view *view,
+    const struct leme_render_view_frame_nodes *nodes, bool activated);
 float leme_render_view_opacity(const struct leme_config *config, bool activated,
                                bool fullscreen,
                                const struct leme_view_rules *rules);

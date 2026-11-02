@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static bool leme_desk_style_reject_named(
@@ -235,7 +236,22 @@ static bool leme_desk_style_value(struct leme_config *config,
     if (!leme_desk_style_text(config, entry, info, &name, fatal)) {
       return false;
     }
-    if (!font && !leme_desk_theme_installed(name)) {
+    if (!font && (strchr(name, '/') != NULL || name[0] == '~')) {
+      char *folder = leme_desk_style_icon_path(config, name);
+      struct stat status = {0};
+      if (folder == NULL || stat(folder, &status) != 0 ||
+          !S_ISDIR(status.st_mode) || access(folder, R_OK | X_OK) != 0) {
+        *fatal = !leme_config_reject(
+            config, entry, 0,
+            "icon folder %s cannot be read; %s is used instead",
+            folder == NULL ? name : folder, LEME_DESK_STYLE_ICON_THEME);
+        free(folder);
+        free(name);
+        return false;
+      }
+      free(name);
+      name = folder;
+    } else if (!font && !leme_desk_theme_installed(name)) {
       *fatal = !leme_config_reject(
           config, entry, 0,
           "icon theme %s is not installed; %s is used instead", name,

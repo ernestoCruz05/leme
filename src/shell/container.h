@@ -9,6 +9,7 @@
 
 #include <wayland-server-core.h>
 
+struct leme_decoration_window;
 struct leme_server;
 struct leme_tag;
 struct leme_view;
@@ -26,6 +27,7 @@ struct leme_container_drop {
 
 struct leme_container {
   struct leme_tag *tag;
+  struct leme_decoration_window *decoration_window;
   struct wlr_scene_tree *render_tree;
   struct wlr_scene_rect *border[4];
   struct leme_desk_frame frame;

@@ -44,6 +44,7 @@ An empty block such as `open { }` turns that event on with the defaults below.
 
 `effect`, `opacity_curve` and `scale_from` only apply to `open` and `close`. On
 desktop tags, `move` also animates maximize, `snap`, containers and minimizing.
+Switching a tag to or from the desktop layout uses `move` too.
 
 ## Springs
 

@@ -10,6 +10,7 @@ struct leme_desk_entry {
   char *path;
   char *label;
   char *icon;
+  char **fallbacks;
   bool directory;
 };
 

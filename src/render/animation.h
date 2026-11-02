@@ -4,6 +4,7 @@
 #include "core/leme.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <time.h>
 #include <wayland-server-core.h>
@@ -123,6 +124,15 @@ void leme_animation_crop_buffer(
     int width, int height);
 struct wlr_scene_tree *leme_animation_snapshot(struct wlr_scene_tree *source,
                                                struct wlr_scene_tree *parent);
+struct wlr_scene_node;
+struct leme_animation_part {
+  const struct wlr_scene_node *source;
+  struct wlr_scene_node *copy;
+};
+struct wlr_scene_tree *
+leme_animation_snapshot_parts(struct wlr_scene_tree *source,
+                              struct wlr_scene_tree *parent,
+                              struct leme_animation_part *parts, size_t count);
 void leme_animation_snapshot_destroy(struct wlr_scene_tree *snapshot);
 
 void leme_animation_manager_init(struct leme_animation_manager *manager);
