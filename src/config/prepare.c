@@ -67,6 +67,44 @@ static bool pointer_settings_equal(const struct leme_pointer_settings *a,
   if ((a->fields & LEME_POINTER_TAP) && a->tap != b->tap) {
     return false;
   }
+  if ((a->fields & LEME_POINTER_DISABLE_WHILE_TYPING) &&
+      a->disable_while_typing != b->disable_while_typing) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_CLICK_METHOD) &&
+      a->click_method != b->click_method) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_SCROLL_METHOD) &&
+      a->scroll_method != b->scroll_method) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_SCROLL_BUTTON) &&
+      a->scroll_button != b->scroll_button) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_MIDDLE_EMULATION) &&
+      a->middle_emulation != b->middle_emulation) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_TAP_BUTTON_MAP) &&
+      a->tap_button_map != b->tap_button_map) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_TAP_DRAG) && a->tap_drag != b->tap_drag) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_DRAG_LOCK) && a->drag_lock != b->drag_lock) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_DRAG_FINGERS) &&
+      a->drag_fingers != b->drag_fingers) {
+    return false;
+  }
+  if ((a->fields & LEME_POINTER_SCROLL_FACTOR) &&
+      fabs(a->scroll_factor - b->scroll_factor) > 1e-9) {
+    return false;
+  }
   return true;
 }
 
@@ -93,7 +131,9 @@ static bool leme_pointers_have_delta(const struct leme_server *server,
     return false;
   }
   if (!pointer_settings_equal(&server->config->pointer_defaults,
-                              &next->pointer_defaults)) {
+                              &next->pointer_defaults) ||
+      leme_config_swipe_fingers(server->config) !=
+          leme_config_swipe_fingers(next)) {
     return true;
   }
   return !pointer_rules_equal(server->config, next);

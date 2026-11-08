@@ -1,6 +1,8 @@
 # Gestures
 
-The `gestures` block sets up horizontal touchpad swipes that switch tags.
+The `gestures` block sets up the touchpad swipe that switches tags and the
+[touchpad edges](#touchpad-edges). Other gestures are
+[bindings](keybindings.md#gestures).
 
 ```scfg
 gestures {
@@ -36,3 +38,23 @@ Two-finger swipes are rejected because libinput does not deliver them. The
 swipe direction follows the device's `natural_scroll`. The release settles with
 a spring that [`animation.workspace.spring`](animation.md#springs) can tune. A
 swipe switches instantly when any tag it can reach uses the desktop layout.
+
+## Touchpad edges
+
+`edges` sizes the [edge bindings](keybindings.md#touchpad-edges).
+
+```scfg
+gestures {
+    edges {
+        size 8
+        step 5
+    }
+}
+```
+
+| Key | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `size` | `2` to `30` | `8` | how far from an edge a slide can start, in mm |
+| `step` | `1` to `50` | `5` | how far a finger slides to run the binding once, in mm |
+
+Edge bindings on the right and bottom edges win over `scroll_method edge`.

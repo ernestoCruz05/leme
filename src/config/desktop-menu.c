@@ -193,6 +193,13 @@ static bool leme_config_desktop_menu_row(struct leme_config *config,
     leme_config_finish_command(&entry->command);
     return false;
   }
+  if (entry->command.type == LEME_COMMAND_GESTURE_MOVE ||
+      entry->command.type == LEME_COMMAND_GESTURE_RESIZE) {
+    *fatal = !leme_config_reject(
+        config, row, 1, "%s only works on a swipe binding", row->params[1]);
+    leme_config_finish_command(&entry->command);
+    return false;
+  }
   if (!leme_config_desktop_menu_placeholders(config, row, menu, &entry->command,
                                              fatal)) {
     leme_config_finish_command(&entry->command);

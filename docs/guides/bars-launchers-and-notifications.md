@@ -45,7 +45,7 @@ Audio and media control are up to other programs. With `wpctl` and
 
 ```scfg
 bind_group "media" {
-    XF86AudioRaiseVolume spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+
+    XF86AudioRaiseVolume spawn wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+
     XF86AudioLowerVolume spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
     XF86AudioMute spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
     XF86AudioPlay spawn playerctl play-pause

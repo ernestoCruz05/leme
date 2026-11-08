@@ -21,6 +21,11 @@ PUBLIC_NUMBER(POSITIVE_NUMBER, false, true, DBL_TRUE_MIN, false, 0, NONE)
 PUBLIC_NUMBER(OPEN_RATIO, false, true, DBL_TRUE_MIN, true, 0x1.fffffffffffffp-1,
               NONE)
 PUBLIC_NUMBER(POINTER_SPEED, false, true, -1, true, 1, NONE)
+PUBLIC_NUMBER(DRAG_FINGERS, true, true, 0, true, 4, FINGERS)
+PUBLIC_NUMBER(SCROLL_FACTOR, false, true, DBL_TRUE_MIN, true, 100, NONE)
+PUBLIC_NUMBER(GESTURE_FINGERS, true, true, 1, true, 5, NONE)
+PUBLIC_NUMBER(EDGE_SIZE, false, true, 2, true, 30, NONE)
+PUBLIC_NUMBER(EDGE_STEP, false, true, 1, true, 50, NONE)
 PUBLIC_NUMBER(TAG_NUMBER, true, true, 1, true, 64, NONE)
 PUBLIC_NUMBER(BLUR, true, true, 0, true, 64, NONE)
 PUBLIC_NUMBER(CURSOR_SIZE, true, true, 1, true, 512, NONE)
@@ -44,6 +49,15 @@ PUBLIC_ENUM(TRANSFORM, "normal", "90", "180", "270", "flipped", "flipped-90",
             "flipped-180", "flipped-270")
 PUBLIC_ENUM(CONFIG_TRANSFORM, "normal", "90", "180", "270")
 PUBLIC_ENUM(PROFILE, "adaptive", "flat")
+PUBLIC_ENUM(CLICK_METHOD, "none", "button_areas", "clickfinger")
+PUBLIC_ENUM(SCROLL_METHOD, "none", "two_finger", "edge", "on_button_down")
+PUBLIC_ENUM(POINTER_BUTTON, "left", "right", "middle", "side", "extra",
+            "forward", "back", "task")
+PUBLIC_ENUM(TAP_BUTTON_MAP, "lrm", "lmr")
+PUBLIC_ENUM(DRAG_LOCK, "none", "timeout", "sticky")
+PUBLIC_ENUM(GESTURE_KIND, "swipe", "pinch", "hold", "edge")
+PUBLIC_ENUM(GESTURE_DIRECTION, "up", "down", "left", "right", "in", "out")
+PUBLIC_ENUM(EDGE_SIDE, "left", "right", "top", "bottom")
 PUBLIC_ENUM(LAYOUT, "dwindle", "master_stack", "desktop")
 PUBLIC_ENUM(DROP_MODE, "simple", "edges")
 PUBLIC_ENUM(COVERS, "none", "top", "overlay")
@@ -272,6 +286,28 @@ PUBLIC_SCHEMA(
                  NULL, "Whether this device supports left handed"),
     PUBLIC_FIELD("tap", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
                  "Whether this device supports tap"),
+    PUBLIC_FIELD("disable_while_typing", BOOLEAN, false, true, NULL, SENSITIVE,
+                 ALWAYS, NULL,
+                 "Whether this device supports disable while typing"),
+    PUBLIC_FIELD("click_method", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS,
+                 NULL, "Whether this device supports click method"),
+    PUBLIC_FIELD("scroll_method", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS,
+                 NULL, "Whether this device supports scroll method"),
+    PUBLIC_FIELD("scroll_button", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS,
+                 NULL, "Whether this device supports scroll button"),
+    PUBLIC_FIELD("middle_emulation", BOOLEAN, false, true, NULL, SENSITIVE,
+                 ALWAYS, NULL,
+                 "Whether this device supports middle button emulation"),
+    PUBLIC_FIELD("tap_button_map", BOOLEAN, false, true, NULL, SENSITIVE,
+                 ALWAYS, NULL, "Whether this device supports tap button map"),
+    PUBLIC_FIELD("tap_drag", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS,
+                 NULL, "Whether this device supports tap and drag"),
+    PUBLIC_FIELD("drag_lock", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS,
+                 NULL, "Whether this device supports drag lock"),
+    PUBLIC_FIELD("drag_fingers", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS,
+                 NULL, "Whether this device supports finger count for drags"),
+    PUBLIC_FIELD("scroll_factor", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS,
+                 NULL, "Whether this device supports a scroll factor"),
     PUBLIC_FIELD("keyboard_layout", BOOLEAN, false, true, NULL, SENSITIVE,
                  ALWAYS, NULL, "Whether this device supports keyboard layout"))
 PUBLIC_SCHEMA(
@@ -287,6 +323,36 @@ PUBLIC_SCHEMA(
                  NULL, "Applied left handed; null if unsupported"),
     PUBLIC_FIELD("tap", BOOLEAN, true, true, NULL, SENSITIVE, ALWAYS, NULL,
                  "Applied tap; null if unsupported"),
+    PUBLIC_FIELD("disable_while_typing", BOOLEAN, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied disable while typing; null if unsupported"),
+    PUBLIC_FIELD("click_method", CLICK_METHOD, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied click method; null if unsupported"),
+    PUBLIC_FIELD("scroll_method", SCROLL_METHOD, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied scroll method; null if unsupported"),
+    PUBLIC_FIELD("scroll_button", POINTER_BUTTON, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied scroll button; null if unsupported"),
+    PUBLIC_FIELD("middle_emulation", BOOLEAN, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied middle button emulation; null if unsupported"),
+    PUBLIC_FIELD("tap_button_map", TAP_BUTTON_MAP, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied tap button map; null if unsupported"),
+    PUBLIC_FIELD("tap_drag", BOOLEAN, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied tap and drag; null if unsupported"),
+    PUBLIC_FIELD("drag_lock", DRAG_LOCK, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied drag lock; null if unsupported"),
+    PUBLIC_FIELD("drag_fingers", DRAG_FINGERS, true, true, NULL,
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied finger count for drags; null if unsupported"),
+    PUBLIC_FIELD("scroll_factor", SCROLL_FACTOR, true, true, "ratio",
+                 SENSITIVE, ALWAYS, NULL,
+                 "Applied scroll distance multiplier; null if unsupported"),
     PUBLIC_FIELD("keyboard_layout", KEYBOARD_LAYOUT, true, true, NULL,
                  SENSITIVE, ALWAYS, NULL,
                  "Keyboard layout state; null for pointers"))

@@ -225,9 +225,14 @@ static enum leme_public_status
 pointer_assignments(struct leme_public_builder *b,
                     const struct leme_pointer_settings *settings,
                     struct leme_public_value **out) {
-  const uint32_t known = LEME_POINTER_PROFILE | LEME_POINTER_SPEED |
-                         LEME_POINTER_NATURAL_SCROLL |
-                         LEME_POINTER_LEFT_HANDED | LEME_POINTER_TAP;
+  const uint32_t known =
+      LEME_POINTER_PROFILE | LEME_POINTER_SPEED | LEME_POINTER_NATURAL_SCROLL |
+      LEME_POINTER_LEFT_HANDED | LEME_POINTER_TAP |
+      LEME_POINTER_DISABLE_WHILE_TYPING | LEME_POINTER_CLICK_METHOD |
+      LEME_POINTER_SCROLL_METHOD | LEME_POINTER_SCROLL_BUTTON |
+      LEME_POINTER_MIDDLE_EMULATION | LEME_POINTER_TAP_BUTTON_MAP |
+      LEME_POINTER_TAP_DRAG | LEME_POINTER_DRAG_LOCK |
+      LEME_POINTER_DRAG_FINGERS | LEME_POINTER_SCROLL_FACTOR;
   if ((settings->fields & ~known) != 0)
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
   struct leme_public_value *record = NULL;
@@ -248,7 +253,9 @@ pointer_assignments(struct leme_public_builder *b,
                             settings->left_handed) != LEME_PUBLIC_OK) ||
       ((settings->fields & LEME_POINTER_TAP) != 0 &&
        leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("tap"),
-                            settings->tap) != LEME_PUBLIC_OK))
+                            settings->tap) != LEME_PUBLIC_OK) ||
+      leme_config_public_pointer_options(b, record, settings, false) !=
+          LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = record;
   return LEME_PUBLIC_OK;

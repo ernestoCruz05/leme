@@ -40,6 +40,7 @@
 #include <wlr/backend/session.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/util/log.h>
@@ -243,6 +244,11 @@ bool leme_server_init(struct leme_server *server) {
   if (!leme_input_protocols_init(server)) {
     return false;
   }
+  server->pointer_gestures = wlr_pointer_gestures_v1_create(server->display);
+  if (server->pointer_gestures == NULL) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to create pointer gestures");
+    return false;
+  }
   if (!leme_scratchpad_init(server) || !leme_sticky_init(server)) {
     return false;
   }
@@ -341,7 +347,7 @@ void leme_server_finish(struct leme_server *server) {
   leme_desk_decoration_finish(server);
   leme_desk_strip_finish(server);
   leme_desk_finish(server);
-  leme_input_workspace_gesture_cancel(server);
+  leme_input_gesture_cancel(server);
   leme_xwayland_finish(server);
   if (server->display != NULL) {
     wl_display_destroy_clients(server->display);

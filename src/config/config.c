@@ -325,6 +325,96 @@ void leme_config_set_pointer_defaults(struct leme_config *config) {
   config->focus_follows_mouse = true;
 }
 
+static const char *const leme_pointer_click_names[] = {
+    "none",
+    "button_areas",
+    "clickfinger",
+};
+static const char *const leme_pointer_scroll_names[] = {
+    "none",
+    "two_finger",
+    "edge",
+    "on_button_down",
+};
+static const char *const leme_pointer_button_names[] = {
+    "left", "right", "middle", "side", "extra", "forward", "back", "task",
+};
+static const char *const leme_pointer_tap_map_names[] = {
+    "lrm",
+    "lmr",
+};
+static const char *const leme_pointer_drag_lock_names[] = {
+    "none",
+    "timeout",
+    "sticky",
+};
+
+static const char *const *
+leme_pointer_choice_names(enum leme_pointer_choice choice, size_t *count) {
+  switch (choice) {
+  case LEME_POINTER_CHOICE_CLICK_METHOD:
+    *count =
+        sizeof(leme_pointer_click_names) / sizeof(*leme_pointer_click_names);
+    return leme_pointer_click_names;
+  case LEME_POINTER_CHOICE_SCROLL_METHOD:
+    *count =
+        sizeof(leme_pointer_scroll_names) / sizeof(*leme_pointer_scroll_names);
+    return leme_pointer_scroll_names;
+  case LEME_POINTER_CHOICE_SCROLL_BUTTON:
+    *count =
+        sizeof(leme_pointer_button_names) / sizeof(*leme_pointer_button_names);
+    return leme_pointer_button_names;
+  case LEME_POINTER_CHOICE_TAP_BUTTON_MAP:
+    *count = sizeof(leme_pointer_tap_map_names) /
+             sizeof(*leme_pointer_tap_map_names);
+    return leme_pointer_tap_map_names;
+  case LEME_POINTER_CHOICE_DRAG_LOCK:
+    *count = sizeof(leme_pointer_drag_lock_names) /
+             sizeof(*leme_pointer_drag_lock_names);
+    return leme_pointer_drag_lock_names;
+  }
+  *count = 0;
+  return NULL;
+}
+
+uint32_t leme_config_swipe_fingers(const struct leme_config *config) {
+  const uint32_t tag_swipe = config->gestures.workspace_switch.fingers;
+  uint32_t fingers = tag_swipe != 0 && tag_swipe < 32 ? 1u << tag_swipe : 0;
+
+  for (size_t i = 0; i < config->mode_count; i++) {
+    const struct leme_mode *mode = &config->modes[i];
+
+    for (size_t j = 0; j < mode->binding_count; j++) {
+      if (mode->bindings[j].trigger == LEME_BINDING_SWIPE) {
+        fingers |= 1u << mode->bindings[j].fingers;
+      }
+    }
+  }
+  return fingers;
+}
+
+const char *leme_pointer_choice_name(enum leme_pointer_choice choice,
+                                     unsigned value) {
+  size_t count = 0;
+  const char *const *names = leme_pointer_choice_names(choice, &count);
+
+  return value < count ? names[value] : NULL;
+}
+
+bool leme_pointer_choice_find(enum leme_pointer_choice choice, const char *text,
+                              size_t length, unsigned *value) {
+  size_t count = 0;
+  const char *const *names = leme_pointer_choice_names(choice, &count);
+
+  for (unsigned i = 0; i < count; i++) {
+    if (strlen(names[i]) == length && memcmp(names[i], text, length) == 0) {
+      *value = i;
+      return true;
+    }
+  }
+  return false;
+}
+
 bool leme_config_set_default_keyboard(struct leme_config *config) {
   config->keyboard_layouts = calloc(1, sizeof(*config->keyboard_layouts));
   if (config->keyboard_layouts == NULL) {
@@ -378,7 +468,9 @@ struct leme_config *leme_config_defaults(void) {
           .threshold = 0.5,
           .deceleration = 0.997,
           .velocity_window_ms = 150,
-      };
+  };
+  config->gestures.edges =
+      (struct leme_edge_gesture_settings){.size = 8.0, .step = 5.0};
   config->publication.activation = LEME_ACTIVATION_FOLLOW;
   config->config_errors = (struct leme_config_errors){
       .show = true,

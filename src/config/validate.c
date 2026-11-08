@@ -217,6 +217,8 @@ bool leme_config_validate_command(const struct leme_config *config,
   case LEME_COMMAND_CONTAINER_DETACH:
   case LEME_COMMAND_CONTAINER_DISSOLVE:
   case LEME_COMMAND_CLOSE_VIEW:
+  case LEME_COMMAND_GESTURE_MOVE:
+  case LEME_COMMAND_GESTURE_RESIZE:
   case LEME_COMMAND_MINIMIZE_VIEW:
   case LEME_COMMAND_RESTORE_MINIMIZED:
   case LEME_COMMAND_WINDOW_MENU:
@@ -245,17 +247,32 @@ bool leme_config_validate_command(const struct leme_config *config,
 
 static bool leme_config_pointer_settings_valid(
     const struct leme_pointer_settings *settings) {
-  const uint32_t all_fields = LEME_POINTER_PROFILE | LEME_POINTER_SPEED |
-                              LEME_POINTER_NATURAL_SCROLL |
-                              LEME_POINTER_LEFT_HANDED | LEME_POINTER_TAP;
+  const uint32_t all_fields = (LEME_POINTER_SCROLL_FACTOR << 1) - 1;
+  const uint32_t fields = settings->fields;
 
-  return (settings->fields & ~all_fields) == 0 &&
-         ((settings->fields & LEME_POINTER_PROFILE) == 0 ||
+  return (fields & ~all_fields) == 0 &&
+         ((fields & LEME_POINTER_PROFILE) == 0 ||
           settings->profile == LEME_POINTER_ACCEL_ADAPTIVE ||
           settings->profile == LEME_POINTER_ACCEL_FLAT) &&
-         ((settings->fields & LEME_POINTER_SPEED) == 0 ||
+         ((fields & LEME_POINTER_SPEED) == 0 ||
           (isfinite(settings->speed) && settings->speed >= -1.0 &&
-           settings->speed <= 1.0));
+           settings->speed <= 1.0)) &&
+         ((fields & LEME_POINTER_CLICK_METHOD) == 0 ||
+          settings->click_method <= LEME_POINTER_CLICK_CLICKFINGER) &&
+         ((fields & LEME_POINTER_SCROLL_METHOD) == 0 ||
+          settings->scroll_method <= LEME_POINTER_SCROLL_ON_BUTTON_DOWN) &&
+         ((fields & LEME_POINTER_SCROLL_BUTTON) == 0 ||
+          settings->scroll_button <= LEME_POINTER_BUTTON_TASK) &&
+         ((fields & LEME_POINTER_TAP_BUTTON_MAP) == 0 ||
+          settings->tap_button_map <= LEME_POINTER_TAP_MAP_LMR) &&
+         ((fields & LEME_POINTER_DRAG_LOCK) == 0 ||
+          settings->drag_lock <= LEME_POINTER_DRAG_LOCK_STICKY) &&
+         ((fields & LEME_POINTER_DRAG_FINGERS) == 0 ||
+          settings->drag_fingers == 0 || settings->drag_fingers == 3 ||
+          settings->drag_fingers == 4) &&
+         ((fields & LEME_POINTER_SCROLL_FACTOR) == 0 ||
+          (settings->scroll_factor > 0.0 &&
+           settings->scroll_factor <= LEME_POINTER_SCROLL_FACTOR_MAX));
 }
 
 bool leme_config_validate(const struct leme_config *config, char **error) {
@@ -344,10 +361,10 @@ bool leme_config_validate(const struct leme_config *config, char **error) {
         error, "config: between one and four keyboard layouts are required");
     return false;
   }
-  if (config->pointer_defaults.fields !=
-          (LEME_POINTER_PROFILE | LEME_POINTER_SPEED |
-           LEME_POINTER_NATURAL_SCROLL | LEME_POINTER_LEFT_HANDED |
-           LEME_POINTER_TAP) ||
+  const uint32_t pointer_base = LEME_POINTER_PROFILE | LEME_POINTER_SPEED |
+                                LEME_POINTER_NATURAL_SCROLL |
+                                LEME_POINTER_LEFT_HANDED | LEME_POINTER_TAP;
+  if ((config->pointer_defaults.fields & pointer_base) != pointer_base ||
       !leme_config_pointer_settings_valid(&config->pointer_defaults)) {
     leme_config_set_error(error, "config: invalid global pointer policy");
     return false;
@@ -395,15 +412,15 @@ bool leme_config_validate(const struct leme_config *config, char **error) {
     for (binding_index = 0; binding_index < mode->binding_count;
          binding_index++) {
       const struct leme_binding *binding = &mode->bindings[binding_index];
-      if (binding->keysym == XKB_KEY_NoSymbol ||
+      if ((binding->trigger == LEME_BINDING_KEY &&
+           binding->keysym == XKB_KEY_NoSymbol) ||
           !leme_config_validate_command(config, &binding->command)) {
         leme_config_set_error(error, "config: invalid binding in mode %s",
                               mode->name);
         return false;
       }
       for (previous = 0; previous < binding_index; previous++) {
-        if (mode->bindings[previous].modifiers == binding->modifiers &&
-            mode->bindings[previous].keysym == binding->keysym) {
+        if (leme_config_bindings_overlap(&mode->bindings[previous], binding)) {
           leme_config_set_error(error, "config: duplicate binding in mode %s",
                                 mode->name);
           return false;

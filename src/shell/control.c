@@ -485,6 +485,10 @@ static enum leme_control_code command(struct leme_server *server,
       cmd.type == LEME_COMMAND_SWITCH_VT || cmd.type == LEME_COMMAND_ACT)
     code =
         leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED, "command refused");
+  else if (cmd.type == LEME_COMMAND_GESTURE_MOVE ||
+           cmd.type == LEME_COMMAND_GESTURE_RESIZE)
+    code = leme_control_refuse(error, LEME_CONTROL_INVALID_ARGUMENT,
+                               "only valid on a swipe binding");
   else if (server->config != NULL &&
            !leme_config_validate_command(server->config, &cmd))
     code = leme_control_refuse(error, LEME_CONTROL_INVALID_ARGUMENT,

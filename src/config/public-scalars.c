@@ -29,6 +29,84 @@ leme_config_public_profile(enum leme_pointer_accel_profile profile) {
   return NULL;
 }
 
+static enum leme_public_status
+put_pointer_unset(struct leme_public_builder *b,
+                  struct leme_public_value *record, struct leme_public_text key,
+                  bool nulls) {
+  return nulls ? leme_public_put_null(b, record, key) : LEME_PUBLIC_OK;
+}
+
+static enum leme_public_status
+put_pointer_bool(struct leme_public_builder *b,
+                 struct leme_public_value *record, struct leme_public_text key,
+                 bool set, bool nulls, bool value) {
+  return set ? leme_public_put_bool(b, record, key, value)
+             : put_pointer_unset(b, record, key, nulls);
+}
+
+static enum leme_public_status
+put_pointer_choice(struct leme_public_builder *b,
+                   struct leme_public_value *record,
+                   struct leme_public_text key, bool set, bool nulls,
+                   enum leme_pointer_choice choice, unsigned value) {
+  if (!set)
+    return put_pointer_unset(b, record, key, nulls);
+  const char *name = leme_pointer_choice_name(choice, value);
+  if (name == NULL)
+    return leme_public_fail(b, LEME_PUBLIC_INVALID);
+  return leme_public_put_cstr(b, record, key, name);
+}
+
+static enum leme_public_status put_pointer_number(
+    struct leme_public_builder *b, struct leme_public_value *record,
+    struct leme_public_text key, bool set, bool nulls, double value) {
+  return set ? leme_public_put_number(b, record, key, value)
+             : put_pointer_unset(b, record, key, nulls);
+}
+
+enum leme_public_status leme_config_public_pointer_options(
+    struct leme_public_builder *b, struct leme_public_value *record,
+    const struct leme_pointer_settings *settings, bool nulls) {
+  const uint32_t fields = settings->fields;
+  if (put_pointer_bool(b, record, LEME_PUBLIC_TEXT("disable_while_typing"),
+                       (fields & LEME_POINTER_DISABLE_WHILE_TYPING) != 0, nulls,
+                       settings->disable_while_typing) != LEME_PUBLIC_OK ||
+      put_pointer_choice(b, record, LEME_PUBLIC_TEXT("click_method"),
+                         (fields & LEME_POINTER_CLICK_METHOD) != 0, nulls,
+                         LEME_POINTER_CHOICE_CLICK_METHOD,
+                         settings->click_method) != LEME_PUBLIC_OK ||
+      put_pointer_choice(b, record, LEME_PUBLIC_TEXT("scroll_method"),
+                         (fields & LEME_POINTER_SCROLL_METHOD) != 0, nulls,
+                         LEME_POINTER_CHOICE_SCROLL_METHOD,
+                         settings->scroll_method) != LEME_PUBLIC_OK ||
+      put_pointer_choice(b, record, LEME_PUBLIC_TEXT("scroll_button"),
+                         (fields & LEME_POINTER_SCROLL_BUTTON) != 0, nulls,
+                         LEME_POINTER_CHOICE_SCROLL_BUTTON,
+                         settings->scroll_button) != LEME_PUBLIC_OK ||
+      put_pointer_bool(b, record, LEME_PUBLIC_TEXT("middle_emulation"),
+                       (fields & LEME_POINTER_MIDDLE_EMULATION) != 0, nulls,
+                       settings->middle_emulation) != LEME_PUBLIC_OK ||
+      put_pointer_choice(b, record, LEME_PUBLIC_TEXT("tap_button_map"),
+                         (fields & LEME_POINTER_TAP_BUTTON_MAP) != 0, nulls,
+                         LEME_POINTER_CHOICE_TAP_BUTTON_MAP,
+                         settings->tap_button_map) != LEME_PUBLIC_OK ||
+      put_pointer_bool(b, record, LEME_PUBLIC_TEXT("tap_drag"),
+                       (fields & LEME_POINTER_TAP_DRAG) != 0, nulls,
+                       settings->tap_drag) != LEME_PUBLIC_OK ||
+      put_pointer_choice(b, record, LEME_PUBLIC_TEXT("drag_lock"),
+                         (fields & LEME_POINTER_DRAG_LOCK) != 0, nulls,
+                         LEME_POINTER_CHOICE_DRAG_LOCK,
+                         settings->drag_lock) != LEME_PUBLIC_OK ||
+      put_pointer_number(b, record, LEME_PUBLIC_TEXT("drag_fingers"),
+                         (fields & LEME_POINTER_DRAG_FINGERS) != 0, nulls,
+                         settings->drag_fingers) != LEME_PUBLIC_OK ||
+      put_pointer_number(b, record, LEME_PUBLIC_TEXT("scroll_factor"),
+                         (fields & LEME_POINTER_SCROLL_FACTOR) != 0, nulls,
+                         settings->scroll_factor) != LEME_PUBLIC_OK)
+    return leme_public_builder_status(b);
+  return LEME_PUBLIC_OK;
+}
+
 static const char *coverage_name(enum leme_fullscreen_coverage coverage) {
   switch (coverage) {
   case LEME_FULLSCREEN_COVERS_NONE:
@@ -289,7 +367,7 @@ static enum leme_public_status pointer_value(struct leme_public_builder *b,
                                              struct leme_public_value **out) {
   const struct leme_pointer_settings *settings = &config->pointer_defaults;
   struct leme_public_value *pointer = NULL;
-  if (leme_public_object(b, 6, &pointer) != LEME_PUBLIC_OK ||
+  if (leme_public_object(b, 16, &pointer) != LEME_PUBLIC_OK ||
       put_enum(b, pointer, LEME_PUBLIC_TEXT("accel_profile"),
                leme_config_public_profile(settings->profile)) !=
           LEME_PUBLIC_OK ||
@@ -302,7 +380,9 @@ static enum leme_public_status pointer_value(struct leme_public_builder *b,
       leme_public_put_bool(b, pointer, LEME_PUBLIC_TEXT("tap"),
                            settings->tap) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, pointer, LEME_PUBLIC_TEXT("focus_follows_mouse"),
-                           config->focus_follows_mouse) != LEME_PUBLIC_OK)
+                           config->focus_follows_mouse) != LEME_PUBLIC_OK ||
+      leme_config_public_pointer_options(b, pointer, settings, true) !=
+          LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = pointer;
   return LEME_PUBLIC_OK;
@@ -313,8 +393,8 @@ static enum leme_public_status gestures_value(struct leme_public_builder *b,
                                               struct leme_public_value **out) {
   const struct leme_workspace_switch_gesture_settings *settings =
       &config->gestures.workspace_switch;
-  struct leme_public_value *gestures = NULL, *workspace = NULL;
-  if (leme_public_object(b, 1, &gestures) != LEME_PUBLIC_OK ||
+  struct leme_public_value *gestures = NULL, *workspace = NULL, *edges = NULL;
+  if (leme_public_object(b, 2, &gestures) != LEME_PUBLIC_OK ||
       leme_public_object(b, 7, &workspace) != LEME_PUBLIC_OK ||
       put_enum(b, workspace, LEME_PUBLIC_TEXT("mode"),
                gesture_name(settings->mode)) != LEME_PUBLIC_OK ||
@@ -331,7 +411,14 @@ static enum leme_public_status gestures_value(struct leme_public_builder *b,
       leme_public_put_bool(b, workspace, LEME_PUBLIC_TEXT("occupied"),
                            settings->occupied) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, gestures, LEME_PUBLIC_TEXT("workspace_switch"),
-                             workspace) != LEME_PUBLIC_OK)
+                             workspace) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 2, &edges) != LEME_PUBLIC_OK ||
+      leme_public_put_number(b, edges, LEME_PUBLIC_TEXT("size"),
+                             config->gestures.edges.size) != LEME_PUBLIC_OK ||
+      leme_public_put_number(b, edges, LEME_PUBLIC_TEXT("step"),
+                             config->gestures.edges.step) != LEME_PUBLIC_OK ||
+      leme_public_object_set(b, gestures, LEME_PUBLIC_TEXT("edges"), edges) !=
+          LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = gestures;
   return LEME_PUBLIC_OK;

@@ -6,6 +6,9 @@
 
 const char *leme_config_public_drop_mode(enum leme_drop_mode mode);
 const char *leme_config_public_profile(enum leme_pointer_accel_profile profile);
+enum leme_public_status leme_config_public_pointer_options(
+    struct leme_public_builder *b, struct leme_public_value *record,
+    const struct leme_pointer_settings *settings, bool nulls);
 enum leme_public_status leme_config_public_text(struct leme_public_builder *b,
                                                 const char *text,
                                                 struct leme_public_value **out);

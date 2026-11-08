@@ -402,6 +402,10 @@ bool leme_command_parse(struct leme_command *command, char *const *params,
     }
   } else if (strcmp(name, "close_view") == 0 && arguments == 0) {
     command->type = LEME_COMMAND_CLOSE_VIEW;
+  } else if (strcmp(name, "gesture_move") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GESTURE_MOVE;
+  } else if (strcmp(name, "gesture_resize") == 0 && arguments == 0) {
+    command->type = LEME_COMMAND_GESTURE_RESIZE;
   } else if (strcmp(name, "spawn") == 0 && arguments > 0) {
     command->type = LEME_COMMAND_SPAWN;
     command->argv = command_copy_argv(params[1], &params[2], arguments - 1);

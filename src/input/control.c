@@ -149,6 +149,76 @@ static enum leme_control_code set_input(struct leme_server *server,
                                  "tap must be boolean");
     }
     leme_public_as_bool(val_val, &setting.boolean);
+  } else if (strcmp(key_str, "disable_while_typing") == 0 ||
+             strcmp(key_str, "middle_emulation") == 0 ||
+             strcmp(key_str, "tap_drag") == 0) {
+    setting.key = key_str[0] == 'd'   ? LEME_INPUT_SETTING_DISABLE_WHILE_TYPING
+                  : key_str[0] == 'm' ? LEME_INPUT_SETTING_MIDDLE_EMULATION
+                                      : LEME_INPUT_SETTING_TAP_DRAG;
+    if (leme_public_kind(val_val) != LEME_PUBLIC_BOOLEAN) {
+      return leme_control_refuse(error, LEME_CONTROL_TYPE_ERROR,
+                                 "value must be boolean");
+    }
+    leme_public_as_bool(val_val, &setting.boolean);
+  } else if (strcmp(key_str, "click_method") == 0 ||
+             strcmp(key_str, "scroll_method") == 0 ||
+             strcmp(key_str, "scroll_button") == 0 ||
+             strcmp(key_str, "tap_button_map") == 0 ||
+             strcmp(key_str, "drag_lock") == 0) {
+    enum leme_pointer_choice choice = LEME_POINTER_CHOICE_DRAG_LOCK;
+    setting.key = LEME_INPUT_SETTING_DRAG_LOCK;
+    if (strcmp(key_str, "click_method") == 0) {
+      choice = LEME_POINTER_CHOICE_CLICK_METHOD;
+      setting.key = LEME_INPUT_SETTING_CLICK_METHOD;
+    } else if (strcmp(key_str, "scroll_method") == 0) {
+      choice = LEME_POINTER_CHOICE_SCROLL_METHOD;
+      setting.key = LEME_INPUT_SETTING_SCROLL_METHOD;
+    } else if (strcmp(key_str, "scroll_button") == 0) {
+      choice = LEME_POINTER_CHOICE_SCROLL_BUTTON;
+      setting.key = LEME_INPUT_SETTING_SCROLL_BUTTON;
+    } else if (strcmp(key_str, "tap_button_map") == 0) {
+      choice = LEME_POINTER_CHOICE_TAP_BUTTON_MAP;
+      setting.key = LEME_INPUT_SETTING_TAP_BUTTON_MAP;
+    }
+    struct leme_public_text text = {0};
+    if (leme_public_as_text(val_val, &text) != LEME_PUBLIC_OK) {
+      return leme_control_refuse(error, LEME_CONTROL_TYPE_ERROR,
+                                 "value must be string");
+    }
+    if (!leme_pointer_choice_find(choice, text.data, text.length,
+                                  &setting.choice)) {
+      return leme_control_refuse(error, LEME_CONTROL_INVALID_ARGUMENT,
+                                 "invalid value");
+    }
+  } else if (strcmp(key_str, "drag_fingers") == 0) {
+    setting.key = LEME_INPUT_SETTING_DRAG_FINGERS;
+    int64_t fingers = 0;
+    if (leme_public_as_integer(val_val, &fingers) != LEME_PUBLIC_OK) {
+      return leme_control_refuse(error, LEME_CONTROL_TYPE_ERROR,
+                                 "drag_fingers must be integer");
+    }
+    if (fingers != 0 && fingers != 3 && fingers != 4) {
+      return leme_control_refuse(error, LEME_CONTROL_INVALID_ARGUMENT,
+                                 "drag_fingers must be 0, 3 or 4");
+    }
+    if (fingers != 0 && server->config != NULL &&
+        (leme_config_swipe_fingers(server->config) & (1u << fingers)) != 0) {
+      return leme_control_refuse(
+          error, LEME_CONTROL_INVALID_ARGUMENT,
+          "swipes with that finger count switch tags or are bound");
+    }
+    setting.fingers = (uint32_t)fingers;
+  } else if (strcmp(key_str, "scroll_factor") == 0) {
+    setting.key = LEME_INPUT_SETTING_SCROLL_FACTOR;
+    if (leme_public_as_number(val_val, &setting.factor) != LEME_PUBLIC_OK) {
+      return leme_control_refuse(error, LEME_CONTROL_TYPE_ERROR,
+                                 "scroll_factor must be number");
+    }
+    if (!(setting.factor > 0.0) ||
+        setting.factor > LEME_POINTER_SCROLL_FACTOR_MAX) {
+      return leme_control_refuse(error, LEME_CONTROL_INVALID_ARGUMENT,
+                                 "scroll_factor out of range");
+    }
   } else {
     return leme_control_refuse(error, LEME_CONTROL_INVALID_ARGUMENT,
                                "unknown input property");
@@ -162,7 +232,7 @@ static enum leme_control_code set_input(struct leme_server *server,
     return leme_control_refuse(
         error, LEME_CONTROL_INVALID_ARGUMENT,
         "keyboard device does not support pointer setting");
-  if (!tinfo.is_libinput)
+  if (!tinfo.is_libinput && setting.key != LEME_INPUT_SETTING_SCROLL_FACTOR)
     return leme_control_refuse(
         error, LEME_CONTROL_UNSUPPORTED,
         "device does not support libinput configuration");
@@ -191,10 +261,44 @@ static enum leme_control_code set_input(struct leme_server *server,
       return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
                                  "left_handed not supported");
     }
-  } else if (setting.key == LEME_INPUT_SETTING_TAP) {
+  } else if (setting.key == LEME_INPUT_SETTING_TAP ||
+             setting.key == LEME_INPUT_SETTING_TAP_BUTTON_MAP ||
+             setting.key == LEME_INPUT_SETTING_TAP_DRAG ||
+             setting.key == LEME_INPUT_SETTING_DRAG_LOCK) {
     if (!tinfo.has_tap) {
       return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
                                  "tap not supported");
+    }
+  } else if (setting.key == LEME_INPUT_SETTING_DISABLE_WHILE_TYPING) {
+    if (!tinfo.has_disable_while_typing) {
+      return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
+                                 "disable_while_typing not supported");
+    }
+  } else if (setting.key == LEME_INPUT_SETTING_MIDDLE_EMULATION) {
+    if (!tinfo.has_middle_emulation) {
+      return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
+                                 "middle_emulation not supported");
+    }
+  } else if (setting.key == LEME_INPUT_SETTING_CLICK_METHOD) {
+    if (tinfo.click_methods == 0) {
+      return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
+                                 "click_method not supported");
+    }
+  } else if (setting.key == LEME_INPUT_SETTING_SCROLL_METHOD) {
+    if (tinfo.scroll_methods == 0) {
+      return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
+                                 "scroll_method not supported");
+    }
+  } else if (setting.key == LEME_INPUT_SETTING_SCROLL_BUTTON) {
+    if (!tinfo.has_scroll_button) {
+      return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
+                                 "scroll_button not supported");
+    }
+  } else if (setting.key == LEME_INPUT_SETTING_DRAG_FINGERS) {
+    if (tinfo.drag_finger_count < 3 ||
+        setting.fingers > tinfo.drag_finger_count) {
+      return leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED,
+                                 "drag_fingers not supported");
     }
   }
 
@@ -209,6 +313,27 @@ static enum leme_control_code set_input(struct leme_server *server,
     same = tinfo.current_left_handed == setting.boolean;
   else if (setting.key == LEME_INPUT_SETTING_TAP)
     same = tinfo.current_tap == setting.boolean;
+  else if (setting.key == LEME_INPUT_SETTING_DISABLE_WHILE_TYPING)
+    same = tinfo.current_disable_while_typing == setting.boolean;
+  else if (setting.key == LEME_INPUT_SETTING_MIDDLE_EMULATION)
+    same = tinfo.current_middle_emulation == setting.boolean;
+  else if (setting.key == LEME_INPUT_SETTING_TAP_DRAG)
+    same = tinfo.current_tap_drag == setting.boolean;
+  else if (setting.key == LEME_INPUT_SETTING_CLICK_METHOD)
+    same = tinfo.current_click_method == setting.choice;
+  else if (setting.key == LEME_INPUT_SETTING_SCROLL_METHOD)
+    same = tinfo.current_scroll_method == setting.choice;
+  else if (setting.key == LEME_INPUT_SETTING_SCROLL_BUTTON)
+    same = tinfo.has_current_scroll_button &&
+           tinfo.current_scroll_button == setting.choice;
+  else if (setting.key == LEME_INPUT_SETTING_TAP_BUTTON_MAP)
+    same = tinfo.current_tap_button_map == setting.choice;
+  else if (setting.key == LEME_INPUT_SETTING_DRAG_LOCK)
+    same = tinfo.current_drag_lock == setting.choice;
+  else if (setting.key == LEME_INPUT_SETTING_DRAG_FINGERS)
+    same = tinfo.current_drag_fingers == setting.fingers;
+  else if (setting.key == LEME_INPUT_SETTING_SCROLL_FACTOR)
+    same = fabs(tinfo.current_scroll_factor - setting.factor) < 1e-9;
   if (same)
     return LEME_CONTROL_OK;
   if (leme_input_apply_pointer_setting(server, call->target->id, &setting) !=

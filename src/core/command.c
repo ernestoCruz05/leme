@@ -499,6 +499,12 @@ bool leme_command_execute(struct leme_server *server,
     }
     leme_view_protocol_close(server->focused_view);
     return true;
+  case LEME_COMMAND_GESTURE_MOVE:
+  case LEME_COMMAND_GESTURE_RESIZE:
+    wlr_log(WLR_ERROR, "%s",
+            "leme: gesture_move and gesture_resize only run from a swipe "
+            "binding");
+    return false;
   case LEME_COMMAND_SPAWN:
     return leme_process_spawn_detached(server, command->argv);
   case LEME_COMMAND_ACT:

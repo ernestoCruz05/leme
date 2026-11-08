@@ -101,7 +101,8 @@ input_capabilities(struct leme_public_builder *b,
   const bool adaptive = !info->keyboard && info->adaptive;
   const bool flat = !info->keyboard && info->flat;
   struct leme_public_value *record = NULL, *profiles = NULL;
-  if (leme_public_object(b, 6, &record) != LEME_PUBLIC_OK ||
+  const bool pointer = !info->keyboard;
+  if (leme_public_object(b, 16, &record) != LEME_PUBLIC_OK ||
       leme_public_array(b, (size_t)adaptive + (size_t)flat, &profiles) !=
           LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
@@ -132,6 +133,32 @@ input_capabilities(struct leme_public_builder *b,
       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("tap"),
                            !info->keyboard && info->has_tap) !=
           LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("disable_while_typing"),
+                           pointer && info->has_disable_while_typing) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("click_method"),
+                           pointer && info->click_method != NULL) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("scroll_method"),
+                           pointer && info->scroll_method != NULL) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("scroll_button"),
+                           pointer && info->has_scroll_button) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("middle_emulation"),
+                           pointer && info->has_middle_emulation) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("tap_button_map"),
+                           pointer && info->has_tap) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("tap_drag"),
+                           pointer && info->has_tap) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("drag_lock"),
+                           pointer && info->has_tap) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("drag_fingers"),
+                           pointer && info->has_drag_fingers) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("scroll_factor"),
+                           pointer) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("keyboard_layout"),
                            info->keyboard) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
@@ -158,7 +185,8 @@ input_settings(struct leme_public_builder *b, const struct leme_server *server,
       profile = info->accel_profile;
   }
   struct leme_public_value *record = NULL, *layout = NULL;
-  if (leme_public_object(b, 6, &record) != LEME_PUBLIC_OK ||
+  const bool pointer = !info->keyboard;
+  if (leme_public_object(b, 16, &record) != LEME_PUBLIC_OK ||
       (info->keyboard
            ? leme_input_public_layout(b, server->config, info->keyboard_active,
                                       info->keyboard_variant, &layout)
@@ -180,6 +208,42 @@ input_settings(struct leme_public_builder *b, const struct leme_server *server,
       optional_bool(b, record, LEME_PUBLIC_TEXT("tap"),
                     !info->keyboard && info->has_tap,
                     info->tap) != LEME_PUBLIC_OK ||
+      optional_bool(b, record, LEME_PUBLIC_TEXT("disable_while_typing"),
+                    pointer && info->has_disable_while_typing,
+                    info->disable_while_typing) != LEME_PUBLIC_OK ||
+      leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("click_method"),
+                           pointer ? info->click_method : NULL) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("scroll_method"),
+                           pointer ? info->scroll_method : NULL) !=
+          LEME_PUBLIC_OK ||
+      leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("scroll_button"),
+                           pointer ? info->scroll_button : NULL) !=
+          LEME_PUBLIC_OK ||
+      optional_bool(b, record, LEME_PUBLIC_TEXT("middle_emulation"),
+                    pointer && info->has_middle_emulation,
+                    info->middle_emulation) != LEME_PUBLIC_OK ||
+      leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("tap_button_map"),
+                           pointer ? info->tap_button_map : NULL) !=
+          LEME_PUBLIC_OK ||
+      optional_bool(b, record, LEME_PUBLIC_TEXT("tap_drag"),
+                    pointer && info->has_tap,
+                    info->tap_drag) != LEME_PUBLIC_OK ||
+      leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("drag_lock"),
+                           pointer ? info->drag_lock : NULL) !=
+          LEME_PUBLIC_OK ||
+      (pointer && info->has_drag_fingers
+           ? leme_public_put_number(b, record, LEME_PUBLIC_TEXT("drag_fingers"),
+                                    info->drag_fingers)
+           : leme_public_put_null(b, record,
+                                  LEME_PUBLIC_TEXT("drag_fingers"))) !=
+          LEME_PUBLIC_OK ||
+      (pointer ? leme_public_put_number(b, record,
+                                        LEME_PUBLIC_TEXT("scroll_factor"),
+                                        info->scroll_factor)
+               : leme_public_put_null(b, record,
+                                      LEME_PUBLIC_TEXT("scroll_factor"))) !=
+          LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("keyboard_layout"),
                              layout) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);

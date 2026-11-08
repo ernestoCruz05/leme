@@ -54,6 +54,10 @@ static const char *command_name(enum leme_command_type type) {
     return "container_join";
   case LEME_COMMAND_CLOSE_VIEW:
     return "close_view";
+  case LEME_COMMAND_GESTURE_MOVE:
+    return "gesture_move";
+  case LEME_COMMAND_GESTURE_RESIZE:
+    return "gesture_resize";
   case LEME_COMMAND_MINIMIZE_VIEW:
     return "minimize_view";
   case LEME_COMMAND_SNAP:
@@ -274,6 +278,8 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
   case LEME_COMMAND_CONTAINER_DETACH:
   case LEME_COMMAND_CONTAINER_DISSOLVE:
   case LEME_COMMAND_CLOSE_VIEW:
+  case LEME_COMMAND_GESTURE_MOVE:
+  case LEME_COMMAND_GESTURE_RESIZE:
   case LEME_COMMAND_MINIMIZE_VIEW:
   case LEME_COMMAND_RESTORE_MINIMIZED:
   case LEME_COMMAND_WINDOW_MENU:
@@ -364,20 +370,60 @@ static enum leme_public_status modifiers_value(struct leme_public_builder *b,
 static enum leme_public_status binding_value(struct leme_public_builder *b,
                                              const struct leme_binding *binding,
                                              struct leme_public_value **out) {
+  static const char *const kinds[] = {
+      [LEME_BINDING_SWIPE] = "swipe",
+      [LEME_BINDING_PINCH] = "pinch",
+      [LEME_BINDING_HOLD] = "hold",
+      [LEME_BINDING_EDGE] = "edge",
+  };
+  static const char *const edges[] = {
+      [LEME_EDGE_LEFT] = "left",
+      [LEME_EDGE_RIGHT] = "right",
+      [LEME_EDGE_TOP] = "top",
+      [LEME_EDGE_BOTTOM] = "bottom",
+  };
+  static const char *const directions[] = {
+      [LEME_GESTURE_UP] = "up",     [LEME_GESTURE_DOWN] = "down",
+      [LEME_GESTURE_LEFT] = "left", [LEME_GESTURE_RIGHT] = "right",
+      [LEME_GESTURE_IN] = "in",     [LEME_GESTURE_OUT] = "out",
+  };
+  const bool key = binding->trigger == LEME_BINDING_KEY;
   char keysym[128] = {0};
-  const int written =
-      xkb_keysym_get_name(binding->keysym, keysym, sizeof(keysym));
-  if (written <= 0 || (size_t)written >= sizeof(keysym))
-    return leme_public_fail(b, LEME_PUBLIC_INVALID);
-  struct leme_public_value *record = NULL, *modifiers = NULL, *command = NULL;
-  if (leme_public_object(b, 4, &record) != LEME_PUBLIC_OK ||
+  int written = 0;
+  if (key) {
+    written = xkb_keysym_get_name(binding->keysym, keysym, sizeof(keysym));
+    if (written <= 0 || (size_t)written >= sizeof(keysym))
+      return leme_public_fail(b, LEME_PUBLIC_INVALID);
+  }
+  struct leme_public_value *record = NULL, *modifiers = NULL, *command = NULL,
+                           *gesture = NULL;
+  if (key) {
+    if (leme_public_null(b, &gesture) != LEME_PUBLIC_OK)
+      return leme_public_builder_status(b);
+  } else if (leme_public_object(b, 4, &gesture) != LEME_PUBLIC_OK ||
+             leme_public_put_cstr(b, gesture, LEME_PUBLIC_TEXT("kind"),
+                                  kinds[binding->trigger]) != LEME_PUBLIC_OK ||
+             leme_public_put_int(b, gesture, LEME_PUBLIC_TEXT("fingers"),
+                                 binding->fingers) != LEME_PUBLIC_OK ||
+             leme_public_put_cstr(b, gesture, LEME_PUBLIC_TEXT("direction"),
+                                  directions[binding->direction]) !=
+                 LEME_PUBLIC_OK ||
+             leme_public_put_cstr(b, gesture, LEME_PUBLIC_TEXT("edge"),
+                                  edges[binding->edge]) != LEME_PUBLIC_OK) {
+    return leme_public_builder_status(b);
+  }
+  if (leme_public_object(b, 5, &record) != LEME_PUBLIC_OK ||
       modifiers_value(b, binding->modifiers, &modifiers) != LEME_PUBLIC_OK ||
       command_value(b, &binding->command, &command) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("modifiers"),
                              modifiers) != LEME_PUBLIC_OK ||
-      leme_public_put_text(b, record, LEME_PUBLIC_TEXT("keysym"),
-                           (struct leme_public_text){keysym, (size_t)written},
-                           false) != LEME_PUBLIC_OK ||
+      (key ? leme_public_put_text(
+                 b, record, LEME_PUBLIC_TEXT("keysym"),
+                 (struct leme_public_text){keysym, (size_t)written}, false)
+           : leme_public_put_null(b, record, LEME_PUBLIC_TEXT("keysym"))) !=
+          LEME_PUBLIC_OK ||
+      leme_public_object_set(b, record, LEME_PUBLIC_TEXT("gesture"), gesture) !=
+          LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("command"), command) !=
           LEME_PUBLIC_OK ||
       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("repeat"),

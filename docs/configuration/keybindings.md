@@ -102,3 +102,58 @@ binds "common" {
     SUPER+SHIFT+Escape toggle_shortcuts_inhibit
 }
 ```
+
+## Gestures
+
+Touchpad gestures go in `binds` blocks like keys, so modes and groups work for
+them too:
+
+```scfg
+binds "common" {
+    swipe:3:up          spawn wofi --show drun
+    SUPER+swipe:4:down  close_view
+    pinch:3:in          toggle_fullscreen
+    hold:4              mode resize
+    swipe:4             gesture_move
+    SUPER+swipe:4       gesture_resize
+}
+```
+
+| Gesture | Fingers | Direction |
+| --- | --- | --- |
+| `swipe:F:DIR` | 3 to 5 | `up`, `down`, `left`, `right` |
+| `swipe:F` | 3 to 5 | none, only with `gesture_move` or `gesture_resize` |
+| `pinch:F:DIR` | 2 to 5 | `in`, `out` |
+| `hold:F` | 1 to 5 | none |
+| `edge:SIDE:DIR` | 1 | `up`, `down` on the `left` and `right` edges; `left`, `right` on the `top` and `bottom` edges |
+
+Swipes, pinches and holds run their command when you lift your fingers.
+Directions follow your fingers, whatever `natural_scroll` says, and `repeat`
+does not work on gestures.
+[`gesture_move` and `gesture_resize`](../reference/commands.md#gestures) move
+or resize the window under the pointer with your fingers, like a SUPER-drag.
+
+Gestures without a binding go to the app under the pointer, so pinch to zoom
+still works in browsers.
+
+The [tag swipe](gestures.md) owns the left and right swipes on its finger
+count. With the default of 3 fingers, `swipe:3:left`, `swipe:3:right` and
+`swipe:3` are errors.
+
+### Touchpad edges
+
+An edge binding runs its command each time one finger slides `step` mm along
+that edge of the touchpad, so a pair of them works like a slider:
+
+```scfg
+binds "common" {
+    edge:left:up       spawn wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+
+    edge:left:down     spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+    edge:bottom:right  spawn playerctl position 5+
+    edge:bottom:left   spawn playerctl position 5-
+}
+```
+
+The slide has to start within `size` mm of the edge and move along it right
+away. Anything else is a normal touch. `size` and `step` are set in the
+[gestures block](gestures.md#touchpad-edges).

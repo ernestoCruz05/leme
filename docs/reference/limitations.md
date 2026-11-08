@@ -1,7 +1,9 @@
 # Limitations
 
 - No VRR or adaptive-sync policy.
-- No touch, tablet, client pointer gestures, text input or input methods.
+- No touch, tablet, text input or input methods.
+- Touchpad edge bindings need a touchpad that reports its size, and do not work
+  when Leme runs inside another compositor.
 - No color management, HDR, gamma control or DRM leasing.
 - Rounded corners and blur only render with the GLES2 and pixman renderers,
   not with `WLR_RENDERER=vulkan`.

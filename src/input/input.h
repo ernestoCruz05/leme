@@ -2,14 +2,37 @@
 #define LEME_INPUT_H
 
 #include "core/command.h"
+#include "input/edge_tracker.h"
 
 #include <stddef.h>
 #include <stdint.h>
 #include <xkbcommon/xkbcommon.h>
 
+enum leme_binding_trigger {
+  LEME_BINDING_KEY,
+  LEME_BINDING_SWIPE,
+  LEME_BINDING_PINCH,
+  LEME_BINDING_HOLD,
+  LEME_BINDING_EDGE,
+};
+
+enum leme_gesture_direction {
+  LEME_GESTURE_NONE,
+  LEME_GESTURE_UP,
+  LEME_GESTURE_DOWN,
+  LEME_GESTURE_LEFT,
+  LEME_GESTURE_RIGHT,
+  LEME_GESTURE_IN,
+  LEME_GESTURE_OUT,
+};
+
 struct leme_binding {
   uint32_t modifiers;
   xkb_keysym_t keysym;
+  enum leme_binding_trigger trigger;
+  uint32_t fingers;
+  enum leme_gesture_direction direction;
+  enum leme_edge_side edge;
   struct leme_command command;
   int lineno;
   bool repeat;
@@ -85,5 +108,6 @@ void leme_input_pointer_grab_cancel_view(struct leme_view *view);
 void leme_input_pointer_grab_finish(struct leme_server *server);
 void leme_input_workspace_gesture_reset(struct leme_server *server);
 void leme_input_workspace_gesture_cancel(struct leme_server *server);
+void leme_input_gesture_cancel(struct leme_server *server);
 
 #endif

@@ -44,6 +44,16 @@ Whether `focus`, `move` and dragging cross onto the next output is set in
 | `toggle_fullscreen` | fullscreens the focused window, one per tag |
 | `toggle_sticky` | keeps the focused window on screen across tags on its output |
 
+## Gestures
+
+These only work on a [swipe binding](../configuration/keybindings.md#gestures)
+without a direction, such as `swipe:4 gesture_move`.
+
+| Command | Effect |
+| --- | --- |
+| `gesture_move` | moves the window under the pointer with your fingers, like a SUPER-drag |
+| `gesture_resize` | resizes the window under the pointer with your fingers, like a SUPER-right-drag |
+
 ## Scratchpads
 
 | Command | Effect |

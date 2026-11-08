@@ -138,13 +138,68 @@ enum leme_pointer_accel_profile {
   LEME_POINTER_ACCEL_FLAT,
 };
 
+enum leme_pointer_click_method {
+  LEME_POINTER_CLICK_NONE,
+  LEME_POINTER_CLICK_BUTTON_AREAS,
+  LEME_POINTER_CLICK_CLICKFINGER,
+};
+
+enum leme_pointer_scroll_method {
+  LEME_POINTER_SCROLL_NONE,
+  LEME_POINTER_SCROLL_TWO_FINGER,
+  LEME_POINTER_SCROLL_EDGE,
+  LEME_POINTER_SCROLL_ON_BUTTON_DOWN,
+};
+
+enum leme_pointer_button {
+  LEME_POINTER_BUTTON_LEFT,
+  LEME_POINTER_BUTTON_RIGHT,
+  LEME_POINTER_BUTTON_MIDDLE,
+  LEME_POINTER_BUTTON_SIDE,
+  LEME_POINTER_BUTTON_EXTRA,
+  LEME_POINTER_BUTTON_FORWARD,
+  LEME_POINTER_BUTTON_BACK,
+  LEME_POINTER_BUTTON_TASK,
+};
+
+enum leme_pointer_tap_button_map {
+  LEME_POINTER_TAP_MAP_LRM,
+  LEME_POINTER_TAP_MAP_LMR,
+};
+
+enum leme_pointer_drag_lock {
+  LEME_POINTER_DRAG_LOCK_NONE,
+  LEME_POINTER_DRAG_LOCK_TIMEOUT,
+  LEME_POINTER_DRAG_LOCK_STICKY,
+};
+
+enum leme_pointer_choice {
+  LEME_POINTER_CHOICE_CLICK_METHOD,
+  LEME_POINTER_CHOICE_SCROLL_METHOD,
+  LEME_POINTER_CHOICE_SCROLL_BUTTON,
+  LEME_POINTER_CHOICE_TAP_BUTTON_MAP,
+  LEME_POINTER_CHOICE_DRAG_LOCK,
+};
+
 enum leme_pointer_field {
   LEME_POINTER_PROFILE = 1 << 0,
   LEME_POINTER_SPEED = 1 << 1,
   LEME_POINTER_NATURAL_SCROLL = 1 << 2,
   LEME_POINTER_LEFT_HANDED = 1 << 3,
   LEME_POINTER_TAP = 1 << 4,
+  LEME_POINTER_DISABLE_WHILE_TYPING = 1 << 5,
+  LEME_POINTER_CLICK_METHOD = 1 << 6,
+  LEME_POINTER_SCROLL_METHOD = 1 << 7,
+  LEME_POINTER_SCROLL_BUTTON = 1 << 8,
+  LEME_POINTER_MIDDLE_EMULATION = 1 << 9,
+  LEME_POINTER_TAP_BUTTON_MAP = 1 << 10,
+  LEME_POINTER_TAP_DRAG = 1 << 11,
+  LEME_POINTER_DRAG_LOCK = 1 << 12,
+  LEME_POINTER_DRAG_FINGERS = 1 << 13,
+  LEME_POINTER_SCROLL_FACTOR = 1 << 14,
 };
+
+#define LEME_POINTER_SCROLL_FACTOR_MAX 100.0
 
 struct leme_pointer_settings {
   uint32_t fields;
@@ -153,6 +208,16 @@ struct leme_pointer_settings {
   bool natural_scroll;
   bool left_handed;
   bool tap;
+  bool disable_while_typing;
+  enum leme_pointer_click_method click_method;
+  enum leme_pointer_scroll_method scroll_method;
+  enum leme_pointer_button scroll_button;
+  bool middle_emulation;
+  enum leme_pointer_tap_button_map tap_button_map;
+  bool tap_drag;
+  enum leme_pointer_drag_lock drag_lock;
+  uint32_t drag_fingers;
+  double scroll_factor;
 };
 
 struct leme_pointer_rule {
@@ -186,8 +251,19 @@ struct leme_workspace_switch_gesture_settings {
   bool occupied;
 };
 
+#define LEME_EDGE_SIZE_MIN 2.0
+#define LEME_EDGE_SIZE_MAX 30.0
+#define LEME_EDGE_STEP_MIN 1.0
+#define LEME_EDGE_STEP_MAX 50.0
+
+struct leme_edge_gesture_settings {
+  double size;
+  double step;
+};
+
 struct leme_gesture_config {
   struct leme_workspace_switch_gesture_settings workspace_switch;
+  struct leme_edge_gesture_settings edges;
 };
 
 enum leme_fullscreen_coverage {
@@ -348,6 +424,11 @@ leme_config_scratchpad(const struct leme_config *config, const char *name);
 bool leme_config_validate_command(const struct leme_config *config,
                                   const struct leme_command *command);
 const char *leme_config_path(void);
+uint32_t leme_config_swipe_fingers(const struct leme_config *config);
+const char *leme_pointer_choice_name(enum leme_pointer_choice choice,
+                                     unsigned value);
+bool leme_pointer_choice_find(enum leme_pointer_choice choice, const char *text,
+                              size_t length, unsigned *value);
 void leme_config_launch_startup(struct leme_server *server);
 
 #endif

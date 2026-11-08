@@ -41,6 +41,7 @@ struct leme_view;
 struct leme_tags;
 struct leme_config_store;
 struct wlr_pointer;
+struct wlr_pointer_gestures_v1;
 struct wlr_virtual_keyboard_manager_v1;
 struct wlr_virtual_pointer_manager_v1;
 
@@ -61,6 +62,31 @@ struct leme_workspace_gesture_state {
   struct leme_gesture_accel accel;
   struct wlr_pointer *pointer; /* borrowed; cleared by device-destroy cleanup */
   struct leme_output *output;  /* borrowed; cleared before output destruction */
+};
+
+enum leme_gesture_route {
+  LEME_GESTURE_ROUTE_IDLE,
+  LEME_GESTURE_ROUTE_PENDING,
+  LEME_GESTURE_ROUTE_FORWARD,
+  LEME_GESTURE_ROUTE_WORKSPACE,
+  LEME_GESTURE_ROUTE_BINDING,
+  LEME_GESTURE_ROUTE_GRAB,
+};
+
+struct leme_gesture_state {
+  enum leme_gesture_route route;
+  enum leme_binding_trigger kind;
+  uint32_t fingers;
+  uint32_t modifiers;
+  uint32_t begin_msec;
+  bool workspace;
+  bool bindings;
+  double dx;
+  double dy;
+  double scale;
+  double rotation;
+  const struct leme_binding *binding;
+  struct wlr_pointer *pointer;
 };
 struct wlr_alpha_modifier_v1;
 struct wlr_compositor;
@@ -199,7 +225,15 @@ struct leme_server {
   struct wl_listener cursor_swipe_begin;
   struct wl_listener cursor_swipe_update;
   struct wl_listener cursor_swipe_end;
+  struct wl_listener cursor_pinch_begin;
+  struct wl_listener cursor_pinch_update;
+  struct wl_listener cursor_pinch_end;
+  struct wl_listener cursor_hold_begin;
+  struct wl_listener cursor_hold_end;
   struct leme_workspace_gesture_state gesture;
+  struct leme_gesture_state gesture_route;
+  uint32_t typed_msec;
+  struct wlr_pointer_gestures_v1 *pointer_gestures;
   struct wl_listener new_output;
   struct wl_listener output_manager_apply;
   struct wl_listener output_manager_test;

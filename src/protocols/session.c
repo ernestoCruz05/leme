@@ -264,6 +264,7 @@ static void leme_session_handle_new_lock(struct wl_listener *listener,
   leme_public_server_lock_changed(server, true);
   leme_capture_invalidate_all(server);
   leme_input_pointer_grab_finish(server);
+  leme_input_gesture_cancel(server);
   session->abandoned = false;
   session->unlocking = false;
   leme_render_session_set_locked(session, true);

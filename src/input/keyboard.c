@@ -336,6 +336,7 @@ void leme_input_replace_modes(struct leme_server *server,
   const char *active_name =
       server->active_mode == NULL ? "common" : server->active_mode->name;
 
+  leme_input_gesture_cancel(server);
   server->modes = modes;
   server->mode_count = mode_count;
   server->active_mode = NULL;
@@ -360,7 +361,8 @@ static struct leme_binding *leme_input_find_binding(struct leme_server *server,
        binding_index++) {
     struct leme_binding *binding =
         &server->active_mode->bindings[binding_index];
-    if (binding->modifiers != modifiers) {
+    if (binding->trigger != LEME_BINDING_KEY ||
+        binding->modifiers != modifiers) {
       continue;
     }
     for (symbol_index = 0; symbol_index < count; symbol_index++) {
@@ -499,6 +501,13 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
                                                  keycode, layout, 0, &syms);
   modifiers = wlr_keyboard_get_modifiers(keyboard->keyboard);
   inhibited = leme_input_protocols_shortcuts_inhibited(keyboard->server);
+  if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+      (modifiers &
+       (WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO)) == 0 &&
+      xkb_keysym_to_utf32(xkb_state_key_get_one_sym(
+          keyboard->keyboard->xkb_state, keycode)) != 0) {
+    keyboard->server->typed_msec = event->time_msec;
+  }
   if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
     if (leme_desk_drag_active(keyboard->server) &&
         event->keycode < LEME_ARRAY_LENGTH(keyboard->handled) &&

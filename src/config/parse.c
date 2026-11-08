@@ -11,6 +11,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stdarg.h>
@@ -2585,13 +2586,92 @@ static bool leme_config_parse_workspace_switch_gesture(
 }
 
 static bool
+leme_config_parse_edges_gesture(struct leme_config *config,
+                                const struct leme_scfg_directive *directive,
+                                struct leme_edge_gesture_settings *settings) {
+  static const char *const edge_keys[] = {"size", "step"};
+  static const double least[] = {LEME_EDGE_SIZE_MIN, LEME_EDGE_STEP_MIN};
+  static const double most[] = {LEME_EDGE_SIZE_MAX, LEME_EDGE_STEP_MAX};
+  double *const fields[] = {&settings->size, &settings->step};
+  const struct leme_scfg_directive *seen[LEME_ARRAY_LENGTH(edge_keys)] = {0};
+
+  if (directive->params_len != 0 &&
+      !leme_config_reject(config, directive, 0,
+                          "edges block takes no parameters")) {
+    return false;
+  }
+  for (size_t index = 0; index < directive->children.directives_len; index++) {
+    const struct leme_scfg_directive *entry =
+        &directive->children.directives[index];
+    size_t key = 0;
+    double value;
+
+    while (key < LEME_ARRAY_LENGTH(edge_keys) &&
+           strcmp(entry->name, edge_keys[key]) != 0) {
+      key++;
+    }
+    if (key == LEME_ARRAY_LENGTH(edge_keys)) {
+      const char *nearest = leme_config_nearest_key(
+          entry->name, edge_keys, LEME_ARRAY_LENGTH(edge_keys));
+      char help_buf[128] = {0};
+      struct leme_reject_extra extra = {0};
+
+      if (nearest != NULL) {
+        snprintf(help_buf, sizeof(help_buf),
+                 "a directive with a similar name exists: `%s`", nearest);
+        extra.help = help_buf;
+      }
+      if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                       "unknown edges property %s",
+                                       entry->name)) {
+        return false;
+      }
+      continue;
+    }
+    if (seen[key] != NULL) {
+      const struct leme_reject_extra extra = {
+          .secondary = seen[key],
+          .secondary_label = "first defined here",
+      };
+      if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                       "duplicate edges property %s",
+                                       entry->name)) {
+        return false;
+      }
+      continue;
+    }
+    if (entry->children.directives_len != 0 || entry->params_len != 1) {
+      if (!leme_config_reject(config, entry, -1, "%s requires one value",
+                              entry->name)) {
+        return false;
+      }
+      continue;
+    }
+    seen[key] = entry;
+    if (!leme_config_parse_decimal(entry->params[0], &value) ||
+        value < least[key] || value > most[key]) {
+      if (!leme_config_reject(config, entry, 0,
+                              "%s must be between %g and %g mm", entry->name,
+                              least[key], most[key])) {
+        return false;
+      }
+      continue;
+    }
+    *fields[key] = value;
+  }
+  return true;
+}
+
+static bool
 leme_config_parse_gestures(struct leme_config *config,
                            const struct leme_scfg_directive *directive,
                            const char *path, char **error) {
   static const char *const gesture_blocks[] = {
       "workspace_switch",
+      "edges",
   };
   const struct leme_scfg_directive *dir_workspace_switch = NULL;
+  const struct leme_scfg_directive *dir_edges = NULL;
   size_t index;
 
   if (directive->params_len != 0) {
@@ -2619,6 +2699,23 @@ leme_config_parse_gestures(struct leme_config *config,
       dir_workspace_switch = entry;
       if (!leme_config_parse_workspace_switch_gesture(
               config, entry, &config->gestures.workspace_switch)) {
+        return false;
+      }
+    } else if (strcmp(entry->name, "edges") == 0) {
+      if (dir_edges != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_edges,
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                         "duplicate gestures property edges")) {
+          return false;
+        }
+        continue;
+      }
+      dir_edges = entry;
+      if (!leme_config_parse_edges_gesture(config, entry,
+                                           &config->gestures.edges)) {
         return false;
       }
     } else {
@@ -3215,14 +3312,60 @@ static bool leme_config_parse_pointer_speed(const char *text, double *value) {
   return true;
 }
 
+struct leme_pointer_option {
+  const char *name;
+  uint32_t field;
+  const char *help;
+};
+
+static const struct leme_pointer_option leme_pointer_options[] = {
+    {"disable_while_typing", LEME_POINTER_DISABLE_WHILE_TYPING, NULL},
+    {"click_method", LEME_POINTER_CLICK_METHOD,
+     "valid values are `none`, `button_areas` and `clickfinger`"},
+    {"scroll_method", LEME_POINTER_SCROLL_METHOD,
+     "valid values are `none`, `two_finger`, `edge` and `on_button_down`"},
+    {"scroll_button", LEME_POINTER_SCROLL_BUTTON,
+     "valid values are `left`, `right`, `middle`, `side`, `extra`, "
+     "`forward`, `back` and `task`"},
+    {"middle_emulation", LEME_POINTER_MIDDLE_EMULATION, NULL},
+    {"tap_button_map", LEME_POINTER_TAP_BUTTON_MAP,
+     "valid values are `lrm` and `lmr`"},
+    {"tap_drag", LEME_POINTER_TAP_DRAG, NULL},
+    {"drag_lock", LEME_POINTER_DRAG_LOCK,
+     "valid values are `none`, `timeout` and `sticky`"},
+    {"drag_fingers", LEME_POINTER_DRAG_FINGERS,
+     "valid values are `0`, `3` and `4`"},
+    {"scroll_factor", LEME_POINTER_SCROLL_FACTOR,
+     "the factor must be above 0 and at most 100"},
+};
+
+#define LEME_POINTER_OPTION_COUNT                                              \
+  (sizeof(leme_pointer_options) / sizeof(*leme_pointer_options))
+
 static bool
 leme_config_parse_pointer(struct leme_config *config,
                           const struct leme_scfg_directive *directive,
                           const char *path, char **error, bool *have_global) {
   static const char *const pointer_keys[] = {
-      "accel_profile", "accel_speed", "natural_scroll",
-      "left_handed",   "tap",         "focus_follows_mouse",
+      "accel_profile",
+      "accel_speed",
+      "natural_scroll",
+      "left_handed",
+      "tap",
+      "focus_follows_mouse",
+      "disable_while_typing",
+      "click_method",
+      "scroll_method",
+      "scroll_button",
+      "middle_emulation",
+      "tap_button_map",
+      "tap_drag",
+      "drag_lock",
+      "drag_fingers",
+      "scroll_factor",
   };
+  const struct leme_scfg_directive *dir_options[LEME_POINTER_OPTION_COUNT] = {
+      0};
   struct leme_pointer_settings local = {0};
   struct leme_pointer_settings *settings;
   const struct leme_scfg_directive *dir_profile = NULL;
@@ -3233,6 +3376,7 @@ leme_config_parse_pointer(struct leme_config *config,
   const struct leme_scfg_directive *dir_focus_follows_mouse = NULL;
   const char *name = NULL;
   size_t index;
+  size_t option;
 
   if (directive->params_len > 1) {
     leme_config_set_error(error,
@@ -3274,6 +3418,11 @@ leme_config_parse_pointer(struct leme_config *config,
         return false;
       }
       continue;
+    }
+    option = 0;
+    while (option < LEME_POINTER_OPTION_COUNT &&
+           strcmp(leme_pointer_options[option].name, entry->name) != 0) {
+      option++;
     }
     if (strcmp(entry->name, "accel_profile") == 0) {
       if (dir_profile != NULL) {
@@ -3409,6 +3558,101 @@ leme_config_parse_pointer(struct leme_config *config,
         goto invalid_boolean;
       }
       dir_focus_follows_mouse = entry;
+    } else if (option < LEME_POINTER_OPTION_COUNT) {
+      const struct leme_pointer_option *spec = &leme_pointer_options[option];
+      const char *text = entry->params[0];
+      const size_t length = strlen(text);
+      unsigned choice = 0;
+      int fingers = 0;
+      double factor = 0.0;
+      bool valid = false;
+
+      if (dir_options[option] != NULL) {
+        const struct leme_reject_extra extra = {
+            .secondary = dir_options[option],
+            .secondary_label = "first defined here",
+        };
+        if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                         "duplicate pointer property %s",
+                                         spec->name)) {
+          return false;
+        }
+        continue;
+      }
+      switch (spec->field) {
+      case LEME_POINTER_DISABLE_WHILE_TYPING:
+        valid =
+            leme_config_parse_boolean(text, &settings->disable_while_typing);
+        break;
+      case LEME_POINTER_MIDDLE_EMULATION:
+        valid = leme_config_parse_boolean(text, &settings->middle_emulation);
+        break;
+      case LEME_POINTER_TAP_DRAG:
+        valid = leme_config_parse_boolean(text, &settings->tap_drag);
+        break;
+      case LEME_POINTER_CLICK_METHOD:
+        valid = leme_pointer_choice_find(LEME_POINTER_CHOICE_CLICK_METHOD, text,
+                                         length, &choice);
+        if (valid) {
+          settings->click_method = choice;
+        }
+        break;
+      case LEME_POINTER_SCROLL_METHOD:
+        valid = leme_pointer_choice_find(LEME_POINTER_CHOICE_SCROLL_METHOD,
+                                         text, length, &choice);
+        if (valid) {
+          settings->scroll_method = choice;
+        }
+        break;
+      case LEME_POINTER_SCROLL_BUTTON:
+        valid = leme_pointer_choice_find(LEME_POINTER_CHOICE_SCROLL_BUTTON,
+                                         text, length, &choice);
+        if (valid) {
+          settings->scroll_button = choice;
+        }
+        break;
+      case LEME_POINTER_TAP_BUTTON_MAP:
+        valid = leme_pointer_choice_find(LEME_POINTER_CHOICE_TAP_BUTTON_MAP,
+                                         text, length, &choice);
+        if (valid) {
+          settings->tap_button_map = choice;
+        }
+        break;
+      case LEME_POINTER_DRAG_LOCK:
+        valid = leme_pointer_choice_find(LEME_POINTER_CHOICE_DRAG_LOCK, text,
+                                         length, &choice);
+        if (valid) {
+          settings->drag_lock = choice;
+        }
+        break;
+      case LEME_POINTER_DRAG_FINGERS:
+        valid = leme_config_parse_nonnegative(text, &fingers) &&
+                (fingers == 0 || fingers == 3 || fingers == 4);
+        if (valid) {
+          settings->drag_fingers = (uint32_t)fingers;
+        }
+        break;
+      case LEME_POINTER_SCROLL_FACTOR:
+        valid = leme_config_parse_decimal(text, &factor) && factor > 0.0 &&
+                factor <= LEME_POINTER_SCROLL_FACTOR_MAX;
+        if (valid) {
+          settings->scroll_factor = factor;
+        }
+        break;
+      }
+      if (!valid) {
+        if (spec->help == NULL) {
+          goto invalid_boolean;
+        }
+        const struct leme_reject_extra extra = {.help = spec->help};
+        if (!leme_config_reject_detailed(config, entry, 0, &extra,
+                                         "invalid pointer %s", spec->name)) {
+          return false;
+        }
+        continue;
+      }
+      dir_options[option] = entry;
+      settings->fields |= spec->field;
     } else {
       const char *nearest = leme_config_nearest_key(
           entry->name, pointer_keys,
@@ -3836,8 +4080,8 @@ leme_config_parse_keyboard(struct leme_config *config,
   return true;
 }
 
-static bool leme_config_parse_key(const char *text, uint32_t *modifiers,
-                                  xkb_keysym_t *keysym) {
+static bool leme_config_parse_trigger(const char *text,
+                                      struct leme_binding *binding) {
   char *copy = strdup(text);
   char *key;
   char *prefix;
@@ -3849,7 +4093,11 @@ static bool leme_config_parse_key(const char *text, uint32_t *modifiers,
   if (copy == NULL) {
     return false;
   }
-  *modifiers = 0;
+  binding->modifiers = 0;
+  binding->trigger = LEME_BINDING_KEY;
+  binding->fingers = 0;
+  binding->direction = LEME_GESTURE_NONE;
+  binding->edge = LEME_EDGE_NONE;
   separator = strrchr(copy, '+');
   if (separator == NULL) {
     key = copy;
@@ -3881,17 +4129,121 @@ static bool leme_config_parse_key(const char *text, uint32_t *modifiers,
       valid = false;
       break;
     }
-    if ((*modifiers & modifier) != 0) {
+    if ((binding->modifiers & modifier) != 0) {
       valid = false;
       break;
     }
-    *modifiers |= modifier;
+    binding->modifiers |= modifier;
   }
-  *keysym = valid ? xkb_keysym_from_name(key, XKB_KEYSYM_CASE_INSENSITIVE)
-                  : XKB_KEY_NoSymbol;
-  valid = valid && *keysym != XKB_KEY_NoSymbol;
+  binding->keysym = XKB_KEY_NoSymbol;
+  char *gesture = NULL;
+  if (strncasecmp(key, "swipe:", 6) == 0) {
+    binding->trigger = LEME_BINDING_SWIPE;
+    gesture = key + 6;
+  } else if (strncasecmp(key, "pinch:", 6) == 0) {
+    binding->trigger = LEME_BINDING_PINCH;
+    gesture = key + 6;
+  } else if (strncasecmp(key, "hold:", 5) == 0) {
+    binding->trigger = LEME_BINDING_HOLD;
+    gesture = key + 5;
+  } else if (strncasecmp(key, "edge:", 5) == 0) {
+    binding->trigger = LEME_BINDING_EDGE;
+    gesture = key + 5;
+  }
+  if (gesture == NULL) {
+    binding->keysym =
+        valid ? xkb_keysym_from_name(key, XKB_KEYSYM_CASE_INSENSITIVE)
+              : XKB_KEY_NoSymbol;
+    valid = valid && binding->keysym != XKB_KEY_NoSymbol;
+    free(copy);
+    return valid;
+  }
+  char *direction = strchr(gesture, ':');
+  if (direction != NULL) {
+    *direction = '\0';
+    direction++;
+  }
+  if (binding->trigger == LEME_BINDING_EDGE) {
+    binding->fingers = 1;
+    if (strcasecmp(gesture, "left") == 0) {
+      binding->edge = LEME_EDGE_LEFT;
+    } else if (strcasecmp(gesture, "right") == 0) {
+      binding->edge = LEME_EDGE_RIGHT;
+    } else if (strcasecmp(gesture, "top") == 0) {
+      binding->edge = LEME_EDGE_TOP;
+    } else if (strcasecmp(gesture, "bottom") == 0) {
+      binding->edge = LEME_EDGE_BOTTOM;
+    } else {
+      valid = false;
+    }
+  } else {
+    const uint32_t least = binding->trigger == LEME_BINDING_SWIPE   ? 3
+                           : binding->trigger == LEME_BINDING_PINCH ? 2
+                                                                    : 1;
+    valid =
+        valid && gesture[0] >= '1' && gesture[0] <= '5' && gesture[1] == '\0';
+    if (valid) {
+      binding->fingers = (uint32_t)(gesture[0] - '0');
+      valid = binding->fingers >= least;
+    }
+  }
+  if (direction != NULL) {
+    if (strcasecmp(direction, "up") == 0) {
+      binding->direction = LEME_GESTURE_UP;
+    } else if (strcasecmp(direction, "down") == 0) {
+      binding->direction = LEME_GESTURE_DOWN;
+    } else if (strcasecmp(direction, "left") == 0) {
+      binding->direction = LEME_GESTURE_LEFT;
+    } else if (strcasecmp(direction, "right") == 0) {
+      binding->direction = LEME_GESTURE_RIGHT;
+    } else if (strcasecmp(direction, "in") == 0) {
+      binding->direction = LEME_GESTURE_IN;
+    } else if (strcasecmp(direction, "out") == 0) {
+      binding->direction = LEME_GESTURE_OUT;
+    } else {
+      valid = false;
+    }
+  }
+  switch (binding->trigger) {
+  case LEME_BINDING_SWIPE:
+    valid = valid && binding->direction != LEME_GESTURE_IN &&
+            binding->direction != LEME_GESTURE_OUT;
+    break;
+  case LEME_BINDING_PINCH:
+    valid = valid && (binding->direction == LEME_GESTURE_IN ||
+                      binding->direction == LEME_GESTURE_OUT);
+    break;
+  case LEME_BINDING_HOLD:
+    valid = valid && direction == NULL;
+    break;
+  case LEME_BINDING_EDGE:
+    valid = valid &&
+            (binding->edge == LEME_EDGE_LEFT || binding->edge == LEME_EDGE_RIGHT
+                 ? binding->direction == LEME_GESTURE_UP ||
+                       binding->direction == LEME_GESTURE_DOWN
+                 : binding->direction == LEME_GESTURE_LEFT ||
+                       binding->direction == LEME_GESTURE_RIGHT);
+    break;
+  case LEME_BINDING_KEY:
+    break;
+  }
   free(copy);
   return valid;
+}
+
+bool leme_config_bindings_overlap(const struct leme_binding *first,
+                                  const struct leme_binding *second) {
+  if (first->trigger != second->trigger ||
+      first->modifiers != second->modifiers) {
+    return false;
+  }
+  if (first->trigger == LEME_BINDING_KEY) {
+    return first->keysym == second->keysym;
+  }
+  return first->fingers == second->fingers && first->edge == second->edge &&
+         (first->direction == second->direction ||
+          first->direction == LEME_GESTURE_NONE ||
+          second->direction == LEME_GESTURE_NONE);
 }
 
 static bool leme_config_parse_command(struct leme_binding *binding,
@@ -4100,18 +4452,55 @@ leme_config_parse_bind_block(struct leme_config *config,
     binding = &group->bindings[group->binding_count];
     *binding = (struct leme_binding){0};
     binding->lineno = entry->lineno;
-    if (!leme_config_parse_key(entry->name, &binding->modifiers,
-                               &binding->keysym)) {
-      if (!leme_config_reject(config, entry, -1, "invalid key specification %s",
-                              entry->name)) {
+    if (!leme_config_parse_trigger(entry->name, binding)) {
+      const struct leme_reject_extra extra = {
+          .help = binding->trigger == LEME_BINDING_KEY
+                      ? NULL
+                      : "gestures are swipe:3-5 with up, down, left or right, "
+                        "pinch:2-5 with in or out, hold:1-5, edge:left or "
+                        "edge:right with up or down, and edge:top or "
+                        "edge:bottom with left or right",
+      };
+      if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                       binding->trigger == LEME_BINDING_KEY
+                                           ? "invalid key specification %s"
+                                           : "invalid gesture %s",
+                                       entry->name)) {
+        free(binding_directives);
+        return false;
+      }
+      continue;
+    }
+    if (binding->trigger != LEME_BINDING_KEY && entry->params_len > 0 &&
+        strcmp(entry->params[0], "repeat") == 0) {
+      if (!leme_config_reject(config, entry, 0,
+                              "repeat only works on key bindings")) {
+        free(binding_directives);
+        return false;
+      }
+      continue;
+    }
+    const uint32_t swipe_fingers = config->gestures.workspace_switch.fingers;
+    if (binding->trigger == LEME_BINDING_SWIPE && swipe_fingers != 0 &&
+        binding->fingers == swipe_fingers &&
+        binding->direction != LEME_GESTURE_UP &&
+        binding->direction != LEME_GESTURE_DOWN) {
+      char help[64];
+      (void)snprintf(help, sizeof(help),
+                     "the tag swipe uses %" PRIu32
+                     "-finger left and right swipes",
+                     swipe_fingers);
+      const struct leme_reject_extra extra = {.help = help};
+      if (!leme_config_reject_detailed(config, entry, -1, &extra,
+                                       "%s overlaps the tag swipe",
+                                       entry->name)) {
         free(binding_directives);
         return false;
       }
       continue;
     }
     for (previous = 0; previous < group->binding_count; previous++) {
-      if (group->bindings[previous].modifiers == binding->modifiers &&
-          group->bindings[previous].keysym == binding->keysym) {
+      if (leme_config_bindings_overlap(&group->bindings[previous], binding)) {
         duplicate = true;
         break;
       }
@@ -4141,6 +4530,31 @@ leme_config_parse_bind_block(struct leme_config *config,
       }
       continue;
     }
+    const bool gesture_command =
+        binding->command.type == LEME_COMMAND_GESTURE_MOVE ||
+        binding->command.type == LEME_COMMAND_GESTURE_RESIZE;
+    const bool free_swipe = binding->trigger == LEME_BINDING_SWIPE &&
+                            binding->direction == LEME_GESTURE_NONE;
+    if (gesture_command != free_swipe) {
+      leme_command_finish(&binding->command);
+      const bool kept =
+          gesture_command
+              ? leme_config_reject(
+                    config, entry, binding->repeat ? 1 : 0,
+                    "%s only works on a swipe binding without a direction",
+                    binding->command.type == LEME_COMMAND_GESTURE_MOVE
+                        ? "gesture_move"
+                        : "gesture_resize")
+              : leme_config_reject(config, entry, -1,
+                                   "%s needs gesture_move or gesture_resize; "
+                                   "other commands need a direction",
+                                   entry->name);
+      if (!kept) {
+        free(binding_directives);
+        return false;
+      }
+      continue;
+    }
     binding_directives[group->binding_count] = entry;
     group->binding_count++;
   }
@@ -4157,14 +4571,14 @@ static bool leme_bind_group_append(struct leme_bind_group *group,
   size_t index;
 
   for (index = 0; index < group->resolved_count; index++) {
-    if (group->resolved[index]->modifiers != binding->modifiers ||
-        group->resolved[index]->keysym != binding->keysym) {
+    if (!leme_config_bindings_overlap(group->resolved[index], binding)) {
       continue;
     }
     if (group->origin[index] == origin) {
       return true;
     }
-    if (origin != group->name) {
+    if (origin != group->name ||
+        group->resolved[index]->direction != binding->direction) {
       leme_config_set_error(
           error, "%s:%d: groups %s and %s both bind the same key in %s", path,
           group->lineno, group->origin[index], origin, group->name);
@@ -4290,6 +4704,10 @@ static bool leme_config_materialize_mode(struct leme_config *config,
 
     mode->bindings[index].modifiers = source->modifiers;
     mode->bindings[index].keysym = source->keysym;
+    mode->bindings[index].trigger = source->trigger;
+    mode->bindings[index].fingers = source->fingers;
+    mode->bindings[index].direction = source->direction;
+    mode->bindings[index].edge = source->edge;
     mode->bindings[index].lineno = source->lineno;
     mode->bindings[index].repeat = source->repeat;
     if (!leme_config_copy_command(&mode->bindings[index].command,
@@ -4655,7 +5073,9 @@ struct leme_config *leme_config_load(const char *path, char **error) {
           .threshold = 0.5,
           .deceleration = 0.997,
           .velocity_window_ms = 150,
-      };
+  };
+  config->gestures.edges =
+      (struct leme_edge_gesture_settings){.size = 8.0, .step = 5.0};
   config->publication.activation = LEME_ACTIVATION_FOLLOW;
   leme_config_set_style_defaults(config);
   leme_config_set_output_defaults(config);
@@ -4698,6 +5118,18 @@ struct leme_config *leme_config_load(const char *path, char **error) {
   }
   leme_env_file_finish(&env_file);
   for (index = 0; index < expanded.directives_len; index++) {
+    if (strcmp(expanded.directives[index].name, "gestures") == 0) {
+      if (!leme_config_parse_gestures(config, &expanded.directives[index], path,
+                                      error)) {
+        leme_scfg_block_finish(&expanded);
+        leme_scfg_result_finish(&parsed);
+        leme_config_destroy(config);
+        return NULL;
+      }
+      break;
+    }
+  }
+  for (index = 0; index < expanded.directives_len; index++) {
     const struct leme_scfg_directive *directive = &expanded.directives[index];
     bool valid;
 
@@ -4724,7 +5156,7 @@ struct leme_config *leme_config_load(const char *path, char **error) {
       valid = leme_config_parse_cursor(config, directive, path, error);
     } else if (strcmp(directive->name, "gestures") == 0 && !have_gestures) {
       have_gestures = true;
-      valid = leme_config_parse_gestures(config, directive, path, error);
+      valid = true;
     } else if (strcmp(directive->name, "desktop") == 0 && !have_desktop) {
       have_desktop = true;
       valid = leme_config_parse_desktop(config, directive, path, error);
