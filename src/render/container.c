@@ -6,6 +6,7 @@
 #include "desktop/frame.h"
 #include "output/output.h"
 #include "protocols/decoration.h"
+#include "render/workspace_transition.h"
 #include "shell/container.h"
 #include "shell/container-policy.h"
 #include "shell/view.h"
@@ -27,7 +28,6 @@ struct leme_render_container_animation {
   struct leme_box natural;
   int border;
   bool flying;
-  bool visible;
 };
 
 static struct leme_server *
@@ -98,16 +98,21 @@ void leme_render_container_destroy(struct leme_container *container) {
   }
 }
 
+void leme_render_container_sync_visible(struct leme_container *container) {
+  if (container->render_tree != NULL) {
+    wlr_scene_node_set_enabled(
+        &container->render_tree->node,
+        container->render_visible &&
+            (container->animation_state == NULL ||
+             !container->animation_state->flying) &&
+            !leme_render_workspace_transition_hides_container(container));
+  }
+}
+
 void leme_render_container_set_visible(struct leme_container *container,
                                        bool visible) {
-  if (container->render_tree != NULL) {
-    if (container->animation_state != NULL &&
-        container->animation_state->flying) {
-      container->animation_state->visible = visible;
-      visible = false;
-    }
-    wlr_scene_node_set_enabled(&container->render_tree->node, visible);
-  }
+  container->render_visible = visible;
+  leme_render_container_sync_visible(container);
 }
 
 void leme_render_container_set_activated(struct leme_container *container,
@@ -235,8 +240,9 @@ static void leme_render_container_move_done(void *data) {
   leme_render_container_set_box(
       state->container, state->flying ? state->container->box : state->target);
   if (state->flying) {
-    leme_render_container_set_visible(
-        state->container, state->visible && !state->container->minimized);
+    leme_render_container_set_visible(state->container,
+                                      state->container->render_visible &&
+                                          !state->container->minimized);
   }
   wl_array_release(&state->colors);
   wl_array_release(&state->shell_bases);
@@ -369,18 +375,14 @@ void leme_render_container_fly(struct leme_container *container,
     return;
   }
   *state = (struct leme_render_container_animation){
-      .container = container,
-      .current = from,
-      .target = to,
-      .flying = true,
-      .visible = container->render_tree->node.enabled};
+      .container = container, .current = from, .target = to, .flying = true};
   wl_array_init(&state->colors);
   wl_array_init(&state->shell_bases);
   enum {
     LEME_RENDER_CONTAINER_PART_FRAME = LEME_ARRAY_LENGTH(container->border),
     LEME_RENDER_CONTAINER_PART_SHELL,
-    LEME_RENDER_CONTAINER_PART_COUNT =
-        LEME_RENDER_CONTAINER_PART_SHELL + LEME_RENDER_VIEW_SHELL_MAX,
+    LEME_RENDER_CONTAINER_PART_COUNT = LEME_RENDER_CONTAINER_PART_SHELL +
+        LEME_RENDER_VIEW_SHELL_MAX,
   };
   struct leme_animation_part parts[LEME_RENDER_CONTAINER_PART_COUNT] = {0};
   for (size_t i = 0; i < LEME_ARRAY_LENGTH(container->border); i++) {

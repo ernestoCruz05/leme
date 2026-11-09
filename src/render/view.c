@@ -514,7 +514,7 @@ static void leme_render_view_apply_opacity(struct wlr_scene_buffer *buffer,
  * de desactivada. Assim continua a receber frames e commits sem aparecer por
  * cima do instantâneo que representa a transição.
  */
-static bool leme_render_view_presentation_hidden(const struct leme_view *view) {
+bool leme_render_view_presentation_hidden(const struct leme_view *view) {
   const struct leme_render_view_animation *state = view->animation_state;
 
   return view->open_animation_pending || (state != NULL && state->moving) ||
@@ -643,6 +643,7 @@ void leme_render_view_sync_presentation(struct leme_view *view) {
       wlr_scene_node_set_enabled(&view->border[index]->node, shown);
     }
   }
+  leme_decoration_protocol_view_present(view);
 }
 
 static void leme_render_tracker_find_buffer(struct wlr_scene_buffer *buffer,
@@ -1655,8 +1656,8 @@ leme_render_view_snapshot(const struct leme_view *view,
     LEME_RENDER_VIEW_PART_CONTENT = LEME_ARRAY_LENGTH(view->border),
     LEME_RENDER_VIEW_PART_TITLEBAR,
     LEME_RENDER_VIEW_PART_SHELL,
-    LEME_RENDER_VIEW_PART_COUNT =
-        LEME_RENDER_VIEW_PART_SHELL + LEME_RENDER_VIEW_SHELL_MAX,
+    LEME_RENDER_VIEW_PART_COUNT = LEME_RENDER_VIEW_PART_SHELL +
+        LEME_RENDER_VIEW_SHELL_MAX,
   };
   struct leme_animation_part parts[LEME_RENDER_VIEW_PART_COUNT] = {0};
   const struct wlr_scene_tree *titlebar = leme_desk_decoration_tree(view);
@@ -1753,6 +1754,15 @@ void leme_render_view_apply_snapshot(
         wlr_scene_rect_set_color(nodes->border[index], config->border_active);
       }
     }
+  }
+  for (index = 0; index < LEME_ARRAY_LENGTH(nodes->shell); index++) {
+    if (nodes->shell[index] != NULL) {
+      wlr_scene_node_set_enabled(&nodes->shell[index]->node, true);
+    }
+  }
+  if (nodes->decoration != NULL) {
+    wlr_scene_node_set_enabled(&nodes->decoration->node,
+                               leme_desk_decoration_eligible(view));
   }
 }
 

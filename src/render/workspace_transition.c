@@ -2,12 +2,14 @@
 #include "render/workspace_transition_internal.h"
 
 #include "core/server.h"
+#include "desktop/desktop.h"
 #include "input/input.h"
 #include "output/output.h"
 #include "protocols/session.h"
 #include "render/animation.h"
 #include "render/render.h"
 #include "render/workspace_effect.h"
+#include "shell/container.h"
 #include "shell/layer.h"
 #include "shell/view.h"
 
@@ -163,8 +165,29 @@ static bool leme_workspace_collect_parent(
         owner != NULL && owner->kind == LEME_RENDER_OWNER_VIEW
             ? owner->value.view
             : NULL;
+    const struct leme_container *container =
+        owner != NULL && owner->kind == LEME_RENDER_OWNER_CONTAINER
+            ? owner->value.container
+            : NULL;
     struct leme_render_view_frame_nodes nodes;
 
+    if (container != NULL) {
+      if (container->tag->id != tag_id ||
+          container->tag->owner->output != output || container->minimized) {
+        continue;
+      }
+      struct wlr_scene_tree *frame = leme_animation_snapshot(
+          container->render_tree, collection->destination);
+      if (frame == NULL) {
+        return false;
+      }
+      wlr_scene_node_set_position(
+          &frame->node,
+          leme_workspace_coordinate_subtract(frame->node.x, output->full_box.x),
+          leme_workspace_coordinate_subtract(frame->node.y,
+                                             output->full_box.y));
+      continue;
+    }
     if (!leme_workspace_view_is_participant(view, output, tag_id) ||
         &view->render_tree->node != node) {
       continue;
@@ -183,12 +206,38 @@ static bool leme_workspace_collect_parent(
   return true;
 }
 
+static bool leme_workspace_tag_is_desktop(const struct leme_output *output,
+                                          uint16_t id) {
+  if (output == NULL || output->tags.table == NULL || id == 0 ||
+      id > output->tags.max_tags) {
+    return false;
+  }
+  const struct leme_tag *tag = output->tags.table[id];
+  if (tag != NULL) {
+    return tag->layout.kind == LEME_LAYOUT_DESKTOP;
+  }
+  struct leme_tag_settings settings = {.layout = LEME_LAYOUT_DWINDLE};
+  if (output->server != NULL && output->server->config != NULL) {
+    leme_config_tag_settings(output->server->config, id, &settings);
+  }
+  return settings.layout == LEME_LAYOUT_DESKTOP;
+}
+
 static bool leme_workspace_collect_tag(struct leme_output *output,
                                        uint16_t tag_id,
                                        struct wlr_scene_tree *composition,
                                        const struct leme_view *active_view) {
   if (!leme_workspace_tag_is_capturable(output, tag_id)) {
     return false;
+  }
+  if (leme_workspace_tag_is_desktop(output, tag_id)) {
+    struct wlr_scene_tree *desk = leme_desk_snapshot(output, composition);
+    if (desk != NULL) {
+      wlr_scene_node_set_position(
+          &desk->node,
+          leme_workspace_coordinate_subtract(desk->node.x, output->full_box.x),
+          leme_workspace_coordinate_subtract(desk->node.y, output->full_box.y));
+    }
   }
   return leme_workspace_collect_parent(
              output, tag_id,
@@ -235,23 +284,6 @@ leme_workspace_finish_live_view_animations(struct leme_output *output) {
   }
 }
 
-static bool leme_workspace_tag_is_desktop(const struct leme_output *output,
-                                          uint16_t id) {
-  if (output == NULL || output->tags.table == NULL || id == 0 ||
-      id > output->tags.max_tags) {
-    return false;
-  }
-  const struct leme_tag *tag = output->tags.table[id];
-  if (tag != NULL) {
-    return tag->layout.kind == LEME_LAYOUT_DESKTOP;
-  }
-  struct leme_tag_settings settings = {.layout = LEME_LAYOUT_DWINDLE};
-  if (output->server != NULL && output->server->config != NULL) {
-    leme_config_tag_settings(output->server->config, id, &settings);
-  }
-  return settings.layout == LEME_LAYOUT_DESKTOP;
-}
-
 static bool leme_workspace_transition_is_eligible(
     struct leme_output *output, uint16_t source_id, uint16_t destination_id,
     enum leme_tag_change_direction direction) {
@@ -270,8 +302,6 @@ static bool leme_workspace_transition_is_eligible(
          source_id != destination_id && output->tags.table != NULL &&
          source_id > 0 && source_id <= output->tags.max_tags &&
          destination_id > 0 && destination_id <= output->tags.max_tags &&
-         !leme_workspace_tag_is_desktop(output, source_id) &&
-         !leme_workspace_tag_is_desktop(output, destination_id) &&
          !leme_workspace_tag_has_fullscreen(output, source_id) &&
          !leme_workspace_tag_has_fullscreen(output, destination_id) &&
          (direction == LEME_TAG_CHANGE_FORWARD ||
@@ -440,14 +470,6 @@ struct leme_workspace_transition *
 leme_render_workspace_transition_prepare_gesture(
     struct leme_output *output, uint16_t source_id, uint16_t destination_id,
     enum leme_tag_change_direction direction) {
-  uint16_t ring[LEME_TAGS_RING_MAX];
-  const size_t count = leme_tags_ring(leme_output_tags(output), direction, ring,
-                                      LEME_ARRAY_LENGTH(ring));
-  for (size_t i = 0; i < count; i++) {
-    if (leme_workspace_tag_is_desktop(output, ring[i])) {
-      return NULL;
-    }
-  }
   struct leme_workspace_transition *transition =
       leme_workspace_transition_prepare_with_ops(
           output, source_id, destination_id, direction,
@@ -475,6 +497,18 @@ leme_render_workspace_transition_refresh_views(struct leme_output *output) {
         leme_ownership_tag(view)->owner != NULL &&
         leme_ownership_tag(view)->owner->output == output) {
       leme_render_view_sync_presentation(view);
+    }
+  }
+  for (uint16_t id = 1;
+       output->tags.table != NULL && id <= output->tags.max_tags; id++) {
+    struct leme_tag *tag = output->tags.table[id];
+    struct leme_container *container;
+
+    if (tag == NULL || tag->containers.next == NULL) {
+      continue;
+    }
+    wl_list_for_each(container, &tag->containers, link) {
+      leme_render_container_sync_visible(container);
     }
   }
 }
@@ -516,6 +550,7 @@ static void leme_render_workspace_transition_done(void *data) {
       }
     }
     leme_render_workspace_transition_refresh_views(output);
+    leme_desk_sync(output->server);
     leme_input_pointer_rebase(output->server);
   }
   leme_workspace_effect_destroy(transition->effect);
@@ -545,6 +580,7 @@ void leme_render_workspace_transition_commit(
   wlr_scene_node_set_enabled(&transition->master->node, true);
   leme_workspace_transition_sync_cache_visibility(transition);
   leme_render_workspace_transition_refresh_views(output);
+  leme_desk_sync(output->server);
 
   for (i = 0; i < transition->ring_count; i++) {
     if (transition->ring[i] == transition->outgoing_id) {
@@ -620,6 +656,7 @@ void leme_render_workspace_transition_begin_gesture(
     }
   }
   leme_render_workspace_transition_refresh_views(output);
+  leme_desk_sync(output->server);
 }
 
 bool leme_render_workspace_transition_set_gesture_bounds(
@@ -1071,22 +1108,15 @@ void leme_render_workspace_transition_settle(struct leme_output *output,
   }
 }
 
-bool leme_render_workspace_transition_hides_view(const struct leme_view *view) {
-  const struct leme_output *output;
-  const struct leme_workspace_transition *transition;
-  uint16_t tag_id;
+static bool
+leme_workspace_transition_hides_tag(const struct leme_output *output,
+                                    uint16_t tag_id) {
+  const struct leme_workspace_transition *transition =
+      output == NULL ? NULL : output->workspace_transition;
 
-  if (view == NULL || view->unmanaged || view->detached ||
-      leme_ownership_tag(view) == NULL ||
-      leme_ownership_tag(view)->owner == NULL) {
-    return false;
-  }
-  output = leme_ownership_tag(view)->owner->output;
-  transition = output == NULL ? NULL : output->workspace_transition;
   if (transition == NULL) {
     return false;
   }
-  tag_id = leme_ownership_tag(view)->id;
   if (transition->is_gesture) {
     return tag_id == transition->outgoing_id ||
            tag_id == transition->incoming_id ||
@@ -1094,6 +1124,22 @@ bool leme_render_workspace_transition_hides_view(const struct leme_view *view) {
            tag_id == output->tags.focused_id;
   }
   return transition->destination_id == tag_id;
+}
+
+bool leme_render_workspace_transition_hides_view(const struct leme_view *view) {
+  if (view == NULL || view->unmanaged || view->detached ||
+      leme_ownership_tag(view) == NULL ||
+      leme_ownership_tag(view)->owner == NULL) {
+    return false;
+  }
+  return leme_workspace_transition_hides_tag(
+      leme_ownership_tag(view)->owner->output, leme_ownership_tag(view)->id);
+}
+
+bool leme_render_workspace_transition_hides_container(
+    const struct leme_container *container) {
+  return leme_workspace_transition_hides_tag(container->tag->owner->output,
+                                             container->tag->id);
 }
 
 struct leme_animation_spring leme_workspace_gesture_spring(

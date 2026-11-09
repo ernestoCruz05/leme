@@ -83,6 +83,7 @@ void leme_render_container_set_box(struct leme_container *container,
                                    struct leme_box box);
 void leme_render_container_set_visible(struct leme_container *container,
                                        bool visible);
+void leme_render_container_sync_visible(struct leme_container *container);
 void leme_render_container_restack(struct leme_container *container,
                                    bool raise);
 void leme_render_container_set_activated(struct leme_container *container,
@@ -128,6 +129,7 @@ void leme_render_view_animate(struct leme_view *view,
                               enum leme_animation_event event);
 void leme_render_view_finish_animation(struct leme_view *view);
 void leme_render_view_sync_presentation(struct leme_view *view);
+bool leme_render_view_presentation_hidden(const struct leme_view *view);
 void leme_render_view_open_ready(struct leme_view *view);
 bool leme_render_view_popup_create(struct leme_view_popup *popup);
 struct leme_box

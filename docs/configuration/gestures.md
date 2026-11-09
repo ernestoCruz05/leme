@@ -36,8 +36,7 @@ gestures {
 
 Two-finger swipes are rejected because libinput does not deliver them. The
 swipe direction follows the device's `natural_scroll`. The release settles with
-a spring that [`animation.workspace.spring`](animation.md#springs) can tune. A
-swipe switches instantly when any tag it can reach uses the desktop layout.
+a spring that [`animation.workspace.spring`](animation.md#springs) can tune.
 
 ## Touchpad edges
 

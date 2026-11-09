@@ -47,6 +47,7 @@ struct leme_container {
   struct leme_public_id id;
   uint64_t generation;
   bool minimized;
+  bool render_visible;
   uint64_t minimized_order;
 };
 

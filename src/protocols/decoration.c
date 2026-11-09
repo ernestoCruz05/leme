@@ -150,6 +150,13 @@ static bool leme_decoration_shown(const struct leme_decoration *decoration,
   return (decoration->current.states & state) != 0;
 }
 
+static bool leme_decoration_visible(const struct leme_decoration *decoration,
+                                    bool fullscreen) {
+  return leme_decoration_shown(decoration, fullscreen) &&
+         (decoration->window->view == NULL ||
+          !leme_render_view_presentation_hidden(decoration->window->view));
+}
+
 static bool
 leme_decoration_window_any_shown(const struct leme_decoration_window *window,
                                  bool fullscreen) {
@@ -250,7 +257,7 @@ leme_decoration_window_arrange(struct leme_decoration_window *window,
     wlr_scene_node_set_position(node, content_x + decoration->current.x,
                                 content_y + decoration->current.y);
     wlr_scene_node_set_enabled(node,
-                               leme_decoration_shown(decoration, fullscreen));
+                               leme_decoration_visible(decoration, fullscreen));
     if (decoration->below) {
       wlr_scene_node_lower_to_bottom(node);
     } else {
@@ -287,6 +294,21 @@ void leme_decoration_protocol_view_arrange(struct leme_view *view,
                                  view->fullscreen);
   if (view->drop_preview != NULL) {
     wlr_scene_node_raise_to_top(&view->drop_preview->node);
+  }
+}
+
+void leme_decoration_protocol_view_present(struct leme_view *view) {
+  struct leme_decoration *decoration;
+
+  if (view->decoration_window == NULL) {
+    return;
+  }
+  wl_list_for_each(decoration, &view->decoration_window->decorations, link) {
+    if (decoration->tree != NULL) {
+      wlr_scene_node_set_enabled(
+          &decoration->tree->node,
+          leme_decoration_visible(decoration, view->fullscreen));
+    }
   }
 }
 

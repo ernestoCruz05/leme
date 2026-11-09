@@ -13,6 +13,7 @@ struct leme_server;
 struct leme_output;
 struct leme_render_hit;
 struct wlr_pointer_button_event;
+struct wlr_scene_tree;
 
 enum leme_desk_grid_action {
   LEME_DESK_GRID_OPEN,
@@ -29,6 +30,8 @@ void leme_desk_sync(struct leme_server *server);
 bool leme_desk_refresh(struct leme_server *server);
 void leme_desk_output_finish(struct leme_output *output);
 bool leme_desk_output_active(const struct leme_output *output);
+struct wlr_scene_tree *leme_desk_snapshot(struct leme_output *output,
+                                          struct wlr_scene_tree *parent);
 bool leme_desk_at(const struct leme_output *output, double lx, double ly,
                   size_t *index);
 bool leme_desk_focused(const struct leme_server *server);

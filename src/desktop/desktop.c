@@ -523,7 +523,9 @@ bool leme_desk_at(const struct leme_output *output, double lx, double ly,
 
 static bool leme_desk_output_ready(const struct leme_output *output) {
   return leme_desk_output_active(output) && output->desk != NULL &&
-         output->desk->tree != NULL && output->desk->tree->node.enabled &&
+         output->desk->tree != NULL &&
+         (output->desk->tree->node.enabled ||
+          output->workspace_transition != NULL) &&
          output->desk->input != NULL && output->desk->input->node.enabled &&
          !output->desk->dirty && leme_desk_geometry_matches(output);
 }
@@ -1711,22 +1713,43 @@ bool leme_desk_handle_key(struct leme_server *server, xkb_keysym_t keysym,
   return true;
 }
 
-static void leme_desk_sync_output(struct leme_desk *desk,
-                                  struct leme_output *output) {
-  const bool active = leme_desk_output_active(output);
+static bool leme_desk_output_shown(const struct leme_output *output) {
+  return leme_desk_output_active(output) &&
+         output->workspace_transition == NULL;
+}
+
+static bool leme_desk_output_build(struct leme_desk *desk,
+                                   struct leme_output *output) {
   if (output->desk == NULL) {
-    if (!active) {
-      return;
-    }
     output->desk = calloc(1, sizeof(*output->desk));
     if (output->desk == NULL) {
-      return;
+      return false;
     }
     output->desk->dirty = true;
   }
   struct leme_desk_output *state = output->desk;
-  if (!active) {
-    if (state->tree != NULL) {
+  if (state->tree != NULL && !state->dirty &&
+      leme_desk_geometry_matches(output)) {
+    return true;
+  }
+  struct leme_desk_look look = {0};
+  leme_desk_style_resolve(desk->server->config, LEME_DESK_ELEMENT_ICON, 0,
+                          &look);
+  int pixels = 0;
+  if (leme_desk_grid_pixels(output->wlr_output->scale, look.size, &pixels) &&
+      leme_desk_build_output(desk, output, pixels)) {
+    return true;
+  }
+  state->dirty = true;
+  wlr_log(WLR_ERROR, "%s", "leme: could not build desktop scene");
+  return false;
+}
+
+static void leme_desk_sync_output(struct leme_desk *desk,
+                                  struct leme_output *output) {
+  if (!leme_desk_output_shown(output)) {
+    struct leme_desk_output *state = output->desk;
+    if (state != NULL && state->tree != NULL) {
       if (state->dirty || !leme_desk_geometry_matches(output)) {
         leme_desk_output_clear_scene(state);
       } else {
@@ -1735,27 +1758,30 @@ static void leme_desk_sync_output(struct leme_desk *desk,
     }
     return;
   }
-  if (state->tree != NULL && !state->dirty &&
-      leme_desk_geometry_matches(output)) {
-    wlr_scene_node_set_enabled(&state->tree->node, true);
+  if (leme_desk_output_build(desk, output)) {
+    wlr_scene_node_set_enabled(&output->desk->tree->node, true);
     return;
   }
-  struct leme_desk_look look = {0};
-  leme_desk_style_resolve(desk->server->config, LEME_DESK_ELEMENT_ICON, 0,
-                          &look);
-  int pixels = 0;
-  if (!leme_desk_grid_pixels(output->wlr_output->scale, look.size, &pixels) ||
-      !leme_desk_build_output(desk, output, pixels)) {
-    if (state->tree != NULL) {
-      wlr_scene_node_set_enabled(&state->tree->node,
-                                 leme_desk_geometry_matches(output));
-      if (state->input != NULL) {
-        wlr_scene_node_set_enabled(&state->input->node, false);
-      }
+  struct leme_desk_output *state = output->desk;
+  if (state != NULL && state->tree != NULL) {
+    wlr_scene_node_set_enabled(&state->tree->node,
+                               leme_desk_geometry_matches(output));
+    if (state->input != NULL) {
+      wlr_scene_node_set_enabled(&state->input->node, false);
     }
-    state->dirty = true;
-    wlr_log(WLR_ERROR, "%s", "leme: could not build desktop scene");
   }
+}
+
+struct wlr_scene_tree *leme_desk_snapshot(struct leme_output *output,
+                                          struct wlr_scene_tree *parent) {
+  struct leme_desk *desk = output->server->desk;
+  if (desk == NULL || (!desk->loaded && !leme_desk_rescan(desk, true)) ||
+      !leme_desk_output_build(desk, output)) {
+    return NULL;
+  }
+  wlr_scene_node_set_enabled(&output->desk->tree->node,
+                             leme_desk_output_shown(output));
+  return leme_animation_snapshot(output->desk->tree, parent);
 }
 
 bool leme_desk_init(struct leme_server *server) {

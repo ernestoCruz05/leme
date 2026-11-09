@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+struct leme_container;
 struct leme_output;
 struct leme_view;
 struct leme_workspace_transition;
@@ -46,5 +47,7 @@ bool leme_render_workspace_transition_targets(const struct leme_output *output,
                                               double *from_scalar,
                                               double *to_scalar);
 bool leme_render_workspace_transition_hides_view(const struct leme_view *view);
+bool leme_render_workspace_transition_hides_container(
+    const struct leme_container *container);
 
 #endif

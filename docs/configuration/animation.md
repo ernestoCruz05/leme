@@ -80,8 +80,8 @@ A spring that takes longer than 1000 ms to settle is rejected.
 | `curve` | a [curve](#curves) | `ease_out` | shape of the motion |
 | `spring` | a [spring](#springs) block | none | replaces `duration` and `curve`, and sets the release of a [touchpad swipe](gestures.md) |
 
-A switch is instant when either tag has a fullscreen window or uses the desktop
-layout.
+A switch is instant when either tag has a fullscreen window. The minimized
+strip of a desktop tag doesn't slide.
 
 ## Curves
 

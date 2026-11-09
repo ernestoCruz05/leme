@@ -17,6 +17,7 @@ void leme_decoration_protocol_schedule(struct leme_server *server);
 void leme_decoration_protocol_view_destroy(struct leme_view *view);
 void leme_decoration_protocol_view_arrange(struct leme_view *view,
                                            int content_x, int content_y);
+void leme_decoration_protocol_view_present(struct leme_view *view);
 bool leme_view_has_shell_decoration(const struct leme_view *view,
                                     bool fullscreen);
 struct leme_gaps leme_decoration_protocol_insets(const struct leme_view *view,
