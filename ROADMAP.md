@@ -1,6 +1,6 @@
 # Leme roadmap
 
-Last updated: 2026-10-31
+Last updated: 2026-11-12
 
 Leme is early alpha. This page lists what works and what is planned. Setup and
 configuration are in the [documentation](docs/README.md), and missing features
@@ -18,16 +18,20 @@ in [limitations](docs/reference/limitations.md).
   [animations](docs/configuration/animation.md). Builds with `-Deffects=true`
   add rounded corners and blur on the GLES2 and pixman renderers.
 - Outputs: persistent placement, hotplug, windows that return to their monitor,
-  power control and temporary changes from output managers. See
+  power control, outputs turned off from the config or a binding, adaptive
+  sync, night light and temporary changes from output managers. See
   [multi-monitor](docs/guides/multi-monitor.md).
-- Input: keyboard layouts, binding modes, pointer settings, touchpad swipes
-  between tags, relative pointer, pointer constraints, shortcut inhibition, and
-  virtual keyboards and pointers.
+- Input: keyboard layouts, binding modes, touchpad and mouse options, touchpad
+  swipes between tags, [gesture bindings](docs/configuration/keybindings.md#gestures),
+  touchpad edges, lid and tablet switch bindings, pinch and hold gestures in
+  apps, relative pointer, pointer constraints, shortcut inhibition, and virtual
+  keyboards and pointers.
 - Desktop integration: layer shell, session lock, idle notification and
   inhibition, clipboard, drag and drop, screen and window capture,
   [screen sharing](docs/guides/screen-sharing.md) through a portal, XDG
-  activation, `xdg-foreign`, server-side decorations and foreign toplevel
-  lists.
+  activation, `xdg-foreign`, server-side decorations, foreign toplevel
+  lists, [shell decorations](docs/guides/shell-decorations.md), and
+  `security-context-v1` for sandboxed apps.
 - Session: `leme-session` sets up the environment, D-Bus and the session log,
   and `leme-session.target` starts and stops systemd user services with Leme.
   See [startup](docs/configuration/startup-and-environment.md).
@@ -37,22 +41,18 @@ in [limitations](docs/reference/limitations.md).
 
 ## Next
 
-- Touchscreens, drawing tablets and pads.
-- Pinch and hold gestures in apps.
-- More touchpad and mouse options.
+- Input methods and text input.
+- Drop shadows, and animations for bars, launchers and notifications.
+- Monocle, grid and centered master layouts.
+- Moving and swapping tags between monitors.
+- Terminal swallowing.
+- An overview of all windows and tags.
 
 ## Planned
 
+- Touchscreens, drawing tablets and pads.
 - Custom shaders: shaders compiled to SPIR-V, applied to windows or outputs on
   both the GLES2 and Vulkan renderers.
-- A visible message when the configuration has errors. The `config_errors`
-  block is accepted but draws nothing yet.
-- Adaptive sync (VRR) in the output configuration.
-- Night light through gamma control.
-- Terminal swallowing.
-- An overview of all windows and tags.
-- Input methods and text input.
-- `security-context-v1` for sandboxed apps.
 - Supervision recipes for services started without systemd or from `exec`.
 
 ## Not planned for now
