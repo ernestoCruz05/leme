@@ -26,7 +26,6 @@ void leme_control_scheduler_remove_peer(
 void leme_control_scheduler_peer_ready(struct leme_control_scheduler *scheduler,
                                        struct leme_control_peer *peer);
 
-void leme_control_scheduler_step(struct leme_control_scheduler *scheduler);
 void leme_control_scheduler_defer(struct leme_control_scheduler *scheduler);
 
 #endif

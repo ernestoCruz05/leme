@@ -40,6 +40,8 @@ struct leme_output {
   struct wl_listener destroy;
   struct wlr_ext_workspace_group_handle_v1 *workspace_group;
   bool power_on;
+  bool disabled;
+  bool gamma_changed;
   bool tearing_fallback;
 };
 
@@ -50,11 +52,14 @@ bool leme_output_test_config(struct leme_server *server,
 bool leme_output_apply_config(struct leme_server *server,
                               const struct leme_config *config, bool startup);
 bool leme_output_set_power(struct leme_output *output, bool on);
+bool leme_output_set_enabled(struct leme_output *output, bool enabled);
+void leme_output_apply_enabled(struct leme_server *server,
+                               const struct leme_config *old,
+                               const struct leme_config *next);
 void leme_output_publish_configuration(struct leme_server *server);
 struct leme_box leme_output_usable_box(const struct leme_output *output);
 struct leme_box leme_output_full_box(const struct leme_output *output);
 double leme_output_scale(const struct leme_output *output);
-void leme_output_refresh_geometry(struct leme_output *output);
 struct leme_output *leme_output_focused(const struct leme_server *server);
 struct leme_output *
 leme_output_from_wlr_output(struct leme_server *server,
@@ -64,6 +69,8 @@ struct leme_output *leme_output_adjacent(struct leme_server *server,
                                          enum leme_direction direction);
 struct leme_output *leme_output_by_name(struct leme_server *server,
                                         const char *name);
+struct leme_output *leme_output_find(struct leme_server *server,
+                                     const char *name);
 struct leme_output *leme_output_at(struct leme_server *server, double layout_x,
                                    double layout_y);
 void leme_output_set_focused(struct leme_server *server,

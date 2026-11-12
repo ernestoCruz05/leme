@@ -19,13 +19,6 @@ static const struct leme_control_operator operators[] = {
 };
 
 const struct leme_control_operator *
-leme_control_operator_by_opcode(enum leme_control_opcode opcode) {
-  if ((size_t)opcode >= LEME_CONTROL_OPERATOR_COUNT)
-    return NULL;
-  return &operators[opcode];
-}
-
-const struct leme_control_operator *
 leme_control_operator_find(struct leme_public_text name) {
   if (name.data == NULL)
     return NULL;

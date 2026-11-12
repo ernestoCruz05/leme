@@ -83,7 +83,8 @@ static bool leme_minimize_ancestry(const struct leme_view *view,
   return true;
 }
 
-bool leme_container_can_minimize(const struct leme_container *container) {
+static bool
+leme_container_can_minimize(const struct leme_container *container) {
   if (container == NULL || container->count < 2 || container->tag == NULL ||
       container->tag->layout.kind != LEME_LAYOUT_DESKTOP) {
     return false;

@@ -54,13 +54,10 @@ const struct leme_durable_owner *
 leme_ownership_durable(const struct leme_view *view);
 struct leme_output *
 leme_ownership_effective_output(const struct leme_view *view);
-const struct leme_view_restore *
-leme_ownership_restore(const struct leme_view *view);
 
 bool leme_ownership_scene_visible(const struct leme_view *view);
 bool leme_ownership_hit_test_eligible(const struct leme_view *view);
 bool leme_ownership_focus_eligible(const struct leme_view *view);
-bool leme_ownership_activation_eligible(const struct leme_view *view);
 bool leme_ownership_publication_eligible(const struct leme_view *view);
 bool leme_ownership_direct_capture_eligible(const struct leme_view *view);
 

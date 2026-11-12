@@ -32,20 +32,15 @@ void leme_desk_output_finish(struct leme_output *output);
 bool leme_desk_output_active(const struct leme_output *output);
 struct wlr_scene_tree *leme_desk_snapshot(struct leme_output *output,
                                           struct wlr_scene_tree *parent);
-bool leme_desk_at(const struct leme_output *output, double lx, double ly,
-                  size_t *index);
 bool leme_desk_focused(const struct leme_server *server);
 size_t leme_desk_context_entries(const struct leme_server *server);
 void leme_desk_drop_feedback(struct leme_server *server, char *const *paths,
                              size_t count);
 bool leme_desk_drop(struct leme_server *server, char *const *paths,
                     size_t count);
-bool leme_desk_context_open(struct leme_server *server);
 struct leme_command;
 bool leme_desk_context_command(struct leme_server *server,
                                const struct leme_command *command);
-bool leme_desk_context_begin(struct leme_server *server,
-                             enum leme_desk_file_action action);
 void leme_desk_unfocus(struct leme_server *server);
 bool leme_desk_focus(struct leme_server *server);
 bool leme_desk_open_menu(struct leme_server *server);

@@ -85,16 +85,8 @@ void leme_public_snapshot_unref(struct leme_public_snapshot *snapshot);
 const struct leme_public_value *
 leme_public_snapshot_root(const struct leme_public_snapshot *snapshot,
                           enum leme_public_root root);
-struct leme_public_text
-leme_public_snapshot_instance(const struct leme_public_snapshot *snapshot);
 enum leme_public_status leme_public_snapshot_find(
     const struct leme_public_snapshot *snapshot, enum leme_public_entity kind,
     struct leme_public_text id, const struct leme_public_value **out);
-enum leme_public_status
-leme_public_snapshot_field(const struct leme_public_snapshot *snapshot,
-                           const struct leme_public_schema *schema,
-                           const struct leme_public_value *row,
-                           const struct leme_public_text *path, size_t count,
-                           const struct leme_public_value **out);
 
 #endif

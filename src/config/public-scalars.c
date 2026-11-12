@@ -1,5 +1,6 @@
 #include "config/public-internal.h"
 #include "config/config.h"
+#include "config/internal.h"
 #include "config/style.h"
 #include "public/value-internal.h"
 #include "public/schema.h"
@@ -105,62 +106,6 @@ enum leme_public_status leme_config_public_pointer_options(
                          settings->scroll_factor) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   return LEME_PUBLIC_OK;
-}
-
-static const char *coverage_name(enum leme_fullscreen_coverage coverage) {
-  switch (coverage) {
-  case LEME_FULLSCREEN_COVERS_NONE:
-    return "none";
-  case LEME_FULLSCREEN_COVERS_TOP:
-    return "top";
-  case LEME_FULLSCREEN_COVERS_OVERLAY:
-    return "overlay";
-  }
-  return NULL;
-}
-
-static const char *secondary_gpu_name(enum leme_secondary_gpu policy) {
-  switch (policy) {
-  case LEME_SECONDARY_GPU_ON_DEMAND:
-    return "on_demand";
-  case LEME_SECONDARY_GPU_ALWAYS:
-    return "always";
-  }
-  return NULL;
-}
-
-static const char *gesture_name(enum leme_workspace_gesture_mode mode) {
-  switch (mode) {
-  case LEME_WORKSPACE_GESTURE_SINGLE:
-    return "single";
-  case LEME_WORKSPACE_GESTURE_SCRUB:
-    return "scrub";
-  case LEME_WORKSPACE_GESTURE_FREE:
-    return "free";
-  }
-  return NULL;
-}
-
-static const char *activation_name(enum leme_activation_policy activation) {
-  switch (activation) {
-  case LEME_ACTIVATION_FOLLOW:
-    return "follow";
-  case LEME_ACTIVATION_URGENT:
-    return "urgent";
-  case LEME_ACTIVATION_IGNORE:
-    return "ignore";
-  }
-  return NULL;
-}
-
-static const char *banner_name(enum leme_banner_position position) {
-  switch (position) {
-  case LEME_BANNER_TOP:
-    return "top";
-  case LEME_BANNER_BOTTOM:
-    return "bottom";
-  }
-  return NULL;
 }
 
 static const char *container_modifier_name(uint32_t modifier) {
@@ -294,7 +239,8 @@ static enum leme_public_status style_value(struct leme_public_builder *b,
       leme_public_put_number(b, style, LEME_PUBLIC_TEXT("opacity_inactive"),
                              config->opacity_inactive) != LEME_PUBLIC_OK ||
       put_enum(b, style, LEME_PUBLIC_TEXT("fullscreen_covers"),
-               coverage_name(config->fullscreen_covers)) != LEME_PUBLIC_OK ||
+               leme_choice_fullscreen_covers[config->fullscreen_covers]) !=
+          LEME_PUBLIC_OK ||
       leme_public_object_set(b, style, LEME_PUBLIC_TEXT("titlebar"),
                              titlebar) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
@@ -354,8 +300,9 @@ output_policy_value(struct leme_public_builder *b,
       leme_public_put_bool(b, policy, LEME_PUBLIC_TEXT("warp_cursor"),
                            config->output_policy.warp_cursor) !=
           LEME_PUBLIC_OK ||
-      put_enum(b, policy, LEME_PUBLIC_TEXT("secondary_gpu"),
-               secondary_gpu_name(config->output_policy.secondary_gpu)) !=
+      put_enum(
+          b, policy, LEME_PUBLIC_TEXT("secondary_gpu"),
+          leme_choice_secondary_gpu[config->output_policy.secondary_gpu]) !=
           LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   *out = policy;
@@ -397,7 +344,7 @@ static enum leme_public_status gestures_value(struct leme_public_builder *b,
   if (leme_public_object(b, 2, &gestures) != LEME_PUBLIC_OK ||
       leme_public_object(b, 7, &workspace) != LEME_PUBLIC_OK ||
       put_enum(b, workspace, LEME_PUBLIC_TEXT("mode"),
-               gesture_name(settings->mode)) != LEME_PUBLIC_OK ||
+               leme_choice_gesture_mode[settings->mode]) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, workspace, LEME_PUBLIC_TEXT("fingers"),
                           settings->fingers) != LEME_PUBLIC_OK ||
       leme_public_put_number(b, workspace, LEME_PUBLIC_TEXT("distance"),
@@ -458,13 +405,14 @@ leme_config_public_scalars(struct leme_public_builder *b,
                           config->cursor.size) != LEME_PUBLIC_OK ||
       leme_public_object(b, 1, &publication) != LEME_PUBLIC_OK ||
       put_enum(b, publication, LEME_PUBLIC_TEXT("activation"),
-               activation_name(config->publication.activation)) !=
+               leme_choice_activation[config->publication.activation]) !=
           LEME_PUBLIC_OK ||
       leme_public_object(b, 3, &errors) != LEME_PUBLIC_OK ||
       leme_public_put_bool(b, errors, LEME_PUBLIC_TEXT("show"),
                            config->config_errors.show) != LEME_PUBLIC_OK ||
       put_enum(b, errors, LEME_PUBLIC_TEXT("position"),
-               banner_name(config->config_errors.position)) != LEME_PUBLIC_OK ||
+               leme_choice_banner[config->config_errors.position]) !=
+          LEME_PUBLIC_OK ||
       leme_public_put_int(b, errors, LEME_PUBLIC_TEXT("timeout"),
                           config->config_errors.timeout) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, settings, LEME_PUBLIC_TEXT("style"), style) !=

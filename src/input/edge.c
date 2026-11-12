@@ -50,12 +50,12 @@ struct leme_edge_slots {
   int32_t values[LEME_EDGE_SLOTS];
 };
 
-static const struct wlr_device *
-leme_input_edge_device(const struct leme_edge_reader *reader) {
+const struct wlr_device *
+leme_input_session_device(const struct leme_server *server, dev_t dev) {
   const struct wlr_device *device;
 
-  wl_list_for_each(device, &reader->server->session->devices, link) {
-    if (device->dev == reader->dev) {
+  wl_list_for_each(device, &server->session->devices, link) {
+    if (device->dev == dev) {
       return device;
     }
   }
@@ -197,7 +197,7 @@ static int leme_input_edge_readable(int fd, uint32_t mask, void *data) {
 
   (void)fd;
   if ((mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR)) != 0 ||
-      leme_input_edge_device(reader) == NULL ||
+      leme_input_session_device(reader->server, reader->dev) == NULL ||
       !leme_input_edge_wanted(reader->server)) {
     leme_input_edge_detach(reader);
     return 0;
@@ -207,7 +207,8 @@ static int leme_input_edge_readable(int fd, uint32_t mask, void *data) {
 }
 
 static bool leme_input_edge_attach(struct leme_edge_reader *reader) {
-  const struct wlr_device *device = leme_input_edge_device(reader);
+  const struct wlr_device *device =
+      leme_input_session_device(reader->server, reader->dev);
 
   if (device == NULL) {
     return false;

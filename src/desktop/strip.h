@@ -24,7 +24,6 @@ bool leme_desk_strip_icon_box(const struct leme_output *output,
 size_t leme_desk_strip_capacity(struct leme_box area, size_t count);
 struct leme_box leme_desk_strip_area_for_count(struct leme_box area,
                                                size_t count);
-void leme_desk_strip_cancel_click(struct leme_server *server);
 bool leme_desk_strip_handle_button(
     struct leme_server *server, const struct leme_render_hit *hit,
     const struct wlr_pointer_button_event *event);

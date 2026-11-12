@@ -128,6 +128,7 @@ void leme_input_gesture_cancel(struct leme_server *server) {
       break;
     case LEME_BINDING_KEY:
     case LEME_BINDING_EDGE:
+    case LEME_BINDING_SWITCH:
       break;
     }
     break;

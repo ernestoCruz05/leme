@@ -66,18 +66,18 @@ static const struct leme_public_schema types[LEME_SCHEMA_TYPE_COUNT] = {
                          .maximum = (high),                                    \
                          .rule = LEME_RULE_##value_rule},
 #define PUBLIC_ENUM(tag, ...)                                                  \
-  [LEME_SCHEMA_##                                                              \
-      tag] = {.name = "string",                                                \
-              .kind = LEME_PUBLIC_STRING,                                      \
-              .enum_values = enum_##tag,                                       \
-              .enum_count = sizeof(enum_##tag) / sizeof(enum_##tag[0])},
+  [LEME_SCHEMA_##tag] = {.name = "string",                                     \
+                         .kind = LEME_PUBLIC_STRING,                           \
+                         .enum_values = enum_##tag,                            \
+                         .enum_count =                                         \
+                             sizeof(enum_##tag) / sizeof(enum_##tag[0])},
 #define PUBLIC_SCHEMA(tag, label, is_sparse, ...)                              \
-  [LEME_SCHEMA_##                                                              \
-      tag] = {.name = (label),                                                 \
-              .kind = LEME_PUBLIC_OBJECT,                                      \
-              .sparse = (is_sparse),                                           \
-              .fields = fields_##tag,                                          \
-              .field_count = sizeof(fields_##tag) / sizeof(fields_##tag[0])},
+  [LEME_SCHEMA_##tag] = {.name = (label),                                      \
+                         .kind = LEME_PUBLIC_OBJECT,                           \
+                         .sparse = (is_sparse),                                \
+                         .fields = fields_##tag,                               \
+                         .field_count =                                        \
+                             sizeof(fields_##tag) / sizeof(fields_##tag[0])},
 #define PUBLIC_UNION(tag, first, second)                                       \
   [LEME_SCHEMA_##tag] = {.name = "union",                                      \
                          .primary = &types[LEME_SCHEMA_##first],               \
@@ -136,33 +136,6 @@ find_field(const struct leme_public_schema *schema,
   return NULL;
 }
 
-enum leme_public_status
-leme_public_schema_path(const struct leme_public_schema *schema,
-                        const struct leme_public_text *path, size_t count,
-                        const struct leme_public_field **out) {
-  if (out == NULL)
-    return LEME_PUBLIC_INVALID;
-  *out = NULL;
-  if (count > LEME_PUBLIC_MAX_FIELD_DEPTH)
-    return LEME_PUBLIC_LIMIT;
-  if (schema == NULL || path == NULL || count == 0)
-    return LEME_PUBLIC_INVALID;
-  const struct leme_public_field *field = NULL;
-  for (size_t i = 0; i < count; ++i) {
-    if (schema->related != NULL)
-      schema = schema->related;
-    if (schema->kind == LEME_PUBLIC_ARRAY)
-      schema = schema->items;
-    if (schema == NULL || schema->kind != LEME_PUBLIC_OBJECT)
-      return LEME_PUBLIC_TYPE_ERROR;
-    field = find_field(schema, path[i]);
-    if (field == NULL)
-      return LEME_PUBLIC_UNKNOWN_FIELD;
-    schema = field->type;
-  }
-  *out = field;
-  return LEME_PUBLIC_OK;
-}
 static bool text_is(struct leme_public_text text, const char *expected) {
   const size_t length = strlen(expected);
   return text.length == length &&
@@ -316,10 +289,6 @@ leme_public_schema_kind(const struct leme_public_schema *schema) {
   return schema != NULL ? schema->kind : LEME_PUBLIC_NULL;
 }
 
-bool leme_public_schema_any(const struct leme_public_schema *schema) {
-  return schema != NULL && schema->rule == LEME_RULE_ANY;
-}
-
 const struct leme_public_schema *
 leme_public_schema_item(const struct leme_public_schema *schema) {
   return (schema != NULL && schema->kind == LEME_PUBLIC_ARRAY) ? schema->items
@@ -329,29 +298,6 @@ leme_public_schema_item(const struct leme_public_schema *schema) {
 const struct leme_public_schema *
 leme_public_schema_reference(const struct leme_public_schema *schema) {
   return schema != NULL ? schema->related : NULL;
-}
-
-size_t
-leme_public_schema_alternatives(const struct leme_public_schema *schema) {
-  if (schema == NULL)
-    return 0;
-  if (schema->primary != NULL && schema->alternative != NULL)
-    return 2;
-  if (schema->primary != NULL)
-    return 1;
-  return 0;
-}
-
-const struct leme_public_schema *
-leme_public_schema_alternative(const struct leme_public_schema *schema,
-                               size_t index) {
-  if (schema == NULL)
-    return NULL;
-  if (index == 0)
-    return schema->primary;
-  if (index == 1)
-    return schema->alternative;
-  return NULL;
 }
 
 size_t leme_public_schema_fields(const struct leme_public_schema *schema) {

@@ -6,13 +6,6 @@
 #include "control/types.h"
 #include "public/schema.h"
 
-const struct leme_public_field *
-leme_control_schema_find_field(const struct leme_public_schema *schema,
-                               struct leme_public_text name);
-
-const struct leme_public_schema *
-leme_control_schema_follow_ref(const struct leme_public_schema *schema);
-
 enum leme_control_code
 leme_control_resolve_field_path(const struct leme_control_type *item_type,
                                 const struct leme_public_text *components,

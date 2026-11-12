@@ -47,9 +47,6 @@ enum leme_control_code
 eval_collection_call(struct evaluator *ev, const struct leme_control_node *node,
                      const struct leme_public_value **out);
 
-bool eval_equal(struct evaluator *ev, const struct leme_public_value *left,
-                const struct leme_public_value *right);
-
 const struct leme_public_value *
 eval_ensure_owned(struct evaluator *ev, const struct leme_public_value *val,
                   enum leme_control_code *out_code);

@@ -93,7 +93,7 @@ struct leme_box leme_desk_strip_area_for_count(struct leme_box area,
   return area;
 }
 
-void leme_desk_strip_cancel_click(struct leme_server *server) {
+static void leme_desk_strip_cancel_click(struct leme_server *server) {
   if (server == NULL) {
     return;
   }

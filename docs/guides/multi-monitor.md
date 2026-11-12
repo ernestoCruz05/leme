@@ -1,7 +1,8 @@
 # Multi-monitor
 
-Every connected output is enabled. `wlr-randr` lists connector names and modes,
-and the log has the names too. Give each monitor an `output` block:
+Every connected output is enabled unless its block says `enabled false`.
+`wlr-randr` lists connector names and modes, and the log has the names too.
+Give each monitor an `output` block:
 
 ```scfg
 output "DP-1" {

@@ -158,26 +158,6 @@ void leme_control_queue_set_completion(
   queue->completion_data = user_data;
 }
 
-enum leme_control_code
-leme_control_queue_reserve(struct leme_control_queue *queue, size_t bytes) {
-  if (queue == NULL) {
-    return LEME_CONTROL_INVALID_ARGUMENT;
-  }
-  if (bytes > queue->max_bytes ||
-      queue->queued_bytes > queue->max_bytes - bytes ||
-      queue->reserved_bytes > queue->max_bytes - bytes - queue->queued_bytes) {
-    return LEME_CONTROL_RESOURCE_LIMIT;
-  }
-  if (queue->reserved_node == NULL) {
-    queue->reserved_node = malloc(sizeof(*queue->reserved_node));
-    if (queue->reserved_node == NULL) {
-      return LEME_CONTROL_OUT_OF_MEMORY;
-    }
-  }
-  queue->reserved_bytes += bytes;
-  return LEME_CONTROL_OK;
-}
-
 void leme_control_queue_cancel_reservation(struct leme_control_queue *queue,
                                            size_t bytes) {
   if (queue == NULL) {
@@ -318,10 +298,6 @@ leme_control_queue_flush(struct leme_control_queue *queue, int fd,
   }
 
   return LEME_CONTROL_FLUSH_OK;
-}
-
-size_t leme_control_queue_bytes(const struct leme_control_queue *queue) {
-  return queue != NULL ? (queue->queued_bytes + queue->reserved_bytes) : 0;
 }
 
 bool leme_control_queue_is_empty(const struct leme_control_queue *queue) {

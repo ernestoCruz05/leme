@@ -372,6 +372,9 @@ void leme_config_reload_commit(struct leme_server *server,
             "leme: output configuration failed after reload; keeping the "
             "previous output layout");
   }
+  if (server->outputs.next != NULL) {
+    leme_output_apply_enabled(server, old, next);
+  }
   if (plan->pointers_changed) {
     leme_input_apply_pointer_config(server, server->config);
   }
@@ -400,6 +403,7 @@ void leme_config_reload_commit(struct leme_server *server,
     leme_config_destroy(old_baseline);
   }
   leme_config_destroy(old);
+  leme_input_switches_sync(server);
 }
 
 void leme_config_reload_discard(struct leme_config_reload **plan_ptr) {

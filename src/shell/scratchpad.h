@@ -37,15 +37,6 @@ struct leme_scratchpad_manager {
   void *direct_prepare_observer_data;
 };
 
-size_t leme_scratchpad_pending_count(const struct leme_server *server);
-bool leme_scratchpad_pending_matches(const struct leme_server *server,
-                                     const char *name, const char *identity);
-struct leme_output *
-leme_scratchpad_pending_destination(const struct leme_server *server,
-                                    const char *name);
-bool leme_scratchpad_expire_pending(struct leme_server *server,
-                                    const char *name);
-
 bool leme_scratchpad_init(struct leme_server *server);
 void leme_scratchpad_finish(struct leme_server *server);
 bool leme_scratchpad_send(struct leme_server *server, struct leme_view *view);

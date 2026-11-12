@@ -15,9 +15,6 @@ enum leme_public_status leme_config_public_text(struct leme_public_builder *b,
 enum leme_public_status
 leme_config_public_redacted(struct leme_public_builder *b,
                             struct leme_public_value **out);
-enum leme_public_status leme_config_public_merge(
-    struct leme_public_builder *b, const struct leme_public_value *lhs,
-    const struct leme_public_value *rhs, struct leme_public_value **out);
 enum leme_public_status
 leme_config_public_count(struct leme_public_builder *b,
                          struct leme_public_value *record,

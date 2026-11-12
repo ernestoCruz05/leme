@@ -222,7 +222,7 @@ void leme_view_configure(struct leme_view *view, struct leme_box box) {
   }
 }
 
-void leme_view_flush_deferred_configure(struct leme_view *view) {
+static void leme_view_flush_deferred_configure(struct leme_view *view) {
   if (view == NULL || !view->configure_dirty) {
     return;
   }

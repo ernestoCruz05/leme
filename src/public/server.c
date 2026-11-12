@@ -15,7 +15,7 @@
 #include "render/graphics.h"
 #include <wlr/backend/session.h>
 
-struct leme_public_features
+static struct leme_public_features
 leme_public_server_features(const struct leme_server *server) {
   struct leme_public_features result = {0};
 #ifdef LEME_HAVE_EFFECTS
@@ -41,6 +41,10 @@ bool leme_public_server_init(struct leme_server *server) {
   return leme_public_model_create(NULL, &server->public_model) ==
          LEME_PUBLIC_OK;
 }
+
+static enum leme_public_status
+leme_public_server_capture(struct leme_server *server, uint32_t requested_roots,
+                           struct leme_public_snapshot **out);
 
 bool leme_public_server_prepare(struct leme_server *server) {
   struct leme_public_snapshot *snapshot = NULL;
@@ -331,7 +335,7 @@ source_root(void *context, const struct leme_public_model *model,
   return LEME_PUBLIC_INVALID;
 }
 
-enum leme_public_status
+static enum leme_public_status
 leme_public_server_capture(struct leme_server *server, uint32_t requested_roots,
                            struct leme_public_snapshot **out) {
   if (out == NULL)

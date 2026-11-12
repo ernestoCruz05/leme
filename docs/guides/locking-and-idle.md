@@ -27,4 +27,4 @@ wlopm --on '*'
 
 Quote `'*'` so the shell leaves it alone. An output that is off keeps its tags
 and windows, comes back with its last mode and position, and is not woken by a
-reload.
+reload. `output_power NAME on|off|toggle` does the same from a binding.

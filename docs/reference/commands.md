@@ -35,6 +35,17 @@ positive integers unless a row says otherwise.
 Whether `focus`, `move` and dragging cross onto the next output is set in
 [outputs](../configuration/outputs.md#behavior-across-outputs).
 
+## Outputs
+
+| Command | Effect |
+| --- | --- |
+| `output_disable NAME` | turns an output off and moves its windows to another output |
+| `output_enable NAME` | turns a disabled output on and returns its windows |
+| `output_toggle NAME` | disables an enabled output, enables a disabled one |
+| `output_power NAME on\|off\|toggle` | turns the screen on or off and leaves its windows on its tags |
+
+`NAME` is a connector name.
+
 ## Windows
 
 | Command | Effect |

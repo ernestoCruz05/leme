@@ -59,8 +59,8 @@ leme_output_from_wlr(struct leme_server *server,
   return NULL;
 }
 
-static struct leme_output *leme_output_find(struct leme_server *server,
-                                            const char *name) {
+struct leme_output *leme_output_find(struct leme_server *server,
+                                     const char *name) {
   struct leme_output *output;
 
   wl_list_for_each(output, &server->outputs, link) {
@@ -207,7 +207,7 @@ static bool leme_output_build_plans(struct leme_server *server,
                                       .scale = 1.0f,
                                       .transform = LEME_OUTPUT_TRANSFORM_NORMAL,
                                   };
-    plan->enabled = output->power_on;
+    plan->enabled = output->power_on && !output->disabled;
     plan->mode = leme_output_select_mode(output->wlr_output, &plan->entry);
     if (plan->entry.has_mode && plan->mode == NULL) {
       if (!startup) {
@@ -220,6 +220,12 @@ static bool leme_output_build_plans(struct leme_server *server,
     }
     if (plan->mode == NULL) {
       plan->mode = wlr_output_preferred_mode(output->wlr_output);
+    }
+    if (startup && plan->entry.adaptive_sync &&
+        !output->wlr_output->adaptive_sync_supported) {
+      wlr_log(WLR_INFO,
+              "leme: output %s does not support adaptive sync, leaving it off",
+              output->wlr_output->name);
     }
   }
   return true;
@@ -332,6 +338,9 @@ leme_output_build_persistent(struct leme_server *server,
       head->state.mode = plan->mode;
       head->state.scale = plan->entry.scale;
       head->state.transform = leme_output_transform(plan->entry.transform);
+      head->state.adaptive_sync_enabled =
+          plan->entry.adaptive_sync &&
+          plan->output->wlr_output->adaptive_sync_supported;
     }
   }
   if (leme_output_heads_overlap(configuration)) {
@@ -689,6 +698,8 @@ static bool leme_output_boxes_equal(struct leme_box left,
          left.height == right.height;
 }
 
+static void leme_output_refresh_geometry(struct leme_output *output);
+
 static bool leme_output_reconcile(struct leme_server *server,
                                   struct leme_sticky_output_plan **sticky) {
   struct leme_output *first = NULL;
@@ -890,7 +901,7 @@ static void leme_output_power_warp_focus(struct leme_server *server,
   leme_input_refresh_pointer_focus(server, 0);
 }
 
-bool leme_output_set_power(struct leme_output *output, bool on) {
+static bool leme_output_commit_enabled(struct leme_output *output, bool on) {
   struct leme_server *server;
   struct leme_sticky_output_snapshot *snapshots = NULL;
   struct leme_sticky_output_plan *sticky = NULL;
@@ -923,9 +934,6 @@ bool leme_output_set_power(struct leme_output *output, bool on) {
     leme_render_output_animations_finish(output);
   }
   if (output->wlr_output->enabled == on) {
-    if (output->power_on != on)
-      leme_public_server_invalidate(server);
-    output->power_on = on;
     return true;
   }
   if (on && !leme_output_build_power_on_plan(output, &plan)) {
@@ -1072,7 +1080,6 @@ bool leme_output_set_power(struct leme_output *output, bool on) {
             rolled_back ? "" : "; backend rollback also failed");
     return false;
   }
-  output->power_on = on;
   leme_output_power_warp_focus(server, previous);
   leme_output_publish_configuration(server);
   if (on) {
@@ -1094,6 +1101,17 @@ failed:
           failure_stage == NULL ? "unknown stage" : failure_stage,
           on ? "on" : "off", name);
   return false;
+}
+
+bool leme_output_set_power(struct leme_output *output, bool on) {
+  if (!output->disabled && !leme_output_commit_enabled(output, on)) {
+    return false;
+  }
+  if (output->power_on != on) {
+    output->power_on = on;
+    leme_public_server_invalidate(output->server);
+  }
+  return true;
 }
 
 bool leme_output_test_config(struct leme_server *server,
@@ -1336,7 +1354,6 @@ static bool leme_output_request_valid(
   }
   wl_list_for_each(head, &configuration->heads, link) {
     struct wlr_output *wlr_output = head->state.output;
-    bool current_adaptive;
 
     output = leme_output_from_wlr(server, wlr_output);
     if (output == NULL || !isfinite(head->state.scale) ||
@@ -1358,9 +1375,8 @@ static bool leme_output_request_valid(
     } else if (!wlr_output->enabled && head->state.enabled) {
       enabled++;
     }
-    current_adaptive =
-        wlr_output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED;
-    if (head->state.adaptive_sync_enabled != current_adaptive) {
+    if (head->state.adaptive_sync_enabled &&
+        !wlr_output->adaptive_sync_supported) {
       return false;
     }
     if (head->state.enabled &&
@@ -1372,6 +1388,8 @@ static bool leme_output_request_valid(
   return enabled >= 1 &&
          leme_output_request_layout_valid(server, configuration);
 }
+
+static void leme_output_restore_homes(struct leme_output *output);
 
 static void leme_output_handle_manager_test(struct wl_listener *listener,
                                             void *data) {
@@ -1404,6 +1422,14 @@ static void leme_output_handle_manager_apply(struct wl_listener *listener,
   }
   wlr_output_configuration_v1_destroy(configuration);
   if (valid) {
+    struct leme_output *output;
+
+    wl_list_for_each(output, &server->outputs, link) {
+      if (output->disabled && output->wlr_output->enabled) {
+        output->disabled = false;
+        leme_output_restore_homes(output);
+      }
+    }
     leme_output_publish_configuration(server);
   }
 }
@@ -1418,6 +1444,10 @@ static void leme_output_handle_commit(struct wl_listener *listener,
 
   if ((event->state->committed & geometry_fields) != 0) {
     leme_public_server_invalidate(output->server);
+  }
+  if ((event->state->committed & WLR_OUTPUT_STATE_ENABLED) != 0 &&
+      output->wlr_output->enabled) {
+    output->gamma_changed = true;
   }
   if ((event->state->committed & geometry_fields) != 0 &&
       output->server->focused_output == output && output->wlr_output->enabled) {
@@ -1463,6 +1493,99 @@ static void leme_output_refresh_restored(struct leme_server *server) {
   }
   leme_view_refresh_end(server);
   leme_publication_invalidate(server);
+}
+
+static void leme_output_restore_homes(struct leme_output *output) {
+  const char *name = output->wlr_output->name;
+  const bool views = leme_output_home_restore(output, name);
+  const bool sticky = leme_sticky_restore_output(output->server, output, name);
+
+  if (views || sticky) {
+    leme_output_refresh_restored(output->server);
+  }
+}
+
+static struct leme_output *
+leme_output_enabled_besides(struct leme_server *server,
+                            const struct leme_output *skip) {
+  struct leme_output *output;
+
+  wl_list_for_each(output, &server->outputs, link) {
+    if (output != skip && output->wlr_output->enabled &&
+        (server->headless_backend == NULL ||
+         output->wlr_output->backend != server->headless_backend)) {
+      return output;
+    }
+  }
+  return NULL;
+}
+
+static bool leme_output_config_disabled(const struct leme_config *config,
+                                        const char *name) {
+  const struct leme_output_config *entry = leme_output_config_for(config, name);
+
+  return entry != NULL && entry->disabled;
+}
+
+bool leme_output_set_enabled(struct leme_output *output, bool enabled) {
+  struct leme_server *server = output->server;
+  struct leme_output *successor;
+
+  if (output->disabled != enabled) {
+    return true;
+  }
+  if (enabled) {
+    output->disabled = false;
+    if (output->power_on && !leme_output_commit_enabled(output, true)) {
+      output->disabled = true;
+      return false;
+    }
+    leme_output_restore_homes(output);
+    return true;
+  }
+  successor = leme_output_enabled_besides(server, output);
+  if (successor == NULL) {
+    wlr_log(WLR_ERROR, "leme: refusing to disable %s, no other output is on",
+            output->wlr_output->name);
+    return false;
+  }
+  if (server->focused_output == output) {
+    leme_desk_owner_cancel(server);
+  } else {
+    leme_desk_menu_close(server);
+  }
+  leme_input_pointer_grab_cancel(server);
+  if (server->gesture.output == output) {
+    leme_input_workspace_gesture_cancel(server);
+  }
+  leme_sticky_handle_output_destroy(server, output, successor);
+  leme_output_home_evacuate(output, successor);
+  output->disabled = true;
+  if (!leme_output_commit_enabled(output, false)) {
+    output->disabled = false;
+    leme_output_restore_homes(output);
+    return false;
+  }
+  leme_output_refresh_restored(server);
+  return true;
+}
+
+void leme_output_apply_enabled(struct leme_server *server,
+                               const struct leme_config *old,
+                               const struct leme_config *next) {
+  struct leme_output *output;
+
+  for (int pass = 0; pass < 2; pass++) {
+    wl_list_for_each(output, &server->outputs, link) {
+      const char *name = output->wlr_output->name;
+      const bool disabled = leme_output_config_disabled(next, name);
+
+      if (disabled == (pass == 1) &&
+          disabled != leme_output_config_disabled(old, name)) {
+        (void)leme_output_set_enabled(output, !disabled);
+      }
+    }
+  }
 }
 
 static void leme_output_ensure_fallback(struct leme_server *server) {
@@ -1642,17 +1765,27 @@ static void leme_output_handle_new(struct wl_listener *listener, void *data) {
   output->destroy.notify = leme_output_handle_destroy;
   wl_signal_add(&wlr_output->events.destroy, &output->destroy);
 
+  if (leme_output_config_disabled(server->config, wlr_output->name)) {
+    output->disabled = leme_output_enabled_besides(server, output) != NULL;
+    if (!output->disabled) {
+      wlr_log(WLR_INFO, "leme: output %s is the only output, keeping it on",
+              wlr_output->name);
+    }
+  }
   if (!leme_output_apply_config(server, server->config, true)) {
     wlr_log(WLR_ERROR, "leme: failed to configure output %s", wlr_output->name);
     leme_output_publish_configuration(server);
   }
   if (wlr_output->enabled) {
-    const bool views = leme_output_home_restore(output, wlr_output->name);
-    const bool sticky =
-        leme_sticky_restore_output(server, output, wlr_output->name);
+    struct leme_output *other;
 
-    if (views || sticky) {
-      leme_output_refresh_restored(server);
+    leme_output_restore_homes(output);
+    wl_list_for_each(other, &server->outputs, link) {
+      if (other != output && !other->disabled &&
+          leme_output_config_disabled(server->config,
+                                      other->wlr_output->name)) {
+        (void)leme_output_set_enabled(other, false);
+      }
     }
   }
   if (wlr_output->backend != server->headless_backend) {
@@ -1731,7 +1864,7 @@ double leme_output_scale(const struct leme_output *output) {
              ? 1.0
              : (double)output->wlr_output->scale;
 }
-void leme_output_refresh_geometry(struct leme_output *output) {
+static void leme_output_refresh_geometry(struct leme_output *output) {
   struct wlr_box box = {0};
   struct leme_box next;
 

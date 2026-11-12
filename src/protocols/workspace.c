@@ -198,8 +198,8 @@ static void leme_workspace_activate(struct leme_server *server,
   leme_publication_invalidate(server);
 }
 
-void leme_workspace_handle_requests(struct leme_server *server,
-                                    struct wl_list *requests) {
+static void leme_workspace_handle_requests(struct leme_server *server,
+                                           struct wl_list *requests) {
   struct wlr_ext_workspace_v1_request *request;
 
   if (leme_session_locked(server)) {

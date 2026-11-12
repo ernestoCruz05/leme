@@ -1,6 +1,7 @@
 #include "config/config.h"
 #include "public/server.h"
 #include "config/internal.h"
+#include "config/option.h"
 
 #include "core/command.h"
 #include "core/server.h"
@@ -157,92 +158,26 @@ static bool leme_config_has_mode(const struct leme_config *config,
 
 bool leme_config_validate_command(const struct leme_config *config,
                                   const struct leme_command *command) {
+  struct leme_command_word words[LEME_COMMAND_WORDS_MAX];
+  size_t count;
+
+  if (!leme_command_words(command, words, &count)) {
+    return false;
+  }
   switch (command->type) {
   case LEME_COMMAND_MOVE_VIEW_TO_TAG:
-    if (command->has_direction) {
-      return command->direction == LEME_DIRECTION_LEFT ||
-             command->direction == LEME_DIRECTION_RIGHT;
-    }
-    return command->tag_id > 0 && command->tag_id <= config->max_tags;
+    return command->has_direction || command->tag_id <= config->max_tags;
   case LEME_COMMAND_FOCUS_TAG:
   case LEME_COMMAND_REMOVE_EMPTY_TAG:
-    return command->tag_id > 0 && command->tag_id <= config->max_tags;
-  case LEME_COMMAND_FOCUS_DIRECTION:
-  case LEME_COMMAND_CONTAINER_JOIN:
-  case LEME_COMMAND_SNAP:
-  case LEME_COMMAND_GRID_SELECT:
-    return command->direction >= LEME_DIRECTION_LEFT &&
-           command->direction <= LEME_DIRECTION_DOWN;
-  case LEME_COMMAND_PLACE:
-    return leme_command_placement_name(command->placement) != NULL;
-  case LEME_COMMAND_CONTAINER_LAYOUT:
-    return command->layout >= LEME_LAYOUT_DWINDLE &&
-           command->layout <= LEME_LAYOUT_MASTER_STACK;
-  case LEME_COMMAND_SET_LAYOUT:
-    return command->layout >= LEME_LAYOUT_DWINDLE &&
-           command->layout <= LEME_LAYOUT_DESKTOP;
-  case LEME_COMMAND_SWITCH_LAYOUT:
-    return true;
-  case LEME_COMMAND_FOCUS_OUTPUT:
-  case LEME_COMMAND_MOVE_VIEW_TO_OUTPUT:
-    return command->has_direction
-               ? (command->direction >= LEME_DIRECTION_LEFT &&
-                  command->direction <= LEME_DIRECTION_DOWN)
-               : (command->text != NULL && command->text[0] != '\0');
-  case LEME_COMMAND_MOVE_DIRECTION:
-    return command->direction >= LEME_DIRECTION_LEFT &&
-           command->direction <= LEME_DIRECTION_DOWN && command->amount > 0;
-  case LEME_COMMAND_RESIZE:
-    return command->amount != 0 && command->edge >= LEME_RESIZE_LEFT &&
-           command->edge <= LEME_RESIZE_DOWN;
-  case LEME_COMMAND_SPAWN:
-    return command->argv != NULL && command->argv[0] != NULL;
-  case LEME_COMMAND_ACT:
-    return command->text != NULL && command->text[0] != '\0';
+    return command->tag_id <= config->max_tags;
   case LEME_COMMAND_SET_MODE:
-    return command->text != NULL && command->text[0] != '\0' &&
-           leme_config_has_mode(config, command->text);
-  case LEME_COMMAND_SWITCH_VT:
-    return command->vt > 0 && command->vt <= 12;
-  case LEME_COMMAND_FOCUS_NEXT_TAG:
-  case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
-  case LEME_COMMAND_FOCUS_LAST_TAG:
-  case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
-  case LEME_COMMAND_FOCUS_URGENT:
-  case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
-  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
-  case LEME_COMMAND_TOGGLE_FLOATING:
-  case LEME_COMMAND_TOGGLE_STICKY:
-  case LEME_COMMAND_TOGGLE_FULLSCREEN:
-  case LEME_COMMAND_CONTAINER_DETACH:
-  case LEME_COMMAND_CONTAINER_DISSOLVE:
-  case LEME_COMMAND_CLOSE_VIEW:
-  case LEME_COMMAND_GESTURE_MOVE:
-  case LEME_COMMAND_GESTURE_RESIZE:
-  case LEME_COMMAND_MINIMIZE_VIEW:
-  case LEME_COMMAND_RESTORE_MINIMIZED:
-  case LEME_COMMAND_WINDOW_MENU:
-  case LEME_COMMAND_SHOW_DESKTOP:
-  case LEME_COMMAND_FOCUS_CYCLE:
-  case LEME_COMMAND_FOCUS_DESKTOP:
-  case LEME_COMMAND_DESKTOP_MENU:
-  case LEME_COMMAND_GRID_OPEN:
-  case LEME_COMMAND_GRID_TRASH:
-  case LEME_COMMAND_GRID_RENAME:
-  case LEME_COMMAND_GRID_NEW_FOLDER:
-  case LEME_COMMAND_GRID_SELECT_ALL:
-  case LEME_COMMAND_GRID_CLEAR:
-  case LEME_COMMAND_RELOAD_CONFIG:
-  case LEME_COMMAND_QUIT:
+    return leme_config_has_mode(config, command->text);
   case LEME_COMMAND_SCRATCHPAD_TOGGLE:
     return command->text == NULL ||
-           (command->text[0] != '\0' &&
-            leme_config_scratchpad(config, command->text) != NULL);
-  case LEME_COMMAND_SCRATCHPAD_SEND:
-  case LEME_COMMAND_SCRATCHPAD_RETRIEVE:
+           leme_config_scratchpad(config, command->text) != NULL;
+  default:
     return true;
   }
-  return false;
 }
 
 static bool leme_config_pointer_settings_valid(
@@ -251,28 +186,10 @@ static bool leme_config_pointer_settings_valid(
   const uint32_t fields = settings->fields;
 
   return (fields & ~all_fields) == 0 &&
-         ((fields & LEME_POINTER_PROFILE) == 0 ||
-          settings->profile == LEME_POINTER_ACCEL_ADAPTIVE ||
-          settings->profile == LEME_POINTER_ACCEL_FLAT) &&
-         ((fields & LEME_POINTER_SPEED) == 0 ||
-          (isfinite(settings->speed) && settings->speed >= -1.0 &&
-           settings->speed <= 1.0)) &&
-         ((fields & LEME_POINTER_CLICK_METHOD) == 0 ||
-          settings->click_method <= LEME_POINTER_CLICK_CLICKFINGER) &&
-         ((fields & LEME_POINTER_SCROLL_METHOD) == 0 ||
-          settings->scroll_method <= LEME_POINTER_SCROLL_ON_BUTTON_DOWN) &&
-         ((fields & LEME_POINTER_SCROLL_BUTTON) == 0 ||
-          settings->scroll_button <= LEME_POINTER_BUTTON_TASK) &&
-         ((fields & LEME_POINTER_TAP_BUTTON_MAP) == 0 ||
-          settings->tap_button_map <= LEME_POINTER_TAP_MAP_LMR) &&
-         ((fields & LEME_POINTER_DRAG_LOCK) == 0 ||
-          settings->drag_lock <= LEME_POINTER_DRAG_LOCK_STICKY) &&
+         leme_option_block_valid(&leme_pointer_block, settings, fields) &&
          ((fields & LEME_POINTER_DRAG_FINGERS) == 0 ||
           settings->drag_fingers == 0 || settings->drag_fingers == 3 ||
-          settings->drag_fingers == 4) &&
-         ((fields & LEME_POINTER_SCROLL_FACTOR) == 0 ||
-          (settings->scroll_factor > 0.0 &&
-           settings->scroll_factor <= LEME_POINTER_SCROLL_FACTOR_MAX));
+          settings->drag_fingers == 4);
 }
 
 bool leme_config_validate(const struct leme_config *config, char **error) {
@@ -292,23 +209,15 @@ bool leme_config_validate(const struct leme_config *config, char **error) {
     leme_config_set_error(error, "config: gap_outer sides must be nonnegative");
     return false;
   }
-  if (config->gap < 0 || config->border_width < 0 ||
-      config->corner_radius < 0 || config->blur < 0 || config->blur > 64) {
+  if (!leme_option_block_valid(&leme_style_block, config, 0)) {
     leme_config_set_error(
         error, "config: gap, border_width, corner_radius and blur are out "
                "of range");
     return false;
   }
-  if (config->cursor.size <= 0 || config->cursor.size > LEME_CURSOR_SIZE_MAX) {
+  if (!leme_option_block_valid(&leme_cursor_block, config, 0)) {
     leme_config_set_error(error, "config: cursor size must be between 1 and %d",
                           LEME_CURSOR_SIZE_MAX);
-    return false;
-  }
-  if (config->gestures.workspace_switch.mode != LEME_WORKSPACE_GESTURE_SINGLE &&
-      config->gestures.workspace_switch.mode != LEME_WORKSPACE_GESTURE_SCRUB &&
-      config->gestures.workspace_switch.mode != LEME_WORKSPACE_GESTURE_FREE) {
-    leme_config_set_error(error,
-                          "config: invalid gestures workspace_switch mode");
     return false;
   }
   if (config->gestures.workspace_switch.fingers == 2 ||
@@ -318,33 +227,16 @@ bool leme_config_validate(const struct leme_config *config, char **error) {
                           "config: invalid gestures workspace_switch fingers");
     return false;
   }
-  if (!isfinite(config->gestures.workspace_switch.distance) ||
-      config->gestures.workspace_switch.distance <= 0.0) {
-    leme_config_set_error(
-        error,
-        "config: gestures workspace_switch distance must be greater than zero");
+  if (!leme_option_block_valid(&leme_workspace_switch_block,
+                               &config->gestures.workspace_switch, 0) ||
+      !leme_option_block_valid(&leme_edges_block, &config->gestures.edges, 0)) {
+    leme_config_set_error(error, "config: gestures settings are out of range");
     return false;
   }
-  if (!isfinite(config->gestures.workspace_switch.threshold) ||
-      !(config->gestures.workspace_switch.threshold > 0.0 &&
-        config->gestures.workspace_switch.threshold < 1.0)) {
-    leme_config_set_error(
-        error,
-        "config: gestures workspace_switch threshold must be between 0 and 1");
-    return false;
-  }
-  if (!isfinite(config->gestures.workspace_switch.deceleration) ||
-      !(config->gestures.workspace_switch.deceleration > 0.0 &&
-        config->gestures.workspace_switch.deceleration < 1.0)) {
-    leme_config_set_error(
-        error,
-        "config: gestures workspace_switch deceleration must be between 0 and 1");
-    return false;
-  }
-  if (config->gestures.workspace_switch.velocity_window_ms == 0) {
-    leme_config_set_error(
-        error,
-        "config: gestures workspace_switch velocity_window must be greater than zero");
+  if (!leme_option_block_valid(&leme_output_policy_block, config, 0) ||
+      !leme_option_block_valid(&leme_publication_block, config, 0) ||
+      !leme_option_block_valid(&leme_config_errors_block, config, 0)) {
+    leme_config_set_error(error, "config: a setting is out of range");
     return false;
   }
   if (!leme_config_validate_outputs(config, error)) {

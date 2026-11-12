@@ -56,6 +56,8 @@ struct leme_output_config {
   char *relative_to;
   enum leme_output_relation relation;
   bool configured;
+  bool disabled;
+  bool adaptive_sync;
   bool has_mode;
   bool has_refresh;
   bool has_position;

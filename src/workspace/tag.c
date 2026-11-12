@@ -78,8 +78,9 @@ static size_t leme_tags_tiled_views(const struct leme_tag *tag,
   return count;
 }
 
-bool leme_tags_swap_list_order(struct leme_tag *tag, struct leme_view *first,
-                               struct leme_view *second) {
+static bool leme_tags_swap_list_order(struct leme_tag *tag,
+                                      struct leme_view *first,
+                                      struct leme_view *second) {
   struct wl_list *first_prev;
   struct wl_list *second_prev;
 
@@ -505,16 +506,6 @@ void leme_tags_commit_set_max(struct leme_tags_resize *resize) {
   *resize = (struct leme_tags_resize){0};
 }
 
-bool leme_tags_set_max(struct leme_tags *tags, uint16_t max_tags) {
-  struct leme_tags_resize resize = {0};
-
-  if (!leme_tags_prepare_set_max(tags, max_tags, &resize)) {
-    return false;
-  }
-  leme_tags_commit_set_max(&resize);
-  return tags->focused_id <= max_tags;
-}
-
 struct leme_tag *
 leme_tags_focus_id_direction(struct leme_tags *tags, uint16_t id,
                              enum leme_tag_change_direction direction) {
@@ -771,12 +762,6 @@ bool leme_tags_assign_view_to(struct leme_tags *tags, struct leme_view *view,
                          view);
   }
   return true;
-}
-
-void leme_tags_assign_view(struct leme_tags *tags, struct leme_view *view) {
-  if (tags != NULL) {
-    (void)leme_tags_assign_view_to(tags, view, tags->focused_id);
-  }
 }
 
 bool leme_tags_adopt_view(struct leme_tags *destination, struct leme_view *view,
@@ -1315,29 +1300,6 @@ void leme_tags_attach_floating_prepared(struct leme_tag *tag,
   }
 }
 
-bool leme_tags_prepare_floating_attach(struct leme_tags *tags, uint16_t id) {
-  if (tags == NULL || id == 0 || id > tags->max_tags) {
-    return false;
-  }
-  return materialize(tags, id) != NULL;
-}
-
-void leme_tags_attach_floating(struct leme_tags *tags, struct leme_view *view,
-                               uint16_t id) {
-  struct leme_tag *tag;
-
-  assert(tags != NULL && view != NULL && leme_ownership_tag(view) == NULL &&
-         view->floating && id > 0 && id <= tags->max_tags &&
-         tags->table[id] != NULL);
-  tag = tags->table[id];
-  leme_ownership_commit_tag(view, tag);
-  wl_list_insert(&tag->views, &view->tag_link);
-  tag->focused_view = view;
-  if (id == tags->focused_id) {
-    tags->focused_is_candidate = false;
-  }
-}
-
 void leme_tags_remove_view(struct leme_view *view) {
   struct leme_tag *tag;
   struct leme_tags *tags;
@@ -1544,8 +1506,8 @@ size_t leme_tags_occupied_ring(const struct leme_tags *tags, uint16_t *ids,
   return count;
 }
 
-bool leme_tags_ring_index(const struct leme_tags *tags, uint16_t tag_id,
-                          size_t *index_out) {
+static bool leme_tags_ring_index(const struct leme_tags *tags, uint16_t tag_id,
+                                 size_t *index_out) {
   uint16_t ids[LEME_TAGS_RING_MAX];
   size_t count;
   size_t i;

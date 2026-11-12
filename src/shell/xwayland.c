@@ -21,9 +21,6 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/util/box.h>
 #include <wlr/util/edges.h>
@@ -61,12 +58,12 @@ struct leme_xwayland_view {
   bool associated;
 };
 
-static bool leme_xwayland_filter_global(const struct wl_client *client,
-                                        const struct wl_global *global,
-                                        void *data) {
-  struct leme_xwayland *xwayland = data;
+bool leme_xwayland_global_allowed(const struct leme_server *server,
+                                  const struct wl_client *client,
+                                  const struct wl_global *global) {
+  const struct leme_xwayland *xwayland = server->xwayland;
 
-  if (xwayland->wlr_xwayland == NULL ||
+  if (xwayland == NULL || xwayland->wlr_xwayland == NULL ||
       xwayland->wlr_xwayland->shell_v1 == NULL ||
       global != xwayland->wlr_xwayland->shell_v1->global) {
     return true;
@@ -81,10 +78,6 @@ static void leme_xwayland_handle_ready(struct wl_listener *listener,
 
   (void)data;
   xwayland->is_ready = true;
-  if (xwayland->startup_fd >= 0) {
-    (void)close(xwayland->startup_fd);
-    xwayland->startup_fd = -1;
-  }
   leme_xwayland_update_workarea(xwayland->server);
   wlr_log(WLR_INFO, "leme: XWayland ready on %s",
           xwayland->wlr_xwayland->display_name);
@@ -711,7 +704,6 @@ void leme_xwayland_init(struct leme_server *server) {
     return;
   }
   xwayland->server = server;
-  xwayland->startup_fd = -1;
   wl_list_init(&xwayland->views);
   xwayland->wlr_xwayland =
       wlr_xwayland_create(server->display, server->compositor, true);
@@ -730,8 +722,6 @@ void leme_xwayland_init(struct leme_server *server) {
   xwayland->destroy.notify = leme_xwayland_handle_destroy;
   wl_signal_add(&xwayland->wlr_xwayland->events.destroy, &xwayland->destroy);
   server->xwayland = xwayland;
-  wl_display_set_global_filter(server->display, leme_xwayland_filter_global,
-                               xwayland);
   wlr_log(WLR_INFO, "leme: reserved XWayland DISPLAY=%s",
           xwayland->wlr_xwayland->display_name);
 }
@@ -742,48 +732,11 @@ void leme_xwayland_finish(struct leme_server *server) {
   if (xwayland == NULL) {
     return;
   }
-  wl_display_set_global_filter(server->display, NULL, NULL);
-  if (xwayland->startup_fd >= 0) {
-    (void)close(xwayland->startup_fd);
-    xwayland->startup_fd = -1;
-  }
   if (xwayland->wlr_xwayland != NULL) {
     wlr_xwayland_destroy(xwayland->wlr_xwayland);
   }
   free(xwayland);
   server->xwayland = NULL;
-}
-
-bool leme_xwayland_start(struct leme_server *server) {
-  struct leme_xwayland *xwayland;
-  struct wlr_xwayland_server *backend;
-
-  if (server == NULL || server->xwayland == NULL ||
-      server->xwayland->wlr_xwayland == NULL ||
-      server->xwayland->wlr_xwayland->server == NULL) {
-    return false;
-  }
-  xwayland = server->xwayland;
-  backend = xwayland->wlr_xwayland->server;
-  if (backend->ready || backend->pid > 0 || xwayland->startup_fd >= 0) {
-    return true;
-  }
-  xwayland->startup_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (xwayland->startup_fd < 0) {
-    return false;
-  }
-  struct sockaddr_un address = {.sun_family = AF_UNIX};
-  const int written = snprintf(address.sun_path, sizeof(address.sun_path),
-                               "/tmp/.X11-unix/X%d", backend->display);
-
-  if (written < 0 || (size_t)written >= sizeof(address.sun_path) ||
-      connect(xwayland->startup_fd, (struct sockaddr *)&address,
-              sizeof(address)) != 0) {
-    (void)close(xwayland->startup_fd);
-    xwayland->startup_fd = -1;
-    return false;
-  }
-  return true;
 }
 
 const char *leme_xwayland_display(const struct leme_server *server) {
@@ -793,10 +746,6 @@ const char *leme_xwayland_display(const struct leme_server *server) {
     return NULL;
   }
   return server->xwayland->wlr_xwayland->display_name;
-}
-
-bool leme_xwayland_ready(const struct leme_server *server) {
-  return server->xwayland != NULL && server->xwayland->is_ready;
 }
 
 static struct wlr_box leme_xwayland_workarea_union(struct leme_server *server) {

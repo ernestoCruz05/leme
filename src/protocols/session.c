@@ -59,11 +59,11 @@ bool leme_session_surface_allowed(const struct leme_server *server,
 bool leme_session_command_allowed(const struct leme_server *server,
                                   const struct leme_command *command) {
   return !leme_session_locked(server) ||
-         command->type == LEME_COMMAND_SWITCH_VT ||
-         command->type == LEME_COMMAND_QUIT;
+         (leme_command_spec(command->type)->flags &
+          LEME_COMMAND_FLAG_LOCKED_ALLOWED) != 0;
 }
 
-void leme_session_restore_focus(struct leme_server *server) {
+static void leme_session_restore_focus(struct leme_server *server) {
   if (leme_session_locked(server)) {
     return;
   }

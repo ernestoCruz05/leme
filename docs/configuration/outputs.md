@@ -1,8 +1,9 @@
 # Outputs
 
-Every connected output is enabled. An `output "NAME"` block sets the mode,
-scale and placement of one connector. Without one, an output uses its
-preferred mode at scale 1, placed left to right.
+Every connected output is enabled unless its block says otherwise. An
+`output "NAME"` block sets the mode, scale and placement of one connector.
+Without one, an output uses its preferred mode at scale 1, placed left to
+right.
 
 ```scfg
 output "DP-1" {
@@ -27,10 +28,17 @@ output "HDMI-A-1" {
 | `transform` | `normal`, `90`, `180`, `270` | rotation |
 | `position` | `X Y` | position in the layout |
 | `left_of`, `right_of`, `top_of`, `bottom_of` | a connector name | position next to another output |
+| `enabled` | `true`, `false` | `false` turns the output off and moves its windows to another one |
+| `adaptive_sync` | `true`, `false` | adaptive sync (VRR), off by default and ignored where unsupported |
 
 `wlr-randr` lists connector names and modes. A block takes one relation, and
 `position` wins over it. Outputs that cannot be placed go to the right.
 Overlapping outputs are rejected.
+
+The [output commands](../reference/commands.md#outputs) turn outputs off and
+on from a binding, such as the
+[lid switch](keybindings.md#lid-and-tablet-switches). The last output that is
+on cannot be disabled.
 
 The layout is shifted so no output sits at a negative coordinate, because X11
 windows cannot be reached there. Output-management tools such as `wlr-randr`

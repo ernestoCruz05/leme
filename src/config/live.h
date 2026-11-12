@@ -25,7 +25,6 @@ leme_config_effective_copy(const struct leme_config *baseline,
                            struct leme_config **out,
                            struct leme_control_error *error);
 
-bool leme_config_live_init(struct leme_server *server);
 void leme_config_live_finish(struct leme_server *server);
 
 enum leme_control_code leme_config_store_add_override(
@@ -42,20 +41,9 @@ const struct leme_scoped_override *
 leme_config_store_overrides(const struct leme_config_store *store,
                             size_t *out_count);
 
-struct leme_config *
-leme_config_store_baseline(const struct leme_config_store *store);
-
-struct leme_config *
-leme_config_store_effective(const struct leme_config_store *store);
-
 enum leme_control_code
 leme_config_live_run(struct leme_server *server,
                      const struct leme_control_call *call, bool *applied,
                      struct leme_control_error *error);
-
-enum leme_control_code
-leme_config_live_set(struct leme_server *server, const char *const *path,
-                     size_t path_count, const struct leme_public_value *value,
-                     bool *applied, struct leme_control_error *error);
 
 #endif

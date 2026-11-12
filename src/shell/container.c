@@ -147,7 +147,7 @@ leme_container_frame_box(const struct leme_container *container,
   return (struct leme_box){(int)x, (int)y, (int)width, (int)height};
 }
 
-struct leme_box
+static struct leme_box
 leme_container_normal_box(const struct leme_container *container) {
   if (container == NULL) {
     return (struct leme_box){0};
@@ -336,6 +336,16 @@ static enum leme_direction leme_container_opposite(enum leme_direction side) {
     return LEME_DIRECTION_UP;
   }
 }
+
+static bool leme_container_create(struct leme_view *target,
+                                  struct leme_view *added,
+                                  enum leme_direction direction,
+                                  struct leme_container **out);
+
+static bool leme_container_insert(struct leme_container *container,
+                                  struct leme_view *target,
+                                  struct leme_view *added,
+                                  enum leme_direction direction);
 
 bool leme_container_join(struct leme_view *view,
                          enum leme_direction direction) {
@@ -978,9 +988,10 @@ leme_container_prepare_insert(struct leme_container *container,
   return true;
 }
 
-bool leme_container_insert(struct leme_container *container,
-                           struct leme_view *target, struct leme_view *added,
-                           enum leme_direction direction) {
+static bool leme_container_insert(struct leme_container *container,
+                                  struct leme_view *target,
+                                  struct leme_view *added,
+                                  enum leme_direction direction) {
   struct leme_container_insertion prepared = {0};
   if (!leme_container_prepare_insert(container, target, added, direction,
                                      &prepared)) {
@@ -1138,9 +1149,10 @@ bool leme_container_commit_drop(struct leme_server *server,
   return leme_container_create(target, added, current.direction, &container);
 }
 
-bool leme_container_create(struct leme_view *target, struct leme_view *added,
-                           enum leme_direction direction,
-                           struct leme_container **out) {
+static bool leme_container_create(struct leme_view *target,
+                                  struct leme_view *added,
+                                  enum leme_direction direction,
+                                  struct leme_container **out) {
   if (out == NULL || *out != NULL || target == added ||
       !leme_container_member_eligible(target) ||
       !leme_container_member_eligible(added) || target->container != NULL ||
@@ -1276,16 +1288,6 @@ void leme_container_remove_view(struct leme_view *view) {
     leme_view_sync_wm_state(survivor);
   }
   leme_container_destroy(container);
-}
-
-bool leme_container_detach(struct leme_view *view,
-                           struct leme_box floating_frame) {
-  if (view == NULL || view->container == NULL || view->fullscreen ||
-      floating_frame.width <= 0 || floating_frame.height <= 0) {
-    return false;
-  }
-  leme_container_remove_view(view);
-  return leme_view_apply_interactive_box(view, floating_frame, true);
 }
 
 static bool leme_container_dissolve_internal(struct leme_container *container,

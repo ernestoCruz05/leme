@@ -23,6 +23,9 @@ struct leme_control_scheduler {
   bool armed;
 };
 
+static void
+leme_control_scheduler_step(struct leme_control_scheduler *scheduler);
+
 static int on_scheduler_timer(void *data) {
   struct leme_control_scheduler *scheduler = data;
   scheduler->armed = false;
@@ -171,7 +174,8 @@ void leme_control_scheduler_peer_ready(struct leme_control_scheduler *scheduler,
   }
 }
 
-void leme_control_scheduler_step(struct leme_control_scheduler *scheduler) {
+static void
+leme_control_scheduler_step(struct leme_control_scheduler *scheduler) {
   if (scheduler == NULL || scheduler->in_step)
     return;
   if (scheduler->armed) {

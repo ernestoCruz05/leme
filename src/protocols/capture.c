@@ -176,8 +176,8 @@ void leme_capture_sync(struct leme_server *server) {
   wl_list_for_each(view, &server->views, link) { leme_capture_sync_view(view); }
 }
 
-bool leme_capture_view_eligible(const struct leme_server *server,
-                                const struct leme_view *view) {
+static bool leme_capture_view_eligible(const struct leme_server *server,
+                                       const struct leme_view *view) {
   const struct leme_output *output;
 
   if (server == NULL || view == NULL || view->server != server ||

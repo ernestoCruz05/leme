@@ -97,6 +97,8 @@ struct wlr_layer_shell_v1;
 struct wlr_linux_dmabuf_v1;
 struct wlr_linux_drm_syncobj_manager_v1;
 struct wlr_output_manager_v1;
+struct wlr_gamma_control_manager_v1;
+struct wlr_security_context_manager_v1;
 struct wlr_output_power_manager_v1;
 struct wlr_presentation;
 struct wlr_single_pixel_buffer_manager_v1;
@@ -159,6 +161,8 @@ struct leme_server {
   struct wlr_fractional_scale_manager_v1 *fractional_scale_manager;
   struct wlr_output_manager_v1 *output_manager;
   struct wlr_output_power_manager_v1 *output_power_manager;
+  struct wlr_gamma_control_manager_v1 *gamma_control_manager;
+  struct wlr_security_context_manager_v1 *security_context_manager;
   struct wlr_xdg_output_manager_v1 *xdg_output_manager;
   struct wlr_ext_workspace_manager_v1 *workspace_manager;
   struct wlr_ext_foreign_toplevel_list_v1 *foreign_toplevel_list;
@@ -206,6 +210,8 @@ struct leme_server {
   struct wl_list layer_surfaces;
   struct wl_list keyboards;
   struct wl_list pointers;
+  struct wl_list switches;
+  struct wl_event_source *switch_sync;
   struct wlr_cursor *cursor;
   struct leme_mode *modes;
   size_t mode_count;
@@ -238,6 +244,7 @@ struct leme_server {
   struct wl_listener output_manager_apply;
   struct wl_listener output_manager_test;
   struct wl_listener output_power_set_mode;
+  struct wl_listener gamma_set;
   struct wl_listener new_xdg_toplevel;
   struct wl_listener new_layer_surface;
   struct wl_event_source *signal_sources[3];

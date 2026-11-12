@@ -42,17 +42,8 @@ struct leme_desk_menu_item {
 };
 
 struct leme_server;
-size_t leme_desk_menu_build(struct leme_server *server,
-                            struct leme_desk_target target,
-                            enum leme_desk_menu_list list,
-                            struct leme_desk_menu_item *items, size_t capacity);
-size_t leme_desk_menu_step(const struct leme_desk_menu_item *items,
-                           size_t count, size_t selected, int direction);
 struct leme_box leme_desk_menu_place(struct leme_box area, double x, double y,
                                      int width, int height);
-struct leme_box leme_desk_menu_place_submenu(struct leme_box area,
-                                             struct leme_box parent, int row_y,
-                                             int width, int height);
 
 bool leme_desk_menu_open(struct leme_server *server,
                          struct leme_desk_target target, double x, double y);
@@ -62,7 +53,6 @@ bool leme_desk_menu_open_desktop(struct leme_server *server,
                                  double x, double y);
 void leme_desk_menu_close(struct leme_server *server);
 void leme_desk_menu_finish(struct leme_server *server);
-bool leme_desk_menu_active(const struct leme_server *server);
 void leme_desk_menu_invalidate(struct leme_server *server,
                                struct leme_desk_target target);
 

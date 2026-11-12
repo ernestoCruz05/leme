@@ -372,7 +372,3 @@ void leme_ipc_invalidate(struct leme_server *server) {
     }
   }
 }
-
-const char *leme_ipc_socket_path(const struct leme_server *server) {
-  return (server == NULL || server->ipc == NULL) ? NULL : server->ipc->path;
-}

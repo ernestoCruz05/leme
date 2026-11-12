@@ -51,9 +51,6 @@ leme_control_type_array(const struct leme_control_type *item);
 
 bool leme_control_type_equal(const struct leme_control_type *left,
                              const struct leme_control_type *right);
-bool leme_control_type_compatible(const struct leme_control_type *expected,
-                                  const struct leme_control_type *actual);
-bool leme_control_type_is_trusted_entity(const struct leme_control_type *type);
 
 const struct leme_control_type *
 leme_control_type_entity_ref(enum leme_public_entity entity,

@@ -620,11 +620,6 @@ void leme_control_program_destroy(struct leme_control_program *program) {
   free(program);
 }
 
-size_t
-leme_control_program_node_count(const struct leme_control_program *program) {
-  return program != NULL ? program->node_count : 0;
-}
-
 const struct leme_control_node *
 leme_control_program_node(const struct leme_control_program *program,
                           size_t index) {
@@ -636,9 +631,4 @@ leme_control_program_node(const struct leme_control_program *program,
 uint32_t
 leme_control_program_root_index(const struct leme_control_program *program) {
   return program != NULL ? program->root_index : 0;
-}
-
-const struct leme_control_type *
-leme_control_program_type(const struct leme_control_program *program) {
-  return program != NULL ? &program->result_type : NULL;
 }

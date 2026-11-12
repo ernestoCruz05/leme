@@ -30,7 +30,7 @@
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/xwayland/xwayland.h>
 
-void leme_render_view_identify(struct leme_view *view) {
+static void leme_render_view_identify(struct leme_view *view) {
   view->render_owner = (struct leme_render_owner){
       .kind = LEME_RENDER_OWNER_VIEW, .value.view = view};
   if (view->render_tree != NULL) {
@@ -437,7 +437,7 @@ static int leme_render_saturate_coordinate(int64_t value) {
   return (int)value;
 }
 
-struct leme_box
+static struct leme_box
 leme_render_view_popup_constraint_box(struct leme_box full, int view_x,
                                       int view_y,
                                       struct leme_box root_geometry) {
@@ -880,6 +880,10 @@ static void leme_render_view_tracking_finish(struct leme_view *view) {
   view->render_state = NULL;
 }
 
+static float leme_render_view_opacity(const struct leme_config *config,
+                                      bool activated, bool fullscreen,
+                                      const struct leme_view_rules *rules);
+
 void leme_render_view_set_activated(struct leme_view *view, bool activated) {
   const struct leme_config *config;
   const float *color;
@@ -904,9 +908,9 @@ void leme_render_view_set_activated(struct leme_view *view, bool activated) {
   leme_render_view_sync_presentation(view);
 }
 
-float leme_render_view_opacity(const struct leme_config *config, bool activated,
-                               bool fullscreen,
-                               const struct leme_view_rules *rules) {
+static float leme_render_view_opacity(const struct leme_config *config,
+                                      bool activated, bool fullscreen,
+                                      const struct leme_view_rules *rules) {
   if (config == NULL || fullscreen) {
     return 1.0f;
   }
@@ -1241,7 +1245,7 @@ int leme_render_view_corner_radius(const struct leme_view *view,
  * opacidade cujo cliente desenhe a sua própria transparência ainda o quer, e
  * daqui não se sabe isso.
  */
-int leme_render_view_blur(const struct leme_view *view) {
+static int leme_render_view_blur(const struct leme_view *view) {
   /* A animação de fecho sobrevive à vista e continua a pedir o desfoque. */
   if (view == NULL || view->fullscreen || view->unmanaged ||
       view->server == NULL || view->server->config == NULL) {
@@ -2321,8 +2325,8 @@ leme_render_view_frame_box_for_state(const struct leme_view *view,
   return content;
 }
 
-struct leme_box leme_render_view_local_box(const struct leme_view *view,
-                                           struct leme_box global) {
+static struct leme_box leme_render_view_local_box(const struct leme_view *view,
+                                                  struct leme_box global) {
   if (view == NULL) {
     return (struct leme_box){0};
   }

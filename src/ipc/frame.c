@@ -27,7 +27,7 @@ struct leme_control_framer {
   size_t length;
 };
 
-enum leme_control_code
+static enum leme_control_code
 leme_control_frame_create_capacity(size_t capacity,
                                    struct leme_control_frame **out) {
   if (out == NULL) {
@@ -89,32 +89,8 @@ const char *leme_control_frame_bytes(const struct leme_control_frame *frame) {
   return frame != NULL ? frame->bytes : NULL;
 }
 
-char *leme_control_frame_buffer(struct leme_control_frame *frame,
-                                size_t *out_capacity) {
-  if (frame == NULL) {
-    if (out_capacity != NULL) {
-      *out_capacity = 0;
-    }
-    return NULL;
-  }
-  if (out_capacity != NULL) {
-    *out_capacity = frame->capacity;
-  }
-  return frame->bytes;
-}
-
 size_t leme_control_frame_length(const struct leme_control_frame *frame) {
   return frame != NULL ? frame->length : 0;
-}
-
-void leme_control_frame_set_length(struct leme_control_frame *frame,
-                                   size_t length) {
-  if (frame != NULL) {
-    frame->length = length;
-    if (frame->bytes != NULL && length <= frame->capacity) {
-      frame->bytes[length] = '\0';
-    }
-  }
 }
 
 void leme_control_frame_set_metadata(struct leme_control_frame *frame,
@@ -193,15 +169,6 @@ void leme_control_framer_destroy(struct leme_control_framer *framer) {
   }
   free(framer->buffer);
   free(framer);
-}
-
-size_t
-leme_control_framer_pending_bytes(const struct leme_control_framer *framer) {
-  return framer != NULL ? framer->length : 0;
-}
-
-bool leme_control_framer_is_empty(const struct leme_control_framer *framer) {
-  return framer == NULL || framer->length == 0;
 }
 
 enum leme_control_code

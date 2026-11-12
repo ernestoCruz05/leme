@@ -92,11 +92,11 @@ static size_t leme_desk_menu_files(struct leme_server *server, bool entry,
   return count;
 }
 
-size_t leme_desk_menu_build(struct leme_server *server,
-                            struct leme_desk_target target,
-                            enum leme_desk_menu_list list,
-                            struct leme_desk_menu_item *items,
-                            size_t capacity) {
+static size_t leme_desk_menu_build(struct leme_server *server,
+                                   struct leme_desk_target target,
+                                   enum leme_desk_menu_list list,
+                                   struct leme_desk_menu_item *items,
+                                   size_t capacity) {
   if (server == NULL || items == NULL || capacity == 0) {
     return 0;
   }
@@ -239,8 +239,9 @@ size_t leme_desk_menu_build(struct leme_server *server,
   return count;
 }
 
-size_t leme_desk_menu_step(const struct leme_desk_menu_item *items,
-                           size_t count, size_t selected, int direction) {
+static size_t leme_desk_menu_step(const struct leme_desk_menu_item *items,
+                                  size_t count, size_t selected,
+                                  int direction) {
   if (items == NULL || count == 0) {
     return SIZE_MAX;
   }
@@ -269,9 +270,10 @@ struct leme_box leme_desk_menu_place(struct leme_box area, double x, double y,
   return (struct leme_box){(int)x, (int)y, width, height};
 }
 
-struct leme_box leme_desk_menu_place_submenu(struct leme_box area,
-                                             struct leme_box parent, int row_y,
-                                             int width, int height) {
+static struct leme_box leme_desk_menu_place_submenu(struct leme_box area,
+                                                    struct leme_box parent,
+                                                    int row_y, int width,
+                                                    int height) {
   double x = (double)parent.x + parent.width;
   if (x + width > (double)area.x + area.width) {
     x = (double)parent.x - width;
@@ -473,7 +475,7 @@ cleanup:
   return ok;
 }
 
-bool leme_desk_menu_active(const struct leme_server *server) {
+static bool leme_desk_menu_active(const struct leme_server *server) {
   return server != NULL && server->desk_menu != NULL &&
          server->desk_menu->panels[0].tree != NULL;
 }

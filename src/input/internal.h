@@ -2,6 +2,7 @@
 #define LEME_INPUT_INTERNAL_H
 
 struct leme_server;
+struct wlr_device;
 struct wlr_input_device;
 struct wlr_keyboard;
 struct wlr_pointer_hold_begin_event;
@@ -19,6 +20,7 @@ struct wlr_pointer_swipe_update_event;
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 enum leme_input_setting_key {
   LEME_INPUT_SETTING_ACCEL_PROFILE,
@@ -92,10 +94,12 @@ void leme_input_pointer_add(struct leme_server *server,
                             struct wlr_input_device *device);
 void leme_input_pointer_events_init(struct leme_server *server);
 void leme_input_pointers_finish(struct leme_server *server);
+const struct wlr_device *
+leme_input_session_device(const struct leme_server *server, dev_t dev);
+void leme_input_switch_add(struct leme_server *server,
+                           struct wlr_input_device *device);
+void leme_input_switches_finish(struct leme_server *server);
 
-bool leme_input_pointer_resolve_id(const struct leme_server *server,
-                                   struct leme_public_id id,
-                                   struct leme_input_target_info *info);
 bool leme_input_keyboard_resolve_id(const struct leme_server *server,
                                     struct leme_public_id id,
                                     struct leme_input_target_info *info);

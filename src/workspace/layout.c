@@ -141,8 +141,8 @@ struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
   return root;
 }
 
-struct leme_layout_node *leme_layout_remove(struct leme_layout_node *root,
-                                            struct leme_view *removed) {
+static struct leme_layout_node *
+leme_layout_remove(struct leme_layout_node *root, struct leme_view *removed) {
   struct leme_layout_node *node = leme_layout_find(root, removed);
   struct leme_layout_node *parent;
   struct leme_layout_node *sibling;
@@ -306,48 +306,6 @@ bool leme_layout_resize_focused(struct leme_layout_node *root,
     node = parent;
   }
   return false;
-}
-
-static struct leme_view *
-leme_layout_find_neighbor(const struct leme_layout_node *node,
-                          const struct leme_view *view, bool *found) {
-  struct leme_view *neighbor;
-
-  if (node->is_leaf) {
-    if (*found) {
-      return node->data.view;
-    }
-    *found = node->data.view == view;
-    return NULL;
-  }
-
-  neighbor = leme_layout_find_neighbor(node->data.branch.first, view, found);
-  if (neighbor != NULL) {
-    return neighbor;
-  }
-  return leme_layout_find_neighbor(node->data.branch.second, view, found);
-}
-
-struct leme_view *leme_layout_neighbor(const struct leme_layout_node *root,
-                                       const struct leme_view *view) {
-  bool found = false;
-  struct leme_view *neighbor;
-  const struct leme_layout_node *first;
-
-  if (root == NULL || view == NULL) {
-    return NULL;
-  }
-
-  neighbor = leme_layout_find_neighbor(root, view, &found);
-  if (neighbor != NULL || !found) {
-    return neighbor;
-  }
-
-  first = root;
-  while (!first->is_leaf) {
-    first = first->data.branch.first;
-  }
-  return first->data.view;
 }
 
 static bool leme_layout_direction_valid(enum leme_direction direction) {

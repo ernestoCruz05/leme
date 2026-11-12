@@ -151,7 +151,6 @@ struct leme_view *leme_view_from_surface(struct leme_server *server,
 void leme_view_set_activated(struct leme_view *view, bool activated);
 void leme_view_configure(struct leme_view *view, struct leme_box box);
 void leme_view_set_configure_deferred(struct leme_view *view, bool deferred);
-void leme_view_flush_deferred_configure(struct leme_view *view);
 void leme_view_flush_deferred_configures(struct leme_server *server);
 void leme_view_ack_fullscreen(struct leme_view *view, bool fullscreen);
 void leme_view_sync_wm_state(struct leme_view *view);

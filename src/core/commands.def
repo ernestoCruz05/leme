@@ -1,0 +1,84 @@
+LEME_COMMAND(FOCUS_NEXT_TAG, "focus_next_tag", "[occupied]",
+             NEEDS_TAGS | CANCELS_GRAB, ARG_KEYWORD("occupied", occupied))
+LEME_COMMAND(FOCUS_PREVIOUS_TAG, "focus_previous_tag", "[occupied]",
+             NEEDS_TAGS | CANCELS_GRAB, ARG_KEYWORD("occupied", occupied))
+LEME_COMMAND(FOCUS_TAG, "focus_tag", "ID", NEEDS_TAGS | CANCELS_GRAB, ARG_TAG)
+LEME_COMMAND(FOCUS_DIRECTION, "focus", "left|right|up|down", CANCELS_GRAB,
+             ARG_DIRECTION)
+LEME_COMMAND(FOCUS_LAST_TAG, "focus_last_tag", "", NEEDS_TAGS | CANCELS_GRAB, )
+LEME_COMMAND(FOCUS_PREVIOUS_VIEW, "focus_previous_view", "", CANCELS_GRAB, )
+LEME_COMMAND(FOCUS_URGENT, "focus_urgent", "", 0, )
+LEME_COMMAND(MOVE_DIRECTION, "move", "left|right|up|down [PIXELS]", NEEDS_VIEW,
+             ARG_DIRECTION ARG_PIXELS(40))
+LEME_COMMAND(MOVE_VIEW_TO_TAG, "move_view_to_tag", "next|previous|ID [follow]",
+             NEEDS_TAGS | NEEDS_VIEW | STICKY_ROOT,
+             ARG_TAG_OR_STEP ARG_KEYWORD("follow", follow))
+LEME_COMMAND(FOCUS_OUTPUT, "focus_output", "left|right|up|down|NAME", 0,
+             ARG_OUTPUT)
+LEME_COMMAND(MOVE_VIEW_TO_OUTPUT, "move_view_to_output",
+             "left|right|up|down|NAME [follow]", NEEDS_VIEW | STICKY_ROOT,
+             ARG_OUTPUT ARG_KEYWORD("follow", follow))
+LEME_COMMAND(SET_LAYOUT, "set_layout", "dwindle|master_stack|desktop",
+             NEEDS_TAGS | CANCELS_GRAB, ARG_CHOICE(leme_command_layouts, layout))
+LEME_COMMAND(SWITCH_LAYOUT, "switch_layout", "", NEEDS_TAGS | CANCELS_GRAB, )
+LEME_COMMAND(REMOVE_EMPTY_TAG, "remove_empty_tag", "ID",
+             NEEDS_TAGS | CANCELS_GRAB, ARG_TAG)
+LEME_COMMAND(TOGGLE_FLOATING, "toggle_floating", "", NEEDS_VIEW | STICKY_ROOT, )
+LEME_COMMAND(TOGGLE_STICKY, "toggle_sticky", "",
+             NEEDS_VIEW | STICKY_ROOT | LOCKED_REFUSED, )
+LEME_COMMAND(TOGGLE_FULLSCREEN, "toggle_fullscreen", "",
+             NEEDS_VIEW | STICKY_ROOT, )
+LEME_COMMAND(RESIZE, "resize", "left|right|up|down PIXELS", NEEDS_VIEW,
+             ARG_CHOICE(leme_command_directions, edge) ARG_DELTA)
+LEME_COMMAND(CONTAINER_LAYOUT, "container_layout", "dwindle|master_stack", 0,
+             ARG_CHOICE(leme_command_container_layouts, layout))
+LEME_COMMAND(CONTAINER_DETACH, "container_detach", "", 0, )
+LEME_COMMAND(CONTAINER_DISSOLVE, "container_dissolve", "", 0, )
+LEME_COMMAND(CONTAINER_JOIN, "container_join", "left|right|up|down", 0,
+             ARG_DIRECTION)
+LEME_COMMAND(CLOSE_VIEW, "close_view", "", NEEDS_VIEW, )
+LEME_COMMAND(MINIMIZE_VIEW, "minimize_view", "", NEEDS_VIEW, )
+LEME_COMMAND(RESTORE_MINIMIZED, "restore_minimized", "", NEEDS_TAGS, )
+LEME_COMMAND(SPAWN, "spawn", "PROGRAM [ARG ...]", LOCAL_ONLY, ARG_ARGV)
+LEME_COMMAND(RELOAD_CONFIG, "reload_config", "", 0, )
+LEME_COMMAND(SET_MODE, "mode", "NAME", 0, ARG_TEXT)
+LEME_COMMAND(CYCLE_KEYBOARD_LAYOUT, "cycle_keyboard_layout", "", 0, )
+LEME_COMMAND(SWITCH_VT, "switch_vt", "N",
+             LOCKED_ALLOWED | LOCAL_ONLY | RESERVED, ARG_VT)
+LEME_COMMAND(QUIT, "quit", "", LOCKED_ALLOWED | LOCAL_ONLY | RESERVED, )
+LEME_COMMAND(SCRATCHPAD_SEND, "scratchpad_send", "",
+             NEEDS_VIEW | LOCKED_REFUSED, )
+LEME_COMMAND(SCRATCHPAD_TOGGLE, "scratchpad_toggle", "[NAME]", LOCKED_REFUSED,
+             ARG_NAME(true))
+LEME_COMMAND(SCRATCHPAD_RETRIEVE, "scratchpad_retrieve", "", LOCKED_REFUSED, )
+LEME_COMMAND(TOGGLE_SHORTCUTS_INHIBIT, "toggle_shortcuts_inhibit", "", RESERVED, )
+LEME_COMMAND(SNAP, "snap", "left|right|up|down", NEEDS_VIEW, ARG_DIRECTION)
+LEME_COMMAND(PLACE, "place",
+             "normal|maximized|left|right|top_left|top_right|"
+             "bottom_left|bottom_right",
+             NEEDS_VIEW, ARG_CHOICE(leme_command_placements, placement))
+LEME_COMMAND(WINDOW_MENU, "window_menu", "", NEEDS_VIEW, )
+LEME_COMMAND(SHOW_DESKTOP, "show_desktop", "", 0, )
+LEME_COMMAND(FOCUS_CYCLE, "focus_cycle", "next|previous", CANCELS_GRAB,
+             ARG_CHOICE(leme_command_cycles, backward))
+LEME_COMMAND(FOCUS_DESKTOP, "focus_desktop", "", 0, )
+LEME_COMMAND(DESKTOP_MENU, "desktop_menu", "", 0, )
+LEME_COMMAND(GRID_OPEN, "grid_open", "", GRID_ONLY, )
+LEME_COMMAND(GRID_TRASH, "grid_trash", "", GRID_ONLY, )
+LEME_COMMAND(GRID_RENAME, "grid_rename", "", GRID_ONLY, )
+LEME_COMMAND(GRID_NEW_FOLDER, "grid_new_folder", "", GRID_ONLY, )
+LEME_COMMAND(GRID_SELECT_ALL, "grid_select_all", "", GRID_ONLY, )
+LEME_COMMAND(GRID_CLEAR, "grid_clear", "", GRID_ONLY, )
+LEME_COMMAND(GRID_SELECT, "grid_select", "left|right|up|down [extend]",
+             GRID_ONLY, ARG_DIRECTION ARG_KEYWORD("extend", extend))
+LEME_COMMAND(GESTURE_MOVE, "gesture_move", NULL, GESTURE_ONLY, )
+LEME_COMMAND(GESTURE_RESIZE, "gesture_resize", NULL, GESTURE_ONLY, )
+LEME_COMMAND(OUTPUT_ENABLE, "output_enable", "NAME", LOCKED_ALLOWED,
+             ARG_NAME(false))
+LEME_COMMAND(OUTPUT_DISABLE, "output_disable", "NAME", LOCKED_ALLOWED,
+             ARG_NAME(false))
+LEME_COMMAND(OUTPUT_TOGGLE, "output_toggle", "NAME", LOCKED_ALLOWED,
+             ARG_NAME(false))
+LEME_COMMAND(OUTPUT_POWER, "output_power", "NAME on|off|toggle", LOCKED_ALLOWED,
+             ARG_NAME(false) ARG_CHOICE(leme_command_switches, output_switch))
+LEME_COMMAND(ACT, "act", "EXPRESSION", LOCAL_ONLY, ARG_TEXT)

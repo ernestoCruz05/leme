@@ -301,7 +301,7 @@ move_to_output(struct leme_server *server, struct leme_view *view,
   return LEME_CONTROL_OK;
 }
 
-enum leme_control_code
+static enum leme_control_code
 leme_shell_control_run(struct leme_server *server,
                        const struct leme_control_call *call, bool *applied,
                        struct leme_control_error *error) {
@@ -481,12 +481,11 @@ static enum leme_control_code command(struct leme_server *server,
     goto cleanup;
   }
   free(parse_error);
-  if (cmd.type == LEME_COMMAND_SPAWN || cmd.type == LEME_COMMAND_QUIT ||
-      cmd.type == LEME_COMMAND_SWITCH_VT || cmd.type == LEME_COMMAND_ACT)
+  const uint32_t flags = leme_command_spec(cmd.type)->flags;
+  if ((flags & LEME_COMMAND_FLAG_LOCAL_ONLY) != 0)
     code =
         leme_control_refuse(error, LEME_CONTROL_UNSUPPORTED, "command refused");
-  else if (cmd.type == LEME_COMMAND_GESTURE_MOVE ||
-           cmd.type == LEME_COMMAND_GESTURE_RESIZE)
+  else if ((flags & LEME_COMMAND_FLAG_GESTURE_ONLY) != 0)
     code = leme_control_refuse(error, LEME_CONTROL_INVALID_ARGUMENT,
                                "only valid on a swipe binding");
   else if (server->config != NULL &&

@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-const struct leme_public_field *
+static const struct leme_public_field *
 leme_control_schema_find_field(const struct leme_public_schema *schema,
                                struct leme_public_text name) {
   if (schema == NULL)
@@ -22,7 +22,7 @@ leme_control_schema_find_field(const struct leme_public_schema *schema,
   return NULL;
 }
 
-const struct leme_public_schema *
+static const struct leme_public_schema *
 leme_control_schema_follow_ref(const struct leme_public_schema *schema) {
   if (schema == NULL)
     return NULL;

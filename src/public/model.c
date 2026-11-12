@@ -173,13 +173,6 @@ leme_public_snapshot_root(const struct leme_public_snapshot *snapshot,
   return snapshot->roots[root];
 }
 
-struct leme_public_text
-leme_public_snapshot_instance(const struct leme_public_snapshot *snapshot) {
-  return snapshot == NULL ? (struct leme_public_text){0}
-                          : (struct leme_public_text){
-                                .data = snapshot->instance, .length = 32};
-}
-
 static int compare_entries(const void *lhs, const void *rhs) {
   const struct leme_public_index_entry *left = lhs;
   const struct leme_public_index_entry *right = rhs;
@@ -262,25 +255,6 @@ enum leme_public_status leme_public_snapshot_find(
       low = middle + 1;
   }
   return LEME_PUBLIC_NOT_FOUND;
-}
-
-static enum leme_public_status
-resolve_reference(const struct leme_public_snapshot *snapshot,
-                  const struct leme_public_schema *schema,
-                  const struct leme_public_value *value,
-                  const struct leme_public_value **out) {
-  *out = NULL;
-  if (compare_text(record_text(value, LEME_PUBLIC_TEXT("instance")),
-                   leme_public_snapshot_instance(snapshot)) != 0)
-    return LEME_PUBLIC_INVALID;
-  for (unsigned i = 0; i < LEME_PUBLIC_ENTITY_COUNT; ++i) {
-    const enum leme_public_entity kind = (enum leme_public_entity)i;
-    if (schema->related == leme_public_entity_schema(kind)) {
-      return leme_public_snapshot_find(
-          snapshot, kind, record_text(value, LEME_PUBLIC_TEXT("id")), out);
-    }
-  }
-  return LEME_PUBLIC_INVALID;
 }
 
 static enum leme_public_status
@@ -451,47 +425,4 @@ enum leme_public_status leme_public_model_capture(
     uint32_t requested_roots, struct leme_public_snapshot **out) {
   return leme_public_model_capture_diagnostic(model, source, requested_roots,
                                               NULL, out);
-}
-
-enum leme_public_status
-leme_public_snapshot_field(const struct leme_public_snapshot *snapshot,
-                           const struct leme_public_schema *schema,
-                           const struct leme_public_value *row,
-                           const struct leme_public_text *path, size_t count,
-                           const struct leme_public_value **out) {
-  if (out == NULL)
-    return LEME_PUBLIC_INVALID;
-  *out = NULL;
-  const struct leme_public_field *field = NULL;
-  enum leme_public_status status =
-      leme_public_schema_path(schema, path, count, &field);
-  if (status != LEME_PUBLIC_OK)
-    return status;
-  if (snapshot == NULL || row == NULL || !row->owner->sealed)
-    return LEME_PUBLIC_INVALID;
-  const struct leme_public_value *current = row;
-  for (size_t i = 0; i < count; ++i) {
-    if (leme_public_kind(current) == LEME_PUBLIC_NULL) {
-      *out = snapshot->null_value;
-      return LEME_PUBLIC_OK;
-    }
-    if (schema->related != NULL) {
-      status = resolve_reference(snapshot, schema, current, &current);
-      if (status != LEME_PUBLIC_OK)
-        return status;
-      schema = schema->related;
-    }
-    if (leme_public_kind(current) != LEME_PUBLIC_OBJECT)
-      return LEME_PUBLIC_TYPE_ERROR;
-    status = leme_public_schema_path(schema, &path[i], 1, &field);
-    if (status != LEME_PUBLIC_OK)
-      return status;
-    current = leme_public_get(current, path[i]);
-    if (current == NULL)
-      return LEME_PUBLIC_NOT_FOUND;
-    schema = field->type;
-  }
-  *out = leme_public_kind(current) == LEME_PUBLIC_NULL ? snapshot->null_value
-                                                       : current;
-  return LEME_PUBLIC_OK;
 }

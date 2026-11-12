@@ -39,9 +39,6 @@ leme_control_queue_create(size_t max_bytes, struct leme_control_queue **out);
 
 void leme_control_queue_destroy(struct leme_control_queue *queue);
 
-enum leme_control_code
-leme_control_queue_reserve(struct leme_control_queue *queue, size_t bytes);
-
 void leme_control_queue_cancel_reservation(struct leme_control_queue *queue,
                                            size_t bytes);
 
@@ -64,7 +61,6 @@ enum leme_control_flush_status
 leme_control_queue_flush(struct leme_control_queue *queue, int fd,
                          size_t *written);
 
-size_t leme_control_queue_bytes(const struct leme_control_queue *queue);
 bool leme_control_queue_is_empty(const struct leme_control_queue *queue);
 
 void leme_control_queue_set_completion(
@@ -106,6 +102,7 @@ struct leme_control_peer {
   uint64_t watch_ready_ns;
   enum leme_control_peer_state state;
   bool negotiated;
+  bool write_blocked;
   struct leme_control_outstanding outstanding[16];
   size_t outstanding_count;
   struct wl_list link;

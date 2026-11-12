@@ -501,8 +501,8 @@ static bool leme_desk_geometry_matches(const struct leme_output *output) {
          state->scale == output->wlr_output->scale;
 }
 
-bool leme_desk_at(const struct leme_output *output, double lx, double ly,
-                  size_t *index) {
+static bool leme_desk_at(const struct leme_output *output, double lx, double ly,
+                         size_t *index) {
   if (index == NULL || !isfinite(lx) || !isfinite(ly) ||
       !leme_desk_output_active(output) || output->desk == NULL) {
     return false;
@@ -891,7 +891,7 @@ static void leme_desk_context_message(struct leme_desk *desk,
   }
 }
 
-bool leme_desk_context_open(struct leme_server *server) {
+static bool leme_desk_context_open(struct leme_server *server) {
   struct leme_desk *desk = server == NULL ? NULL : server->desk;
   struct leme_output *output =
       desk == NULL ? NULL : leme_desk_context_output(desk);
@@ -914,6 +914,9 @@ bool leme_desk_context_open(struct leme_server *server) {
   }
   return ok;
 }
+
+static bool leme_desk_context_begin(struct leme_server *server,
+                                    enum leme_desk_file_action action);
 
 bool leme_desk_context_command(struct leme_server *server,
                                const struct leme_command *command) {
@@ -1021,8 +1024,8 @@ static void leme_desk_context_submit(struct leme_server *server,
                         name);
 }
 
-bool leme_desk_context_begin(struct leme_server *server,
-                             enum leme_desk_file_action action) {
+static bool leme_desk_context_begin(struct leme_server *server,
+                                    enum leme_desk_file_action action) {
   if (server == NULL || server->desk == NULL) {
     return false;
   }

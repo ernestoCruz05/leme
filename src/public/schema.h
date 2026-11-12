@@ -42,10 +42,6 @@ leme_public_root_schema(enum leme_public_root root);
 const struct leme_public_schema *
 leme_public_entity_schema(enum leme_public_entity entity);
 enum leme_public_status
-leme_public_schema_path(const struct leme_public_schema *schema,
-                        const struct leme_public_text *path, size_t count,
-                        const struct leme_public_field **out);
-enum leme_public_status
 leme_public_schema_validate(const struct leme_public_schema *schema,
                             const struct leme_public_value *value);
 
@@ -56,15 +52,10 @@ struct leme_public_text
 leme_public_field_name(const struct leme_public_field *field);
 enum leme_public_kind
 leme_public_schema_kind(const struct leme_public_schema *schema);
-bool leme_public_schema_any(const struct leme_public_schema *schema);
 const struct leme_public_schema *
 leme_public_schema_item(const struct leme_public_schema *schema);
 const struct leme_public_schema *
 leme_public_schema_reference(const struct leme_public_schema *schema);
-size_t leme_public_schema_alternatives(const struct leme_public_schema *schema);
-const struct leme_public_schema *
-leme_public_schema_alternative(const struct leme_public_schema *schema,
-                               size_t index);
 size_t leme_public_schema_fields(const struct leme_public_schema *schema);
 const struct leme_public_field *
 leme_public_schema_field(const struct leme_public_schema *schema, size_t index);

@@ -4,70 +4,11 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-struct leme_command_usage {
-  const char *name;
-  const char *usage;
-};
-
-static const struct leme_command_usage leme_command_usages[] = {
-    {"focus_next_tag", "focus_next_tag [occupied]"},
-    {"focus_previous_tag", "focus_previous_tag [occupied]"},
-    {"focus_tag", "focus_tag ID"},
-    {"focus_last_tag", "focus_last_tag"},
-    {"focus_previous_view", "focus_previous_view"},
-    {"focus_urgent", "focus_urgent"},
-    {"focus", "focus left|right|up|down"},
-    {"move", "move left|right|up|down [PIXELS]"},
-    {"move_view_to_tag", "move_view_to_tag next|previous|ID [follow]"},
-    {"focus_output", "focus_output left|right|up|down|NAME"},
-    {"move_view_to_output",
-     "move_view_to_output left|right|up|down|NAME [follow]"},
-    {"set_layout", "set_layout dwindle|master_stack|desktop"},
-    {"switch_layout", "switch_layout"},
-    {"remove_empty_tag", "remove_empty_tag ID"},
-    {"toggle_floating", "toggle_floating"},
-    {"toggle_sticky", "toggle_sticky"},
-    {"toggle_fullscreen", "toggle_fullscreen"},
-    {"scratchpad_send", "scratchpad_send"},
-    {"scratchpad_toggle", "scratchpad_toggle [NAME]"},
-    {"scratchpad_retrieve", "scratchpad_retrieve"},
-    {"resize", "resize left|right|up|down PIXELS"},
-    {"container_layout", "container_layout dwindle|master_stack"},
-    {"container_detach", "container_detach"},
-    {"container_dissolve", "container_dissolve"},
-    {"container_join", "container_join left|right|up|down"},
-    {"snap", "snap left|right|up|down"},
-    {"place", "place normal|maximized|left|right|top_left|top_right|"
-              "bottom_left|bottom_right"},
-    {"window_menu", "window_menu"},
-    {"show_desktop", "show_desktop"},
-    {"focus_cycle", "focus_cycle next|previous"},
-    {"focus_desktop", "focus_desktop"},
-    {"desktop_menu", "desktop_menu"},
-    {"grid_open", "grid_open"},
-    {"grid_trash", "grid_trash"},
-    {"grid_rename", "grid_rename"},
-    {"grid_new_folder", "grid_new_folder"},
-    {"grid_select_all", "grid_select_all"},
-    {"grid_clear", "grid_clear"},
-    {"grid_select", "grid_select left|right|up|down [extend]"},
-    {"close_view", "close_view"},
-    {"minimize_view", "minimize_view"},
-    {"restore_minimized", "restore_minimized"},
-    {"spawn", "spawn PROGRAM [ARG ...]"},
-    {"act", "act EXPRESSION"},
-    {"reload_config", "reload_config"},
-    {"mode", "mode NAME"},
-    {"cycle_keyboard_layout", "cycle_keyboard_layout"},
-    {"toggle_shortcuts_inhibit", "toggle_shortcuts_inhibit"},
-    {"switch_vt", "switch_vt N"},
-    {"quit", "quit"},
-};
 
 static const char *const leme_command_placements[] = {
     [LEME_VIEW_PLACEMENT_NORMAL] = "normal",
@@ -86,24 +27,97 @@ const char *leme_command_placement_name(enum leme_view_placement placement) {
              : NULL;
 }
 
-static bool leme_command_parse_placement(const char *text,
-                                         enum leme_view_placement *placement) {
-  for (size_t index = 0; index < LEME_ARRAY_LENGTH(leme_command_placements);
-       index++) {
-    if (strcmp(text, leme_command_placements[index]) == 0) {
-      *placement = (enum leme_view_placement)index;
-      return true;
-    }
-  }
-  return false;
+enum leme_command_status {
+  LEME_COMMAND_STATUS_OK,
+  LEME_COMMAND_STATUS_INVALID,
+  LEME_COMMAND_STATUS_MEMORY,
+};
+
+static const char *const leme_command_directions[] = {"left", "right", "up",
+                                                      "down"};
+static const char *const leme_command_layouts[] = {"dwindle", "master_stack",
+                                                   "desktop"};
+static const char *const leme_command_container_layouts[] = {"dwindle",
+                                                             "master_stack"};
+static const char *const leme_command_cycles[] = {"next", "previous"};
+static const char *const leme_command_switches[] = {"on", "off", "toggle"};
+
+_Static_assert(LEME_DIRECTION_LEFT == 0 && LEME_DIRECTION_DOWN == 3 &&
+                   LEME_RESIZE_LEFT == 0 && LEME_RESIZE_DOWN == 3 &&
+                   LEME_LAYOUT_DWINDLE == 0 && LEME_LAYOUT_DESKTOP == 2 &&
+                   LEME_OUTPUT_SWITCH_ON == 0 &&
+                   LEME_OUTPUT_SWITCH_TOGGLE == 2 &&
+                   LEME_VIEW_PLACEMENT_NORMAL == 0,
+               "command words follow the enum order");
+_Static_assert(sizeof(enum leme_direction) == sizeof(unsigned) &&
+                   sizeof(enum leme_resize_edge) == sizeof(unsigned) &&
+                   sizeof(enum leme_layout_kind) == sizeof(unsigned) &&
+                   sizeof(enum leme_view_placement) == sizeof(unsigned) &&
+                   sizeof(enum leme_output_switch) == sizeof(unsigned),
+               "command choices are stored as unsigned");
+
+#define FIELD(member)                                                          \
+  .offset = offsetof(struct leme_command, member),                             \
+  .size = sizeof(((struct leme_command *)0)->member)
+#define ARG_CHOICE(list, member)                                               \
+  {.kind = LEME_COMMAND_ARG_CHOICE,                                            \
+   .words = (list),                                                            \
+   .word_count = LEME_ARRAY_LENGTH(list),                                      \
+   FIELD(member)},
+#define ARG_DIRECTION ARG_CHOICE(leme_command_directions, direction)
+#define ARG_KEYWORD(word, member)                                              \
+  {.kind = LEME_COMMAND_ARG_KEYWORD,                                           \
+   .optional = true,                                                           \
+   .words = (const char *const[]){word},                                       \
+   .word_count = 1,                                                            \
+   FIELD(member)},
+#define ARG_TAG {.kind = LEME_COMMAND_ARG_TAG},
+#define ARG_TAG_OR_STEP {.kind = LEME_COMMAND_ARG_TAG_OR_STEP},
+#define ARG_OUTPUT {.kind = LEME_COMMAND_ARG_OUTPUT},
+#define ARG_PIXELS(value)                                                      \
+  {.kind = LEME_COMMAND_ARG_PIXELS, .optional = true, .fallback = (value)},
+#define ARG_DELTA {.kind = LEME_COMMAND_ARG_DELTA},
+#define ARG_VT {.kind = LEME_COMMAND_ARG_VT},
+#define ARG_TEXT {.kind = LEME_COMMAND_ARG_TEXT},
+#define ARG_NAME(may_omit)                                                     \
+  {.kind = LEME_COMMAND_ARG_NAME, .optional = (may_omit)},
+#define ARG_ARGV {.kind = LEME_COMMAND_ARG_ARGV},
+
+#define LEME_COMMAND(id, label, help, bits, list)                              \
+  static const struct leme_command_arg leme_command_args_##id[] = {            \
+      list{.kind = LEME_COMMAND_ARG_END}};
+#include "core/commands.def"
+#undef LEME_COMMAND
+
+#define NEEDS_TAGS LEME_COMMAND_FLAG_NEEDS_TAGS
+#define NEEDS_VIEW LEME_COMMAND_FLAG_NEEDS_VIEW
+#define CANCELS_GRAB LEME_COMMAND_FLAG_CANCELS_GRAB
+#define STICKY_ROOT LEME_COMMAND_FLAG_STICKY_ROOT
+#define LOCKED_ALLOWED LEME_COMMAND_FLAG_LOCKED_ALLOWED
+#define LOCKED_REFUSED LEME_COMMAND_FLAG_LOCKED_REFUSED
+#define LOCAL_ONLY LEME_COMMAND_FLAG_LOCAL_ONLY
+#define GESTURE_ONLY LEME_COMMAND_FLAG_GESTURE_ONLY
+#define GRID_ONLY LEME_COMMAND_FLAG_GRID_ONLY
+#define RESERVED LEME_COMMAND_FLAG_RESERVED
+
+static const struct leme_command_spec leme_command_specs[] = {
+#define LEME_COMMAND(id, label, help, bits, list)                              \
+  [LEME_COMMAND_##id] = {.name = (label),                                      \
+                         .usage = (help),                                      \
+                         .args = leme_command_args_##id,                       \
+                         .flags = (bits)},
+#include "core/commands.def"
+#undef LEME_COMMAND
+};
+
+const struct leme_command_spec *leme_command_spec(enum leme_command_type type) {
+  return &leme_command_specs[type];
 }
 
-static const char *leme_command_usage(const char *name) {
-  for (size_t index = 0;
-       index < sizeof(leme_command_usages) / sizeof(leme_command_usages[0]);
-       index++) {
-    if (strcmp(leme_command_usages[index].name, name) == 0) {
-      return leme_command_usages[index].usage;
+static const struct leme_command_spec *leme_command_find(const char *name) {
+  for (size_t index = 0; index < LEME_COMMAND_COUNT; index++) {
+    if (strcmp(leme_command_specs[index].name, name) == 0) {
+      return &leme_command_specs[index];
     }
   }
   return NULL;
@@ -154,50 +168,6 @@ static bool leme_command_parse_int(const char *text, long minimum, int *value) {
   return true;
 }
 
-static bool leme_command_parse_layout_kind(const char *text,
-                                           enum leme_layout_kind *kind) {
-  if (strcmp(text, "dwindle") == 0) {
-    *kind = LEME_LAYOUT_DWINDLE;
-  } else if (strcmp(text, "master_stack") == 0) {
-    *kind = LEME_LAYOUT_MASTER_STACK;
-  } else if (strcmp(text, "desktop") == 0) {
-    *kind = LEME_LAYOUT_DESKTOP;
-  } else {
-    return false;
-  }
-  return true;
-}
-
-static bool leme_command_parse_direction(const char *text,
-                                         enum leme_direction *direction) {
-  if (strcmp(text, "left") == 0) {
-    *direction = LEME_DIRECTION_LEFT;
-  } else if (strcmp(text, "right") == 0) {
-    *direction = LEME_DIRECTION_RIGHT;
-  } else if (strcmp(text, "up") == 0) {
-    *direction = LEME_DIRECTION_UP;
-  } else if (strcmp(text, "down") == 0) {
-    *direction = LEME_DIRECTION_DOWN;
-  } else {
-    return false;
-  }
-  return true;
-}
-
-static bool leme_command_parse_output_target(const char *text,
-                                             struct leme_command *command) {
-  if (leme_command_parse_direction(text, &command->direction)) {
-    command->has_direction = true;
-    return true;
-  }
-  if (text[0] == '\0') {
-    return false;
-  }
-  command->has_direction = false;
-  command->text = strdup(text);
-  return command->text != NULL;
-}
-
 static char **command_copy_argv(const char *name, char *const *params,
                                 size_t count) {
   char **argv = (char **)calloc(count + 2, sizeof(*argv));
@@ -226,267 +196,260 @@ static char **command_copy_argv(const char *name, char *const *params,
   return argv;
 }
 
+static size_t leme_command_word_index(const struct leme_command_arg *arg,
+                                      const char *text) {
+  size_t index = 0;
+
+  while (index < arg->word_count && strcmp(arg->words[index], text) != 0) {
+    index++;
+  }
+  return index;
+}
+
+static enum leme_command_status
+leme_command_parse_arg(struct leme_command *command,
+                       const struct leme_command_arg *arg, const char *word) {
+  void *field = (char *)command + arg->offset;
+  size_t index;
+
+  switch (arg->kind) {
+  case LEME_COMMAND_ARG_CHOICE:
+    index = leme_command_word_index(arg, word);
+    if (index == arg->word_count) {
+      return LEME_COMMAND_STATUS_INVALID;
+    }
+    if (arg->size == sizeof(bool)) {
+      *(bool *)field = index != 0;
+    } else {
+      const unsigned value = (unsigned)index;
+      memcpy(field, &value, sizeof(value));
+    }
+    return LEME_COMMAND_STATUS_OK;
+  case LEME_COMMAND_ARG_KEYWORD:
+    if (strcmp(arg->words[0], word) != 0) {
+      return LEME_COMMAND_STATUS_INVALID;
+    }
+    *(bool *)field = true;
+    return LEME_COMMAND_STATUS_OK;
+  case LEME_COMMAND_ARG_TAG:
+    return leme_command_parse_u16(word, &command->tag_id)
+               ? LEME_COMMAND_STATUS_OK
+               : LEME_COMMAND_STATUS_INVALID;
+  case LEME_COMMAND_ARG_TAG_OR_STEP:
+    if (strcmp(word, "next") == 0 || strcmp(word, "previous") == 0) {
+      command->has_direction = true;
+      command->direction =
+          word[0] == 'n' ? LEME_DIRECTION_RIGHT : LEME_DIRECTION_LEFT;
+      return LEME_COMMAND_STATUS_OK;
+    }
+    return leme_command_parse_u16(word, &command->tag_id)
+               ? LEME_COMMAND_STATUS_OK
+               : LEME_COMMAND_STATUS_INVALID;
+  case LEME_COMMAND_ARG_OUTPUT:
+    for (index = 0; index < LEME_ARRAY_LENGTH(leme_command_directions);
+         index++) {
+      if (strcmp(word, leme_command_directions[index]) == 0) {
+        command->has_direction = true;
+        command->direction = (enum leme_direction)index;
+        return LEME_COMMAND_STATUS_OK;
+      }
+    }
+    command->has_direction = false;
+    break;
+  case LEME_COMMAND_ARG_PIXELS:
+    return leme_command_parse_int(word, 0, &command->amount) &&
+                   command->amount != 0
+               ? LEME_COMMAND_STATUS_OK
+               : LEME_COMMAND_STATUS_INVALID;
+  case LEME_COMMAND_ARG_DELTA:
+    return leme_command_parse_int(word, -INT_MAX, &command->amount) &&
+                   command->amount != 0
+               ? LEME_COMMAND_STATUS_OK
+               : LEME_COMMAND_STATUS_INVALID;
+  case LEME_COMMAND_ARG_VT:
+    return leme_command_parse_u16(word, &command->vt) && command->vt <= 12
+               ? LEME_COMMAND_STATUS_OK
+               : LEME_COMMAND_STATUS_INVALID;
+  case LEME_COMMAND_ARG_TEXT:
+    command->text = strdup(word);
+    return command->text != NULL ? LEME_COMMAND_STATUS_OK
+                                 : LEME_COMMAND_STATUS_MEMORY;
+  case LEME_COMMAND_ARG_NAME:
+    break;
+  case LEME_COMMAND_ARG_ARGV:
+  case LEME_COMMAND_ARG_END:
+    return LEME_COMMAND_STATUS_INVALID;
+  }
+  if (word[0] == '\0') {
+    return LEME_COMMAND_STATUS_INVALID;
+  }
+  command->text = strdup(word);
+  return command->text != NULL ? LEME_COMMAND_STATUS_OK
+                               : LEME_COMMAND_STATUS_MEMORY;
+}
+
 bool leme_command_parse(struct leme_command *command, char *const *params,
                         size_t params_len, char **error) {
-  const char *name;
-  const char *usage;
-  size_t arguments;
+  const struct leme_command_spec *spec;
+  enum leme_command_status status = LEME_COMMAND_STATUS_OK;
+  size_t used = 1;
 
   if (params_len == 0) {
     leme_command_set_error(error, "%s", "missing command");
     return false;
   }
-  name = params[0];
-  arguments = params_len - 1;
-  if ((strcmp(name, "focus_next_tag") == 0 ||
-       strcmp(name, "focus_previous_tag") == 0) &&
-      arguments <= 1) {
-    command->type = strcmp(name, "focus_next_tag") == 0
-                        ? LEME_COMMAND_FOCUS_NEXT_TAG
-                        : LEME_COMMAND_FOCUS_PREVIOUS_TAG;
-    if (arguments == 1 && strcmp(params[1], "occupied") != 0) {
-      goto invalid;
-    }
-    command->occupied = arguments == 1;
-  } else if (strcmp(name, "focus_tag") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_FOCUS_TAG;
-    if (!leme_command_parse_u16(params[1], &command->tag_id)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "focus") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_FOCUS_DIRECTION;
-    if (!leme_command_parse_direction(params[1], &command->direction)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "focus_last_tag") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_FOCUS_LAST_TAG;
-  } else if (strcmp(name, "focus_previous_view") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_FOCUS_PREVIOUS_VIEW;
-  } else if (strcmp(name, "focus_urgent") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_FOCUS_URGENT;
-  } else if (strcmp(name, "move") == 0 && (arguments == 1 || arguments == 2)) {
-    command->type = LEME_COMMAND_MOVE_DIRECTION;
-    command->amount = 40;
-    if (!leme_command_parse_direction(params[1], &command->direction) ||
-        (arguments == 2 &&
-         (!leme_command_parse_int(params[2], 0, &command->amount) ||
-          command->amount == 0))) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "move_view_to_tag") == 0 &&
-             (arguments == 1 || arguments == 2)) {
-    command->type = LEME_COMMAND_MOVE_VIEW_TO_TAG;
-    if (strcmp(params[1], "next") == 0) {
-      command->has_direction = true;
-      command->direction = LEME_DIRECTION_RIGHT;
-    } else if (strcmp(params[1], "previous") == 0) {
-      command->has_direction = true;
-      command->direction = LEME_DIRECTION_LEFT;
-    } else if (!leme_command_parse_u16(params[1], &command->tag_id)) {
-      goto invalid;
-    }
-    if (arguments == 2 && strcmp(params[2], "follow") != 0) {
-      goto invalid;
-    }
-    command->follow = arguments == 2;
-  } else if (strcmp(name, "focus_output") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_FOCUS_OUTPUT;
-    if (!leme_command_parse_output_target(params[1], command)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "move_view_to_output") == 0 &&
-             (arguments == 1 || arguments == 2)) {
-    command->type = LEME_COMMAND_MOVE_VIEW_TO_OUTPUT;
-    if (!leme_command_parse_output_target(params[1], command) ||
-        (arguments == 2 && strcmp(params[2], "follow") != 0)) {
-      goto invalid;
-    }
-    command->follow = arguments == 2;
-  } else if (strcmp(name, "set_layout") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_SET_LAYOUT;
-    if (!leme_command_parse_layout_kind(params[1], &command->layout)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "container_layout") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_CONTAINER_LAYOUT;
-    if (!leme_command_parse_layout_kind(params[1], &command->layout) ||
-        command->layout == LEME_LAYOUT_DESKTOP) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "switch_layout") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_SWITCH_LAYOUT;
-  } else if (strcmp(name, "remove_empty_tag") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_REMOVE_EMPTY_TAG;
-    if (!leme_command_parse_u16(params[1], &command->tag_id)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "toggle_floating") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_TOGGLE_FLOATING;
-  } else if (strcmp(name, "toggle_sticky") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_TOGGLE_STICKY;
-  } else if (strcmp(name, "toggle_fullscreen") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_TOGGLE_FULLSCREEN;
-  } else if (strcmp(name, "resize") == 0 && arguments == 2) {
-    command->type = LEME_COMMAND_RESIZE;
-    if (strcmp(params[1], "left") == 0) {
-      command->edge = LEME_RESIZE_LEFT;
-    } else if (strcmp(params[1], "right") == 0) {
-      command->edge = LEME_RESIZE_RIGHT;
-    } else if (strcmp(params[1], "up") == 0) {
-      command->edge = LEME_RESIZE_UP;
-    } else if (strcmp(params[1], "down") == 0) {
-      command->edge = LEME_RESIZE_DOWN;
-    } else {
-      goto invalid;
-    }
-    if (!leme_command_parse_int(params[2], -INT_MAX, &command->amount) ||
-        command->amount == 0) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "minimize_view") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_MINIMIZE_VIEW;
-  } else if (strcmp(name, "restore_minimized") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_RESTORE_MINIMIZED;
-  } else if (strcmp(name, "container_detach") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_CONTAINER_DETACH;
-  } else if (strcmp(name, "container_dissolve") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_CONTAINER_DISSOLVE;
-  } else if (strcmp(name, "container_join") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_CONTAINER_JOIN;
-    if (!leme_command_parse_direction(params[1], &command->direction)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "snap") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_SNAP;
-    if (!leme_command_parse_direction(params[1], &command->direction)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "place") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_PLACE;
-    if (!leme_command_parse_placement(params[1], &command->placement)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "window_menu") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_WINDOW_MENU;
-  } else if (strcmp(name, "show_desktop") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_SHOW_DESKTOP;
-  } else if (strcmp(name, "focus_cycle") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_FOCUS_CYCLE;
-    command->backward = strcmp(params[1], "previous") == 0;
-    if (!command->backward && strcmp(params[1], "next") != 0) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "focus_desktop") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_FOCUS_DESKTOP;
-  } else if (strcmp(name, "desktop_menu") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_DESKTOP_MENU;
-  } else if (strcmp(name, "grid_open") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GRID_OPEN;
-  } else if (strcmp(name, "grid_trash") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GRID_TRASH;
-  } else if (strcmp(name, "grid_rename") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GRID_RENAME;
-  } else if (strcmp(name, "grid_new_folder") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GRID_NEW_FOLDER;
-  } else if (strcmp(name, "grid_select_all") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GRID_SELECT_ALL;
-  } else if (strcmp(name, "grid_clear") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GRID_CLEAR;
-  } else if (strcmp(name, "grid_select") == 0 &&
-             (arguments == 1 || arguments == 2)) {
-    command->type = LEME_COMMAND_GRID_SELECT;
-    command->extend = arguments == 2;
-    if (!leme_command_parse_direction(params[1], &command->direction) ||
-        (arguments == 2 && strcmp(params[2], "extend") != 0)) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "close_view") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_CLOSE_VIEW;
-  } else if (strcmp(name, "gesture_move") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GESTURE_MOVE;
-  } else if (strcmp(name, "gesture_resize") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_GESTURE_RESIZE;
-  } else if (strcmp(name, "spawn") == 0 && arguments > 0) {
-    command->type = LEME_COMMAND_SPAWN;
-    command->argv = command_copy_argv(params[1], &params[2], arguments - 1);
-    if (command->argv == NULL) {
-      goto allocation;
-    }
-  } else if (strcmp(name, "reload_config") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_RELOAD_CONFIG;
-  } else if (strcmp(name, "mode") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_SET_MODE;
-    command->text = strdup(params[1]);
-    if (command->text == NULL) {
-      goto allocation;
-    }
-  } else if (strcmp(name, "cycle_keyboard_layout") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT;
-  } else if (strcmp(name, "toggle_shortcuts_inhibit") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
-  } else if (strcmp(name, "switch_vt") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_SWITCH_VT;
-    if (!leme_command_parse_u16(params[1], &command->vt) || command->vt == 0 ||
-        command->vt > 12) {
-      goto invalid;
-    }
-  } else if (strcmp(name, "quit") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_QUIT;
-  } else if (strcmp(name, "scratchpad_send") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_SCRATCHPAD_SEND;
-  } else if (strcmp(name, "scratchpad_toggle") == 0 &&
-             (arguments == 0 || arguments == 1)) {
-    command->type = LEME_COMMAND_SCRATCHPAD_TOGGLE;
-    if (arguments == 1) {
-      if (params[1][0] == '\0') {
-        goto invalid;
-      }
-      command->text = strdup(params[1]);
-      if (command->text == NULL) {
-        goto allocation;
-      }
-    }
-  } else if (strcmp(name, "scratchpad_retrieve") == 0 && arguments == 0) {
-    command->type = LEME_COMMAND_SCRATCHPAD_RETRIEVE;
-  } else if (strcmp(name, "act") == 0 && arguments == 1) {
-    command->type = LEME_COMMAND_ACT;
-    command->text = strdup(params[1]);
-    if (command->text == NULL) {
-      goto allocation;
-    }
-  } else {
-    goto invalid;
+  spec = leme_command_find(params[0]);
+  if (spec == NULL) {
+    leme_command_set_error(error, "unknown command '%s'", params[0]);
+    return false;
   }
-  return true;
-
-invalid:
-  leme_command_finish(command);
-  usage = leme_command_usage(name);
-  if (usage == NULL) {
-    leme_command_set_error(error, "unknown command '%s'", name);
-  } else {
-    leme_command_set_error(error, "usage: %s", usage);
+  command->type = (enum leme_command_type)(spec - leme_command_specs);
+  for (const struct leme_command_arg *arg = spec->args;
+       status == LEME_COMMAND_STATUS_OK && arg->kind != LEME_COMMAND_ARG_END;
+       arg++) {
+    if (arg->kind == LEME_COMMAND_ARG_ARGV) {
+      if (used == params_len) {
+        status = LEME_COMMAND_STATUS_INVALID;
+        break;
+      }
+      command->argv = command_copy_argv(params[used], &params[used + 1],
+                                        params_len - used - 1);
+      status = command->argv != NULL ? LEME_COMMAND_STATUS_OK
+                                     : LEME_COMMAND_STATUS_MEMORY;
+      used = params_len;
+    } else if (used < params_len) {
+      status = leme_command_parse_arg(command, arg, params[used++]);
+    } else if (!arg->optional) {
+      status = LEME_COMMAND_STATUS_INVALID;
+    } else if (arg->kind == LEME_COMMAND_ARG_PIXELS) {
+      command->amount = arg->fallback;
+    }
   }
-  return false;
-allocation:
+  if (status == LEME_COMMAND_STATUS_OK && used == params_len) {
+    return true;
+  }
   leme_command_finish(command);
-  leme_command_set_error(error, "%s", "out of memory");
+  if (status == LEME_COMMAND_STATUS_MEMORY) {
+    leme_command_set_error(error, "%s", "out of memory");
+  } else if (spec->usage == NULL) {
+    leme_command_set_error(error, "unknown command '%s'", params[0]);
+  } else if (spec->usage[0] == '\0') {
+    leme_command_set_error(error, "usage: %s", params[0]);
+  } else {
+    leme_command_set_error(error, "usage: %s %s", params[0], spec->usage);
+  }
   return false;
 }
 
-bool leme_command_grid_only(const struct leme_command *command) {
-  switch (command->type) {
-  case LEME_COMMAND_GRID_OPEN:
-  case LEME_COMMAND_GRID_TRASH:
-  case LEME_COMMAND_GRID_RENAME:
-  case LEME_COMMAND_GRID_NEW_FOLDER:
-  case LEME_COMMAND_GRID_SELECT_ALL:
-  case LEME_COMMAND_GRID_CLEAR:
-  case LEME_COMMAND_GRID_SELECT:
-    return true;
-  default:
-    return false;
+bool leme_command_words(const struct leme_command *command,
+                        struct leme_command_word *words, size_t *count) {
+  const struct leme_command_spec *spec = leme_command_spec(command->type);
+
+  *count = 0;
+  for (const struct leme_command_arg *arg = spec->args;
+       arg->kind != LEME_COMMAND_ARG_END; arg++) {
+    const void *field = (const char *)command + arg->offset;
+    struct leme_command_word *word = &words[*count];
+    unsigned choice = 0;
+
+    *word = (struct leme_command_word){0};
+    switch (arg->kind) {
+    case LEME_COMMAND_ARG_CHOICE:
+      if (arg->size == sizeof(bool)) {
+        choice = *(const bool *)field ? 1 : 0;
+      } else {
+        memcpy(&choice, field, sizeof(choice));
+      }
+      if (choice >= arg->word_count) {
+        return false;
+      }
+      word->text = arg->words[choice];
+      break;
+    case LEME_COMMAND_ARG_KEYWORD:
+      if (!*(const bool *)field) {
+        continue;
+      }
+      word->text = arg->words[0];
+      break;
+    case LEME_COMMAND_ARG_TAG_OR_STEP:
+      if (command->has_direction) {
+        if (command->direction != LEME_DIRECTION_LEFT &&
+            command->direction != LEME_DIRECTION_RIGHT) {
+          return false;
+        }
+        word->text =
+            command->direction == LEME_DIRECTION_RIGHT ? "next" : "previous";
+        break;
+      }
+      if (command->tag_id == 0) {
+        return false;
+      }
+      word->is_number = true;
+      word->number = command->tag_id;
+      break;
+    case LEME_COMMAND_ARG_TAG:
+      if (command->tag_id == 0) {
+        return false;
+      }
+      word->is_number = true;
+      word->number = command->tag_id;
+      break;
+    case LEME_COMMAND_ARG_OUTPUT:
+      if (command->has_direction) {
+        if ((unsigned)command->direction >=
+            LEME_ARRAY_LENGTH(leme_command_directions)) {
+          return false;
+        }
+        word->text = leme_command_directions[command->direction];
+        break;
+      }
+      if (command->text == NULL || command->text[0] == '\0') {
+        return false;
+      }
+      word->text = command->text;
+      break;
+    case LEME_COMMAND_ARG_PIXELS:
+    case LEME_COMMAND_ARG_DELTA:
+      if (command->amount == 0 ||
+          (arg->kind == LEME_COMMAND_ARG_PIXELS && command->amount < 0)) {
+        return false;
+      }
+      word->is_number = true;
+      word->number = command->amount;
+      break;
+    case LEME_COMMAND_ARG_VT:
+      if (command->vt == 0 || command->vt > 12) {
+        return false;
+      }
+      word->is_number = true;
+      word->number = command->vt;
+      break;
+    case LEME_COMMAND_ARG_NAME:
+      if (arg->optional && command->text == NULL) {
+        continue;
+      }
+      if (command->text == NULL || command->text[0] == '\0') {
+        return false;
+      }
+      word->text = command->text;
+      break;
+    case LEME_COMMAND_ARG_TEXT:
+      if (command->text == NULL || command->text[0] == '\0') {
+        return false;
+      }
+      word->text = command->text;
+      break;
+    case LEME_COMMAND_ARG_ARGV:
+      if (command->argv == NULL || command->argv[0] == NULL) {
+        return false;
+      }
+      continue;
+    case LEME_COMMAND_ARG_END:
+      continue;
+    }
+    (*count)++;
   }
+  return true;
 }
 
 void leme_command_finish(struct leme_command *command) {

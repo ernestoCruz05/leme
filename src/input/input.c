@@ -30,6 +30,8 @@ static void leme_input_handle_new(struct wl_listener *listener, void *data) {
     leme_input_keyboard_add(server, device);
   } else if (device->type == WLR_INPUT_DEVICE_POINTER) {
     leme_input_pointer_add(server, device);
+  } else if (device->type == WLR_INPUT_DEVICE_SWITCH) {
+    leme_input_switch_add(server, device);
   }
   leme_input_update_capabilities(server);
 }
@@ -93,6 +95,7 @@ static void leme_input_listener_remove(struct wl_listener *listener) {
 void leme_input_init(struct leme_server *server) {
   wl_list_init(&server->keyboards);
   wl_list_init(&server->pointers);
+  wl_list_init(&server->switches);
   server->cursor = wlr_cursor_create();
   if (server->cursor == NULL) {
     return;
@@ -124,6 +127,7 @@ void leme_input_finish(struct leme_server *server) {
   }
   leme_input_keyboards_finish(server);
   leme_input_pointers_finish(server);
+  leme_input_switches_finish(server);
   wlr_cursor_destroy(server->cursor);
   server->cursor = NULL;
 }

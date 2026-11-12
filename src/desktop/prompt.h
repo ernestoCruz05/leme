@@ -23,11 +23,6 @@ struct leme_desk_prompt_text {
   bool select_all;
 };
 
-bool leme_desk_prompt_text_init(struct leme_desk_prompt_text *text,
-                                const char *initial);
-bool leme_desk_prompt_text_edit(struct leme_desk_prompt_text *text,
-                                xkb_keysym_t keysym, uint32_t modifiers,
-                                const char *utf8, size_t length);
 bool leme_desk_prompt_open(struct leme_server *server,
                            struct leme_output *output,
                            enum leme_desk_prompt_kind kind, const char *initial,
@@ -36,6 +31,5 @@ bool leme_desk_prompt_open(struct leme_server *server,
 void leme_desk_prompt_status(struct leme_server *server, const char *message);
 void leme_desk_prompt_close(struct leme_server *server);
 void leme_desk_prompt_finish(struct leme_server *server);
-bool leme_desk_prompt_active(const struct leme_server *server);
 
 #endif

@@ -251,7 +251,7 @@ input_settings(struct leme_public_builder *b, const struct leme_server *server,
   return LEME_PUBLIC_OK;
 }
 
-enum leme_public_status leme_input_public_record(
+static enum leme_public_status leme_input_public_record(
     struct leme_public_builder *b, const struct leme_server *server,
     const struct leme_public_input_info *info, struct leme_public_value **out) {
   if (out == NULL)

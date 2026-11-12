@@ -73,7 +73,7 @@ static bool leme_workspace_view_is_participant(const struct leme_view *view,
                                                const struct leme_output *output,
                                                uint16_t tag_id) {
   return view != NULL && view->render_tree != NULL && view->mapped &&
-         !view->unmanaged && !view->detached &&
+         !view->unmanaged && !view->detached && !leme_view_is_minimized(view) &&
          leme_ownership_tag(view) != NULL &&
          leme_ownership_tag(view)->owner != NULL &&
          leme_ownership_tag(view)->owner->output == output &&
@@ -444,15 +444,6 @@ fail:
   return NULL;
 }
 
-struct leme_workspace_transition *
-leme_render_workspace_transition_prepare_with_ops(
-    struct leme_output *output, uint16_t source_id, uint16_t destination_id,
-    enum leme_tag_change_direction direction,
-    const struct leme_workspace_transition_ops *ops) {
-  return leme_workspace_transition_prepare_with_ops(
-      output, source_id, destination_id, direction, ops, false);
-}
-
 static const struct leme_workspace_transition_ops leme_workspace_default_ops = {
     .snapshot = leme_animation_snapshot,
     .effect_create = leme_workspace_effect_create,
@@ -659,15 +650,6 @@ void leme_render_workspace_transition_begin_gesture(
   leme_desk_sync(output->server);
 }
 
-bool leme_render_workspace_transition_set_gesture_bounds(
-    struct leme_output *output, double center_position) {
-  if (!isfinite(center_position) || floor(center_position) != center_position) {
-    return false;
-  }
-  return leme_render_workspace_transition_set_gesture_range(
-      output, true, center_position - 1.0, center_position + 1.0);
-}
-
 static double leme_workspace_gesture_segment(double position, bool bounded,
                                              double minimum, double maximum) {
   if (!bounded) {
@@ -790,18 +772,6 @@ bool leme_render_workspace_transition_active(const struct leme_output *output) {
   return output != NULL && output->workspace_transition != NULL;
 }
 
-uint16_t
-leme_render_workspace_transition_bound_id(const struct leme_output *output,
-                                          bool incoming) {
-  const struct leme_workspace_transition *transition =
-      output == NULL ? NULL : output->workspace_transition;
-
-  if (transition == NULL) {
-    return 0;
-  }
-  return incoming ? transition->incoming_id : transition->outgoing_id;
-}
-
 const uint16_t *
 leme_render_workspace_transition_ring(const struct leme_output *output,
                                       size_t *ring_count) {
@@ -818,24 +788,6 @@ leme_render_workspace_transition_ring(const struct leme_output *output,
     *ring_count = transition->ring_count;
   }
   return transition->ring;
-}
-
-bool leme_render_workspace_transition_targets(const struct leme_output *output,
-                                              double *from_scalar,
-                                              double *to_scalar) {
-  const struct leme_workspace_transition *transition =
-      output == NULL ? NULL : output->workspace_transition;
-
-  if (transition == NULL) {
-    return false;
-  }
-  if (from_scalar != NULL) {
-    *from_scalar = transition->from_scalar;
-  }
-  if (to_scalar != NULL) {
-    *to_scalar = transition->to_scalar;
-  }
-  return true;
 }
 
 static struct wlr_scene_tree *leme_workspace_transition_get_or_create_slot(
@@ -1022,6 +974,9 @@ static void leme_render_workspace_transition_settle_apply(
                                                 frame->scalar);
 }
 
+static struct leme_animation_spring leme_workspace_gesture_spring(
+    const struct leme_workspace_animation_settings *settings);
+
 void leme_render_workspace_transition_settle(struct leme_output *output,
                                              double from_position,
                                              double to_position,
@@ -1142,7 +1097,7 @@ bool leme_render_workspace_transition_hides_container(
                                              container->tag->id);
 }
 
-struct leme_animation_spring leme_workspace_gesture_spring(
+static struct leme_animation_spring leme_workspace_gesture_spring(
     const struct leme_workspace_animation_settings *settings) {
   if (settings != NULL && settings->kind == LEME_ANIMATION_KIND_SPRING) {
     return settings->spring;

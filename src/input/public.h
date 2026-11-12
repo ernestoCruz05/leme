@@ -52,9 +52,6 @@ leme_input_public_keyboards(const struct leme_server *server,
 enum leme_public_status
 leme_input_public_pointers(const struct leme_server *server,
                            leme_public_input_visitor visit, void *context);
-enum leme_public_status leme_input_public_record(
-    struct leme_public_builder *b, const struct leme_server *server,
-    const struct leme_public_input_info *info, struct leme_public_value **out);
 enum leme_public_status
 leme_inputs_public_capture(struct leme_public_builder *b,
                            const struct leme_server *server,

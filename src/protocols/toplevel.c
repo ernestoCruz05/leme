@@ -391,13 +391,6 @@ void leme_toplevel_untrack(struct leme_view *view) {
   }
 }
 
-struct wlr_foreign_toplevel_handle_v1 *
-leme_toplevel_handle(const struct leme_view *view) {
-  return view == NULL || view->publication == NULL
-             ? NULL
-             : view->publication->wlr_handle;
-}
-
 bool leme_toplevel_init(struct leme_server *server) {
   server->foreign_toplevel_list =
       wlr_ext_foreign_toplevel_list_v1_create(server->display, 1);

@@ -24,8 +24,8 @@ for my own use. Issues and patches are welcome, but support is best-effort.
 
 ## Current limits
 
-Leme does not yet provide persistent VRR policy, touch and tablet input,
-text-input protocols, color management, HDR, gamma control, or DRM leasing.
+Leme does not yet provide touch and tablet input, text-input protocols,
+color management, HDR, or DRM leasing.
 See the [limitations](docs/reference/limitations.md) and the
 [roadmap](ROADMAP.md).
 

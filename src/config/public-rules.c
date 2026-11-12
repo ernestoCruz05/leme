@@ -154,7 +154,7 @@ output_value(struct leme_public_builder *b,
   const bool relative = output->relation != LEME_OUTPUT_RELATION_NONE;
   const size_t count = 1u + (size_t)output->has_mode +
                        (size_t)output->has_position +
-                       (output->configured ? 2u : 0u) + (relative ? 2u : 0u);
+                       (output->configured ? 4u : 0u) + (relative ? 2u : 0u);
   struct leme_public_value *record = NULL;
   if (leme_public_object(b, count, &record) != LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("name"), output->name) !=
@@ -194,7 +194,11 @@ output_value(struct leme_public_builder *b,
                             relation_name(output->relation)) != LEME_PUBLIC_OK))
     return leme_public_builder_status(b);
   if (output->configured &&
-      (leme_public_put_number(b, record, LEME_PUBLIC_TEXT("scale"),
+      (leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("enabled"),
+                            !output->disabled) != LEME_PUBLIC_OK ||
+       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("adaptive_sync"),
+                            output->adaptive_sync) != LEME_PUBLIC_OK ||
+       leme_public_put_number(b, record, LEME_PUBLIC_TEXT("scale"),
                               (double)output->scale) != LEME_PUBLIC_OK ||
        put_name(b, record, LEME_PUBLIC_TEXT("transform"),
                 transform_name(output->transform)) != LEME_PUBLIC_OK))

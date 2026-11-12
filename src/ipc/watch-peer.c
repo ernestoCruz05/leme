@@ -57,7 +57,7 @@ void leme_control_watch_peer_notify(struct leme_control_peer *peer,
   leme_control_watch_notify(peer->watches, change);
 }
 
-enum leme_control_code
+static enum leme_control_code
 leme_control_watch_peer_open(struct leme_control_peer *peer) {
   if (peer == NULL)
     return LEME_CONTROL_INVALID_ARGUMENT;

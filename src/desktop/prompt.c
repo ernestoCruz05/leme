@@ -50,8 +50,8 @@ static bool leme_desk_prompt_printable(const char *utf8, size_t length) {
   return true;
 }
 
-bool leme_desk_prompt_text_init(struct leme_desk_prompt_text *text,
-                                const char *initial) {
+static bool leme_desk_prompt_text_init(struct leme_desk_prompt_text *text,
+                                       const char *initial) {
   if (text == NULL) {
     return false;
   }
@@ -69,9 +69,9 @@ bool leme_desk_prompt_text_init(struct leme_desk_prompt_text *text,
   return true;
 }
 
-bool leme_desk_prompt_text_edit(struct leme_desk_prompt_text *text,
-                                xkb_keysym_t keysym, uint32_t modifiers,
-                                const char *utf8, size_t length) {
+static bool leme_desk_prompt_text_edit(struct leme_desk_prompt_text *text,
+                                       xkb_keysym_t keysym, uint32_t modifiers,
+                                       const char *utf8, size_t length) {
   if (text == NULL) {
     return false;
   }
@@ -161,7 +161,7 @@ bool leme_desk_prompt_text_edit(struct leme_desk_prompt_text *text,
 
 static const struct leme_desk_owner leme_desk_prompt_owner;
 
-bool leme_desk_prompt_active(const struct leme_server *server) {
+static bool leme_desk_prompt_active(const struct leme_server *server) {
   return server != NULL && server->desk_prompt != NULL &&
          server->desk_prompt->tree != NULL;
 }

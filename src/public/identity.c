@@ -24,7 +24,7 @@ leme_public_system_entropy(void *context, unsigned char *out, size_t count) {
   return LEME_PUBLIC_OK;
 }
 
-const char *leme_public_entity_name(enum leme_public_entity kind) {
+static const char *leme_public_entity_name(enum leme_public_entity kind) {
   static const char *const names[] = {"view", "tag", "output", "input"};
   return (unsigned)kind < LEME_PUBLIC_ENTITY_COUNT ? names[(unsigned)kind]
                                                    : NULL;

@@ -23,12 +23,8 @@ struct leme_json {
   bool fixed;
 };
 
-void leme_json_init(struct leme_json *json);
 void leme_json_init_limit(struct leme_json *json, size_t limit);
-void leme_json_init_fixed(struct leme_json *json, char *buffer,
-                          size_t capacity);
 void leme_json_append(struct leme_json *json, const char *text, size_t length);
-bool leme_json_reserve(struct leme_json *json, size_t extra);
 void leme_json_key_n(struct leme_json *json, const char *text, size_t length);
 void leme_json_string_n(struct leme_json *json, const char *text,
                         size_t length);
@@ -42,8 +38,6 @@ void leme_json_array_end(struct leme_json *json);
 void leme_json_key(struct leme_json *json, const char *key);
 void leme_json_string(struct leme_json *json, const char *value);
 void leme_json_bool(struct leme_json *json, bool value);
-void leme_json_number(struct leme_json *json, long value);
 void leme_json_null(struct leme_json *json);
-const char *leme_json_result(const struct leme_json *json);
 
 #endif

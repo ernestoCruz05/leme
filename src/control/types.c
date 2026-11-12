@@ -59,37 +59,6 @@ bool leme_control_type_equal(const struct leme_control_type *left,
   return true;
 }
 
-bool leme_control_type_compatible(const struct leme_control_type *expected,
-                                  const struct leme_control_type *actual) {
-  if (expected == NULL || actual == NULL)
-    return false;
-  if (expected->kind == LEME_CONTROL_TYPE_ANY)
-    return true;
-  if (actual->kind == LEME_CONTROL_TYPE_NULL)
-    return expected->nullable;
-  if (expected->kind == LEME_CONTROL_TYPE_ARRAY &&
-      actual->kind == LEME_CONTROL_TYPE_ARRAY) {
-    if (expected->item_type == NULL ||
-        expected->item_type->kind == LEME_CONTROL_TYPE_ANY)
-      return true;
-    if (actual->item_type == NULL)
-      return true;
-    return leme_control_type_compatible(expected->item_type, actual->item_type);
-  }
-  if (expected->kind == LEME_CONTROL_TYPE_ENTITY &&
-      actual->kind == LEME_CONTROL_TYPE_ENTITY)
-    return expected->entity == actual->entity;
-  if (expected->kind == LEME_CONTROL_TYPE_RECORD &&
-      actual->kind == LEME_CONTROL_TYPE_RECORD)
-    return expected->schema == NULL || expected->schema == actual->schema;
-  return expected->kind == actual->kind;
-}
-
-bool leme_control_type_is_trusted_entity(const struct leme_control_type *type) {
-  return type != NULL && type->kind == LEME_CONTROL_TYPE_ENTITY &&
-         type->provenance == LEME_CONTROL_PROVENANCE_SNAPSHOT;
-}
-
 static struct leme_control_type entity_types[4][3];
 static struct leme_control_type collection_types[4][3];
 static bool types_initialized = false;

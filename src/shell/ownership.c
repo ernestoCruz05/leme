@@ -127,13 +127,6 @@ leme_ownership_effective_output(const struct leme_view *view) {
   return NULL;
 }
 
-const struct leme_view_restore *
-leme_ownership_restore(const struct leme_view *view) {
-  const struct leme_durable_owner *durable = leme_ownership_durable(view);
-
-  return durable == NULL ? NULL : durable->restore;
-}
-
 bool leme_ownership_scene_visible(const struct leme_view *view) {
   return leme_ownership_base_eligible(view) && !leme_view_is_minimized(view);
 }
@@ -144,10 +137,6 @@ bool leme_ownership_hit_test_eligible(const struct leme_view *view) {
 
 bool leme_ownership_focus_eligible(const struct leme_view *view) {
   return leme_ownership_base_eligible(view) && !leme_view_is_minimized(view);
-}
-
-bool leme_ownership_activation_eligible(const struct leme_view *view) {
-  return leme_ownership_base_eligible(view);
 }
 
 bool leme_ownership_publication_eligible(const struct leme_view *view) {

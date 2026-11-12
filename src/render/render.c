@@ -6,6 +6,7 @@
 
 #include "protocols/capture.h"
 #include "protocols/data.h"
+#include "protocols/gamma.h"
 #include "shell/layer.h"
 #include "output/output.h"
 #include "core/server.h"
@@ -257,7 +258,7 @@ void leme_render_output_frame(struct leme_output *output) {
                                               output)) {
     wlr_output_schedule_frame(output->wlr_output);
   }
-  if (!output->tearing_fallback &&
+  if (!output->tearing_fallback && !output->gamma_changed &&
       !wlr_scene_output_needs_frame(output->scene_output)) {
     return;
   }
@@ -274,6 +275,9 @@ void leme_render_output_frame(struct leme_output *output) {
   if (!built) {
     wlr_output_state_finish(&state);
     return;
+  }
+  if (output->gamma_changed) {
+    leme_gamma_apply(output, &state);
   }
   request_tearing = !output->tearing_fallback &&
                     leme_tearing_can_tear(output->server, output);

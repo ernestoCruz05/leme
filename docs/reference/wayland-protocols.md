@@ -8,10 +8,11 @@ Leme only advertises a global when the backend and renderer support it.
 | shell | `wlr-layer-shell` v5, `ext-session-lock-v1`, `ext-idle-notify-v1`, `idle-inhibit-unstable-v1`, `leme-decoration-v1` |
 | input | `relative-pointer`, `pointer-constraints`, `pointer-gestures`, `keyboard-shortcuts-inhibit`, `cursor-shape`, `virtual-keyboard-unstable-v1`, `wlr-virtual-pointer-unstable-v1` |
 | clipboard | primary selection, `wlr-data-control`, `ext-data-control` |
-| outputs | `xdg-output`, `wlr-output-management`, `wlr-output-power-management`, `viewporter`, `fractional-scale` |
+| outputs | `xdg-output`, `wlr-output-management`, `wlr-output-power-management`, `wlr-gamma-control`, `viewporter`, `fractional-scale` |
 | graphics | `linux-dmabuf` v5 with feedback, `linux-drm-syncobj`, `presentation-time`, `single-pixel-buffer`, `alpha-modifier`, `content-type`, `tearing-control` |
 | capture | `wlr-screencopy`, `ext-image-copy-capture-v1` with output and window sources |
 | publication | `ext-workspace-v1`, `ext-foreign-toplevel-list-v1`, `wlr-foreign-toplevel-management-v1` |
+| sandboxing | `security-context-v1` |
 
 Not implemented: touch, tablet, text input and input methods, and
 `xdg_toplevel.show_window_menu`.
@@ -88,3 +89,13 @@ surface is visible.
 
 `wlr-output-power-management` turns outputs off and on. An output that is off
 keeps its tags and windows, and turning it on restores its config.
+`wlr-gamma-control` lets night-light tools such as `wlsunset` and `gammastep`
+tint an output.
+
+## Sandboxed apps
+
+Apps marked through `security-context-v1`, such as Flatpak apps, do not see
+virtual keyboard and pointer, data control, screen capture, output
+management, power and gamma, layer shell, session lock, `leme-decoration-v1`,
+or the workspace and toplevel lists. Screen sharing still works through the
+[portal](../guides/screen-sharing.md).

@@ -30,9 +30,6 @@ struct leme_control_operator {
 const struct leme_control_operator *
 leme_control_operator_find(struct leme_public_text name);
 
-const struct leme_control_operator *
-leme_control_operator_by_opcode(enum leme_control_opcode opcode);
-
 uint32_t
 leme_control_operator_roots(const struct leme_control_operator *op,
                             const struct leme_public_value *const *arg_literals,

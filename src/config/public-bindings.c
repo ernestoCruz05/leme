@@ -6,144 +6,6 @@
 #include <stdio.h>
 #include <wlr/types/wlr_keyboard.h>
 
-static const char *command_name(enum leme_command_type type) {
-  switch (type) {
-  case LEME_COMMAND_FOCUS_NEXT_TAG:
-    return "focus_next_tag";
-  case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
-    return "focus_previous_tag";
-  case LEME_COMMAND_FOCUS_TAG:
-    return "focus_tag";
-  case LEME_COMMAND_FOCUS_DIRECTION:
-    return "focus";
-  case LEME_COMMAND_FOCUS_LAST_TAG:
-    return "focus_last_tag";
-  case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
-    return "focus_previous_view";
-  case LEME_COMMAND_FOCUS_URGENT:
-    return "focus_urgent";
-  case LEME_COMMAND_MOVE_DIRECTION:
-    return "move";
-  case LEME_COMMAND_MOVE_VIEW_TO_TAG:
-    return "move_view_to_tag";
-  case LEME_COMMAND_FOCUS_OUTPUT:
-    return "focus_output";
-  case LEME_COMMAND_MOVE_VIEW_TO_OUTPUT:
-    return "move_view_to_output";
-  case LEME_COMMAND_SET_LAYOUT:
-    return "set_layout";
-  case LEME_COMMAND_SWITCH_LAYOUT:
-    return "switch_layout";
-  case LEME_COMMAND_REMOVE_EMPTY_TAG:
-    return "remove_empty_tag";
-  case LEME_COMMAND_TOGGLE_FLOATING:
-    return "toggle_floating";
-  case LEME_COMMAND_TOGGLE_STICKY:
-    return "toggle_sticky";
-  case LEME_COMMAND_TOGGLE_FULLSCREEN:
-    return "toggle_fullscreen";
-  case LEME_COMMAND_RESIZE:
-    return "resize";
-  case LEME_COMMAND_CONTAINER_LAYOUT:
-    return "container_layout";
-  case LEME_COMMAND_CONTAINER_DETACH:
-    return "container_detach";
-  case LEME_COMMAND_CONTAINER_DISSOLVE:
-    return "container_dissolve";
-  case LEME_COMMAND_CONTAINER_JOIN:
-    return "container_join";
-  case LEME_COMMAND_CLOSE_VIEW:
-    return "close_view";
-  case LEME_COMMAND_GESTURE_MOVE:
-    return "gesture_move";
-  case LEME_COMMAND_GESTURE_RESIZE:
-    return "gesture_resize";
-  case LEME_COMMAND_MINIMIZE_VIEW:
-    return "minimize_view";
-  case LEME_COMMAND_SNAP:
-    return "snap";
-  case LEME_COMMAND_PLACE:
-    return "place";
-  case LEME_COMMAND_WINDOW_MENU:
-    return "window_menu";
-  case LEME_COMMAND_SHOW_DESKTOP:
-    return "show_desktop";
-  case LEME_COMMAND_FOCUS_CYCLE:
-    return "focus_cycle";
-  case LEME_COMMAND_FOCUS_DESKTOP:
-    return "focus_desktop";
-  case LEME_COMMAND_DESKTOP_MENU:
-    return "desktop_menu";
-  case LEME_COMMAND_GRID_OPEN:
-    return "grid_open";
-  case LEME_COMMAND_GRID_TRASH:
-    return "grid_trash";
-  case LEME_COMMAND_GRID_RENAME:
-    return "grid_rename";
-  case LEME_COMMAND_GRID_NEW_FOLDER:
-    return "grid_new_folder";
-  case LEME_COMMAND_GRID_SELECT_ALL:
-    return "grid_select_all";
-  case LEME_COMMAND_GRID_CLEAR:
-    return "grid_clear";
-  case LEME_COMMAND_GRID_SELECT:
-    return "grid_select";
-  case LEME_COMMAND_RESTORE_MINIMIZED:
-    return "restore_minimized";
-  case LEME_COMMAND_SPAWN:
-    return "spawn";
-  case LEME_COMMAND_ACT:
-    return "act";
-  case LEME_COMMAND_RELOAD_CONFIG:
-    return "reload_config";
-  case LEME_COMMAND_SET_MODE:
-    return "mode";
-  case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
-    return "cycle_keyboard_layout";
-  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
-    return "toggle_shortcuts_inhibit";
-  case LEME_COMMAND_SWITCH_VT:
-    return "switch_vt";
-  case LEME_COMMAND_QUIT:
-    return "quit";
-  case LEME_COMMAND_SCRATCHPAD_SEND:
-    return "scratchpad_send";
-  case LEME_COMMAND_SCRATCHPAD_TOGGLE:
-    return "scratchpad_toggle";
-  case LEME_COMMAND_SCRATCHPAD_RETRIEVE:
-    return "scratchpad_retrieve";
-  }
-  return NULL;
-}
-
-static const char *direction_name(enum leme_direction direction) {
-  switch (direction) {
-  case LEME_DIRECTION_LEFT:
-    return "left";
-  case LEME_DIRECTION_RIGHT:
-    return "right";
-  case LEME_DIRECTION_UP:
-    return "up";
-  case LEME_DIRECTION_DOWN:
-    return "down";
-  }
-  return NULL;
-}
-
-static const char *edge_name(enum leme_resize_edge edge) {
-  switch (edge) {
-  case LEME_RESIZE_LEFT:
-    return "left";
-  case LEME_RESIZE_RIGHT:
-    return "right";
-  case LEME_RESIZE_UP:
-    return "up";
-  case LEME_RESIZE_DOWN:
-    return "down";
-  }
-  return NULL;
-}
-
 static enum leme_public_status integer_text(struct leme_public_builder *b,
                                             int64_t integer,
                                             struct leme_public_value **out) {
@@ -155,160 +17,25 @@ static enum leme_public_status integer_text(struct leme_public_builder *b,
       b, (struct leme_public_text){buffer, (size_t)written}, false, out);
 }
 
-static enum leme_public_status argument_text(struct leme_public_builder *b,
-                                             const char *text,
-                                             struct leme_public_value **out) {
-  if (text == NULL || text[0] == '\0')
-    return leme_public_fail(b, LEME_PUBLIC_INVALID);
-  return leme_config_public_text(b, text, out);
-}
-
 static enum leme_public_status command_args(struct leme_public_builder *b,
                                             const struct leme_command *command,
                                             struct leme_public_value **out) {
   if (command->type == LEME_COMMAND_SPAWN)
     return leme_config_public_redacted(b, out);
-  struct leme_public_value *arguments[2] = {NULL, NULL};
+  struct leme_command_word words[LEME_COMMAND_WORDS_MAX] = {0};
   size_t count = 0;
-  enum leme_public_status status = LEME_PUBLIC_OK;
-  switch (command->type) {
-  case LEME_COMMAND_FOCUS_TAG:
-  case LEME_COMMAND_REMOVE_EMPTY_TAG:
-    if (command->tag_id == 0)
-      return leme_public_fail(b, LEME_PUBLIC_INVALID);
-    status = integer_text(b, command->tag_id, &arguments[count++]);
-    break;
-  case LEME_COMMAND_FOCUS_DIRECTION:
-  case LEME_COMMAND_CONTAINER_JOIN:
-  case LEME_COMMAND_SNAP:
-    status = argument_text(b, direction_name(command->direction),
-                           &arguments[count++]);
-    break;
-  case LEME_COMMAND_PLACE:
-    status = argument_text(b, leme_command_placement_name(command->placement),
-                           &arguments[count++]);
-    break;
-  case LEME_COMMAND_FOCUS_CYCLE:
-    status = argument_text(b, command->backward ? "previous" : "next",
-                           &arguments[count++]);
-    break;
-  case LEME_COMMAND_GRID_SELECT:
-    status = argument_text(b, direction_name(command->direction),
-                           &arguments[count++]);
-    if (status == LEME_PUBLIC_OK && command->extend)
-      status = argument_text(b, "extend", &arguments[count++]);
-    break;
-  case LEME_COMMAND_MOVE_DIRECTION:
-    if (command->amount <= 0)
-      return leme_public_fail(b, LEME_PUBLIC_INVALID);
-    status = argument_text(b, direction_name(command->direction),
-                           &arguments[count++]);
-    if (status == LEME_PUBLIC_OK)
-      status = integer_text(b, command->amount, &arguments[count++]);
-    break;
-  case LEME_COMMAND_MOVE_VIEW_TO_TAG:
-    if (command->has_direction) {
-      const char *relative = command->direction == LEME_DIRECTION_RIGHT ? "next"
-                             : command->direction == LEME_DIRECTION_LEFT
-                                 ? "previous"
-                                 : NULL;
-      status = argument_text(b, relative, &arguments[count++]);
-    } else {
-      if (command->tag_id == 0)
-        return leme_public_fail(b, LEME_PUBLIC_INVALID);
-      status = integer_text(b, command->tag_id, &arguments[count++]);
-    }
-    if (status == LEME_PUBLIC_OK && command->follow)
-      status = argument_text(b, "follow", &arguments[count++]);
-    break;
-  case LEME_COMMAND_FOCUS_OUTPUT:
-  case LEME_COMMAND_MOVE_VIEW_TO_OUTPUT:
-    status = argument_text(b,
-                           command->has_direction
-                               ? direction_name(command->direction)
-                               : command->text,
-                           &arguments[count++]);
-    if (status == LEME_PUBLIC_OK &&
-        command->type == LEME_COMMAND_MOVE_VIEW_TO_OUTPUT && command->follow) {
-      status = argument_text(b, "follow", &arguments[count++]);
-    }
-    break;
-  case LEME_COMMAND_CONTAINER_LAYOUT:
-  case LEME_COMMAND_SET_LAYOUT:
-    if (command->type == LEME_COMMAND_CONTAINER_LAYOUT &&
-        (command->layout < LEME_LAYOUT_DWINDLE ||
-         command->layout > LEME_LAYOUT_MASTER_STACK)) {
-      return leme_public_fail(b, LEME_PUBLIC_INVALID);
-    }
-    status = argument_text(b, leme_layout_public_name(command->layout),
-                           &arguments[count++]);
-    break;
-  case LEME_COMMAND_RESIZE:
-    if (command->amount <= 0)
-      return leme_public_fail(b, LEME_PUBLIC_INVALID);
-    status = argument_text(b, edge_name(command->edge), &arguments[count++]);
-    if (status == LEME_PUBLIC_OK)
-      status = integer_text(b, command->amount, &arguments[count++]);
-    break;
-  case LEME_COMMAND_SET_MODE:
-  case LEME_COMMAND_ACT:
-    status = argument_text(b, command->text, &arguments[count++]);
-    break;
-  case LEME_COMMAND_SWITCH_VT:
-    if (command->vt == 0 || command->vt > 12)
-      return leme_public_fail(b, LEME_PUBLIC_INVALID);
-    status = integer_text(b, command->vt, &arguments[count++]);
-    break;
-  case LEME_COMMAND_SCRATCHPAD_TOGGLE:
-    if (command->text != NULL)
-      status = argument_text(b, command->text, &arguments[count++]);
-    break;
-  case LEME_COMMAND_FOCUS_NEXT_TAG:
-  case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
-    if (command->occupied)
-      status = argument_text(b, "occupied", &arguments[count++]);
-    break;
-  case LEME_COMMAND_FOCUS_LAST_TAG:
-  case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
-  case LEME_COMMAND_FOCUS_URGENT:
-  case LEME_COMMAND_SWITCH_LAYOUT:
-  case LEME_COMMAND_TOGGLE_FLOATING:
-  case LEME_COMMAND_TOGGLE_STICKY:
-  case LEME_COMMAND_TOGGLE_FULLSCREEN:
-  case LEME_COMMAND_CONTAINER_DETACH:
-  case LEME_COMMAND_CONTAINER_DISSOLVE:
-  case LEME_COMMAND_CLOSE_VIEW:
-  case LEME_COMMAND_GESTURE_MOVE:
-  case LEME_COMMAND_GESTURE_RESIZE:
-  case LEME_COMMAND_MINIMIZE_VIEW:
-  case LEME_COMMAND_RESTORE_MINIMIZED:
-  case LEME_COMMAND_WINDOW_MENU:
-  case LEME_COMMAND_SHOW_DESKTOP:
-  case LEME_COMMAND_FOCUS_DESKTOP:
-  case LEME_COMMAND_DESKTOP_MENU:
-  case LEME_COMMAND_GRID_OPEN:
-  case LEME_COMMAND_GRID_TRASH:
-  case LEME_COMMAND_GRID_RENAME:
-  case LEME_COMMAND_GRID_NEW_FOLDER:
-  case LEME_COMMAND_GRID_SELECT_ALL:
-  case LEME_COMMAND_GRID_CLEAR:
-  case LEME_COMMAND_RELOAD_CONFIG:
-  case LEME_COMMAND_CYCLE_KEYBOARD_LAYOUT:
-  case LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT:
-  case LEME_COMMAND_QUIT:
-  case LEME_COMMAND_SCRATCHPAD_SEND:
-  case LEME_COMMAND_SCRATCHPAD_RETRIEVE:
-    break;
-  case LEME_COMMAND_SPAWN:
+  if (!leme_command_words(command, words, &count))
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
-  }
-  if (status != LEME_PUBLIC_OK)
-    return status;
   struct leme_public_value *array = NULL;
   if (leme_public_array(b, count, &array) != LEME_PUBLIC_OK)
     return leme_public_builder_status(b);
   for (size_t i = 0; i < count; ++i) {
-    if (leme_public_array_set(b, array, i, arguments[i]) != LEME_PUBLIC_OK)
+    struct leme_public_value *argument = NULL;
+    if ((words[i].is_number
+             ? integer_text(b, words[i].number, &argument)
+             : leme_config_public_text(b, words[i].text, &argument)) !=
+            LEME_PUBLIC_OK ||
+        leme_public_array_set(b, array, i, argument) != LEME_PUBLIC_OK)
       return leme_public_builder_status(b);
   }
   *out = array;
@@ -318,9 +45,7 @@ static enum leme_public_status command_args(struct leme_public_builder *b,
 static enum leme_public_status command_value(struct leme_public_builder *b,
                                              const struct leme_command *command,
                                              struct leme_public_value **out) {
-  const char *name = command_name(command->type);
-  if (name == NULL)
-    return leme_public_fail(b, LEME_PUBLIC_INVALID);
+  const char *name = leme_command_spec(command->type)->name;
   struct leme_public_value *record = NULL, *args = NULL;
   if (leme_public_object(b, 2, &record) != LEME_PUBLIC_OK ||
       command_args(b, command, &args) != LEME_PUBLIC_OK ||
@@ -395,9 +120,23 @@ static enum leme_public_status binding_value(struct leme_public_builder *b,
     if (written <= 0 || (size_t)written >= sizeof(keysym))
       return leme_public_fail(b, LEME_PUBLIC_INVALID);
   }
+  const bool lever = binding->trigger == LEME_BINDING_SWITCH;
   struct leme_public_value *record = NULL, *modifiers = NULL, *command = NULL,
-                           *gesture = NULL;
-  if (key) {
+                           *gesture = NULL, *toggle = NULL;
+  if (!lever) {
+    if (leme_public_null(b, &toggle) != LEME_PUBLIC_OK)
+      return leme_public_builder_status(b);
+  } else if (leme_public_object(b, 2, &toggle) != LEME_PUBLIC_OK ||
+             leme_public_put_cstr(b, toggle, LEME_PUBLIC_TEXT("kind"),
+                                  binding->switch_kind == LEME_SWITCH_LID
+                                      ? "lid"
+                                      : "tablet") != LEME_PUBLIC_OK ||
+             leme_public_put_cstr(b, toggle, LEME_PUBLIC_TEXT("state"),
+                                  binding->switch_on ? "on" : "off") !=
+                 LEME_PUBLIC_OK) {
+    return leme_public_builder_status(b);
+  }
+  if (key || lever) {
     if (leme_public_null(b, &gesture) != LEME_PUBLIC_OK)
       return leme_public_builder_status(b);
   } else if (leme_public_object(b, 4, &gesture) != LEME_PUBLIC_OK ||
@@ -412,7 +151,7 @@ static enum leme_public_status binding_value(struct leme_public_builder *b,
                                   edges[binding->edge]) != LEME_PUBLIC_OK) {
     return leme_public_builder_status(b);
   }
-  if (leme_public_object(b, 5, &record) != LEME_PUBLIC_OK ||
+  if (leme_public_object(b, 6, &record) != LEME_PUBLIC_OK ||
       modifiers_value(b, binding->modifiers, &modifiers) != LEME_PUBLIC_OK ||
       command_value(b, &binding->command, &command) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("modifiers"),
@@ -423,6 +162,8 @@ static enum leme_public_status binding_value(struct leme_public_builder *b,
            : leme_public_put_null(b, record, LEME_PUBLIC_TEXT("keysym"))) !=
           LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("gesture"), gesture) !=
+          LEME_PUBLIC_OK ||
+      leme_public_object_set(b, record, LEME_PUBLIC_TEXT("switch"), toggle) !=
           LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("command"), command) !=
           LEME_PUBLIC_OK ||

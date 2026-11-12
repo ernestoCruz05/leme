@@ -10,6 +10,10 @@
 #include <stdint.h>
 #include <string.h>
 
+static enum leme_public_status leme_config_public_merge(
+    struct leme_public_builder *b, const struct leme_public_value *lhs,
+    const struct leme_public_value *rhs, struct leme_public_value **out);
+
 static enum leme_public_status
 capture_settings(struct leme_public_builder *b,
                  const struct leme_config *config,
@@ -239,7 +243,7 @@ merge_records(struct leme_public_builder *b,
   return LEME_PUBLIC_OK;
 }
 
-enum leme_public_status leme_config_public_merge(
+static enum leme_public_status leme_config_public_merge(
     struct leme_public_builder *b, const struct leme_public_value *lhs,
     const struct leme_public_value *rhs, struct leme_public_value **out) {
   if (out == NULL)

@@ -15,6 +15,5 @@ void leme_desk_watch_destroy(struct leme_desk_watch *watch);
 void leme_desk_watch_begin_files(struct leme_desk_watch *watch);
 bool leme_desk_watch_add_file(struct leme_desk_watch *watch, const char *path);
 void leme_desk_watch_end_files(struct leme_desk_watch *watch);
-bool leme_desk_watch_changes(uint32_t mask);
 
 #endif

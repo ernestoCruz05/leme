@@ -63,7 +63,6 @@ struct leme_render_hit {
   double surface_y;
 };
 
-void leme_render_view_identify(struct leme_view *view);
 bool leme_render_container_create(struct leme_container *container);
 void leme_render_container_destroy(struct leme_container *container);
 void leme_render_container_move(struct leme_container *container,
@@ -72,8 +71,6 @@ void leme_render_container_finish_move(struct leme_container *container);
 void leme_render_container_fly(struct leme_container *container,
                                struct leme_box from, struct leme_box to,
                                bool appearing);
-bool leme_render_container_animation_box(const struct leme_container *container,
-                                         struct leme_box *out);
 bool leme_render_container_ready(const struct leme_container *container);
 bool leme_render_view_move_settled(const struct leme_view *view);
 uint32_t
@@ -132,16 +129,11 @@ void leme_render_view_sync_presentation(struct leme_view *view);
 bool leme_render_view_presentation_hidden(const struct leme_view *view);
 void leme_render_view_open_ready(struct leme_view *view);
 bool leme_render_view_popup_create(struct leme_view_popup *popup);
-struct leme_box
-leme_render_view_popup_constraint_box(struct leme_box full, int view_x,
-                                      int view_y,
-                                      struct leme_box root_geometry);
 void leme_render_view_popup_unconstrain(struct leme_view_popup *popup,
                                         struct leme_box full);
 void leme_render_view_popup_destroy(struct leme_view_popup *popup);
 int leme_render_view_corner_radius(const struct leme_view *view,
                                    struct leme_box frame);
-int leme_render_view_blur(const struct leme_view *view);
 struct wl_array;
 bool leme_render_view_collect_content(struct wl_array *bases,
                                       struct wlr_scene_tree *tree, int origin_x,
@@ -165,8 +157,6 @@ void leme_render_view_fly(struct leme_view *view, struct leme_box from,
                           struct leme_box to, bool appearing);
 bool leme_render_view_flying(const struct leme_view *view);
 void leme_render_view_clip_to_geometry(struct leme_view *view);
-struct leme_box leme_render_view_local_box(const struct leme_view *view,
-                                           struct leme_box global);
 bool leme_render_view_show_drop_preview(struct leme_view *view,
                                         struct leme_box global);
 void leme_render_view_hide_drop_preview(struct leme_view *view);
@@ -186,9 +176,6 @@ leme_render_view_snapshot(const struct leme_view *view,
 void leme_render_view_apply_snapshot(
     const struct leme_view *view,
     const struct leme_render_view_frame_nodes *nodes, bool activated);
-float leme_render_view_opacity(const struct leme_config *config, bool activated,
-                               bool fullscreen,
-                               const struct leme_view_rules *rules);
 void leme_render_view_update_layer(struct leme_view *view);
 struct leme_box
 leme_render_view_content_box_for_state(const struct leme_view *view,

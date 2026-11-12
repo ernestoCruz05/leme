@@ -16,13 +16,4 @@ struct leme_workspace_transition_ops {
       const struct leme_workspace_animation_settings *settings);
 };
 
-struct leme_workspace_transition *
-leme_render_workspace_transition_prepare_with_ops(
-    struct leme_output *output, uint16_t source_id, uint16_t destination_id,
-    enum leme_tag_change_direction direction,
-    const struct leme_workspace_transition_ops *ops);
-
-struct leme_animation_spring leme_workspace_gesture_spring(
-    const struct leme_workspace_animation_settings *settings);
-
 #endif

@@ -14,6 +14,13 @@ enum leme_binding_trigger {
   LEME_BINDING_PINCH,
   LEME_BINDING_HOLD,
   LEME_BINDING_EDGE,
+  LEME_BINDING_SWITCH,
+};
+
+enum leme_switch_kind {
+  LEME_SWITCH_NONE,
+  LEME_SWITCH_LID,
+  LEME_SWITCH_TABLET,
 };
 
 enum leme_gesture_direction {
@@ -33,6 +40,8 @@ struct leme_binding {
   uint32_t fingers;
   enum leme_gesture_direction direction;
   enum leme_edge_side edge;
+  enum leme_switch_kind switch_kind;
+  bool switch_on;
   struct leme_command command;
   int lineno;
   bool repeat;
@@ -62,6 +71,7 @@ void leme_input_apply_pointer_config(struct leme_server *server,
                                      const struct leme_config *config);
 void leme_input_init(struct leme_server *server);
 void leme_input_finish(struct leme_server *server);
+void leme_input_switches_sync(struct leme_server *server);
 void leme_input_replace_modes(struct leme_server *server,
                               struct leme_mode *modes, size_t mode_count);
 bool leme_input_set_mode(struct leme_server *server, const char *name);
@@ -81,9 +91,6 @@ bool leme_input_pointer_grab_moves_container(
     const struct leme_container *container);
 bool leme_input_pointer_grab_start_container(struct leme_container *container,
                                              uint32_t button);
-bool leme_input_pointer_grab_start_container_resize(
-    struct leme_container *container, enum leme_grab_edge edges,
-    uint32_t button);
 bool leme_input_pointer_grab_start_decoration(struct leme_view *view,
                                               uint32_t button);
 bool leme_input_pointer_grab_start_xdg(struct leme_view *view, bool resize,

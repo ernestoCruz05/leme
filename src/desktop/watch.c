@@ -31,7 +31,7 @@ static const uint32_t leme_desk_watch_mask =
     IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_DELETE_SELF |
     IN_MOVE_SELF | IN_CLOSE_WRITE | IN_ATTRIB;
 
-bool leme_desk_watch_changes(uint32_t mask) {
+static bool leme_desk_watch_changes(uint32_t mask) {
   return (mask & (leme_desk_watch_mask | IN_Q_OVERFLOW | IN_UNMOUNT)) != 0;
 }
 

@@ -102,20 +102,6 @@ leme_swipe_tracker_projected_position(const struct leme_swipe_tracker *tracker,
   return isfinite(proj) ? proj : current_position;
 }
 
-bool leme_swipe_tracker_threshold_reached(double projected, double threshold,
-                                          bool forward) {
-  double frac;
-
-  if (!isfinite(projected)) {
-    return false;
-  }
-  frac = projected - floor(projected);
-  if (!isfinite(frac)) {
-    return false;
-  }
-  return forward ? frac >= threshold : frac <= (1.0 - threshold);
-}
-
 double leme_swipe_continuous_target(double projected, double threshold,
                                     bool forward) {
   /* Beyond this range doubles cannot distinguish adjacent tag coordinates. */

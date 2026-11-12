@@ -29,9 +29,6 @@ size_t leme_desk_grid_columns(struct leme_box area,
 size_t leme_desk_grid_rows(struct leme_box area,
                            const struct leme_desk_grid_metrics *metrics,
                            int row_height);
-size_t leme_desk_grid_capacity(struct leme_box area,
-                               const struct leme_desk_grid_metrics *metrics,
-                               int row_height);
 bool leme_desk_grid_assign(size_t columns, size_t rows,
                            const struct leme_desk_wish *wishes, size_t count,
                            size_t *slots, size_t *placed);

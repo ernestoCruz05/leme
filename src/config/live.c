@@ -1,6 +1,8 @@
 #include "config/live.h"
 #include "config/live-internal.h"
 #include "config/config.h"
+#include "config/internal.h"
+#include "config/option.h"
 #include "control/control.h"
 #include "core/server.h"
 #include "input/input.h"
@@ -14,6 +16,7 @@
 #include "shell/view.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,7 +59,7 @@ static int compare_override_key(bool a_has_target,
   return 0;
 }
 
-bool leme_config_live_init(struct leme_server *server) {
+static bool leme_config_live_init(struct leme_server *server) {
   if (server == NULL || server->config == NULL) {
     return false;
   }
@@ -424,80 +427,127 @@ leme_config_store_overrides(const struct leme_config_store *store,
   return store != NULL ? store->overrides : NULL;
 }
 
-struct leme_config *
-leme_config_store_baseline(const struct leme_config_store *store) {
-  return store != NULL ? store->baseline : NULL;
-}
+struct leme_option_group {
+  const char *path[2];
+  size_t path_count;
+  const struct leme_option_block *block;
+  size_t base;
+  size_t fields;
+};
 
-struct leme_config *
-leme_config_store_effective(const struct leme_config_store *store) {
-  return store != NULL ? store->effective : NULL;
-}
+static const struct leme_option leme_live_gap_outer_options[] = {
+    {.name = "top",
+     .kind = LEME_OPTION_INT,
+     .offset = offsetof(struct leme_gaps, top),
+     .min = 0,
+     .max = INT_MAX,
+     .effect = LEME_OPTION_EFFECT_ARRANGE},
+    {.name = "right",
+     .kind = LEME_OPTION_INT,
+     .offset = offsetof(struct leme_gaps, right),
+     .min = 0,
+     .max = INT_MAX,
+     .effect = LEME_OPTION_EFFECT_ARRANGE},
+    {.name = "bottom",
+     .kind = LEME_OPTION_INT,
+     .offset = offsetof(struct leme_gaps, bottom),
+     .min = 0,
+     .max = INT_MAX,
+     .effect = LEME_OPTION_EFFECT_ARRANGE},
+    {.name = "left",
+     .kind = LEME_OPTION_INT,
+     .offset = offsetof(struct leme_gaps, left),
+     .min = 0,
+     .max = INT_MAX,
+     .effect = LEME_OPTION_EFFECT_ARRANGE},
+};
 
-enum leme_live_setting_id {
-  LEME_LIVE_STYLE_GAP,
-  LEME_LIVE_STYLE_GAP_OUTER_TOP,
-  LEME_LIVE_STYLE_GAP_OUTER_RIGHT,
-  LEME_LIVE_STYLE_GAP_OUTER_BOTTOM,
-  LEME_LIVE_STYLE_GAP_OUTER_LEFT,
-  LEME_LIVE_STYLE_SMART_GAPS,
-  LEME_LIVE_DESKTOP_MINIMIZED_STRIP,
-  LEME_LIVE_STYLE_BORDER_WIDTH,
-  LEME_LIVE_STYLE_CORNER_RADIUS,
-  LEME_LIVE_STYLE_BLUR,
-  LEME_LIVE_STYLE_BORDER_ACTIVE,
-  LEME_LIVE_STYLE_BORDER_INACTIVE,
-  LEME_LIVE_STYLE_OPACITY_ACTIVE,
-  LEME_LIVE_STYLE_OPACITY_INACTIVE,
-  LEME_LIVE_STYLE_FULLSCREEN_COVERS,
-  LEME_LIVE_OUTPUT_CROSS_FOCUS,
-  LEME_LIVE_OUTPUT_CROSS_MOVE,
-  LEME_LIVE_OUTPUT_CROSS_DRAG,
-  LEME_LIVE_OUTPUT_WARP_CURSOR,
-  LEME_LIVE_CURSOR_THEME,
-  LEME_LIVE_CURSOR_SIZE,
-  LEME_LIVE_POINTER_ACCEL_PROFILE,
-  LEME_LIVE_POINTER_ACCEL_SPEED,
-  LEME_LIVE_POINTER_NATURAL_SCROLL,
-  LEME_LIVE_POINTER_LEFT_HANDED,
-  LEME_LIVE_POINTER_TAP,
-  LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE,
-  LEME_LIVE_POINTER_DISABLE_WHILE_TYPING,
-  LEME_LIVE_POINTER_CLICK_METHOD,
-  LEME_LIVE_POINTER_SCROLL_METHOD,
-  LEME_LIVE_POINTER_SCROLL_BUTTON,
-  LEME_LIVE_POINTER_MIDDLE_EMULATION,
-  LEME_LIVE_POINTER_TAP_BUTTON_MAP,
-  LEME_LIVE_POINTER_TAP_DRAG,
-  LEME_LIVE_POINTER_DRAG_LOCK,
-  LEME_LIVE_POINTER_DRAG_FINGERS,
-  LEME_LIVE_POINTER_SCROLL_FACTOR,
-  LEME_LIVE_GESTURES_MODE,
-  LEME_LIVE_GESTURES_FINGERS,
-  LEME_LIVE_GESTURES_DISTANCE,
-  LEME_LIVE_GESTURES_THRESHOLD,
-  LEME_LIVE_GESTURES_DECELERATION,
-  LEME_LIVE_GESTURES_VELOCITY_WINDOW,
-  LEME_LIVE_GESTURES_OCCUPIED,
-  LEME_LIVE_GESTURES_EDGE_SIZE,
-  LEME_LIVE_GESTURES_EDGE_STEP,
-  LEME_LIVE_PUBLICATION_ACTIVATION,
-  LEME_LIVE_SETTING_COUNT
+static const struct leme_option_block leme_live_gap_outer_block = {
+    .name = "gap_outer",
+    .options = leme_live_gap_outer_options,
+    .count = LEME_OPTION_COUNT(leme_live_gap_outer_options),
+};
+
+static const struct leme_option leme_live_pointer_options[] = {
+    {.name = "focus_follows_mouse",
+     .kind = LEME_OPTION_BOOL,
+     .offset = offsetof(struct leme_config, focus_follows_mouse),
+     .effect = LEME_OPTION_EFFECT_STORE},
+    {.name = "drag_fingers",
+     .kind = LEME_OPTION_U32,
+     .offset = offsetof(struct leme_config, pointer_defaults.drag_fingers),
+     .min = 0,
+     .max = 4,
+     .field = LEME_POINTER_DRAG_FINGERS,
+     .effect = LEME_OPTION_EFFECT_POINTERS},
+};
+
+static const struct leme_option_block leme_live_pointer_block = {
+    .name = "pointer",
+    .options = leme_live_pointer_options,
+    .count = LEME_OPTION_COUNT(leme_live_pointer_options),
+};
+
+static const struct leme_option leme_live_swipe_options[] = {
+    {.name = "fingers",
+     .kind = LEME_OPTION_U32,
+     .offset = offsetof(struct leme_workspace_switch_gesture_settings, fingers),
+     .min = 0,
+     .max = INT_MAX,
+     .effect = LEME_OPTION_EFFECT_FINGERS},
+};
+
+static const struct leme_option_block leme_live_swipe_block = {
+    .name = "workspace_switch",
+    .options = leme_live_swipe_options,
+    .count = LEME_OPTION_COUNT(leme_live_swipe_options),
+};
+
+static const struct leme_option_group leme_live_groups[] = {
+    {.path = {"desktop"}, .path_count = 1, .block = &leme_desktop_block},
+    {.path = {"style"}, .path_count = 1, .block = &leme_style_block},
+    {.path = {"style", "gap_outer"},
+     .path_count = 2,
+     .block = &leme_live_gap_outer_block,
+     .base = offsetof(struct leme_config, gap_outer)},
+    {.path = {"output_policy"},
+     .path_count = 1,
+     .block = &leme_output_policy_block},
+    {.path = {"cursor"}, .path_count = 1, .block = &leme_cursor_block},
+    {.path = {"pointer"},
+     .path_count = 1,
+     .block = &leme_pointer_block,
+     .base = offsetof(struct leme_config, pointer_defaults),
+     .fields = offsetof(struct leme_config, pointer_defaults.fields)},
+    {.path = {"pointer"},
+     .path_count = 1,
+     .block = &leme_live_pointer_block,
+     .fields = offsetof(struct leme_config, pointer_defaults.fields)},
+    {.path = {"publication"},
+     .path_count = 1,
+     .block = &leme_publication_block},
+    {.path = {"gestures", "workspace_switch"},
+     .path_count = 2,
+     .block = &leme_workspace_switch_block,
+     .base = offsetof(struct leme_config, gestures.workspace_switch)},
+    {.path = {"gestures", "workspace_switch"},
+     .path_count = 2,
+     .block = &leme_live_swipe_block,
+     .base = offsetof(struct leme_config, gestures.workspace_switch)},
+    {.path = {"gestures", "edges"},
+     .path_count = 2,
+     .block = &leme_edges_block,
+     .base = offsetof(struct leme_config, gestures.edges)},
 };
 
 struct leme_config_prepared_set {
-  enum leme_live_setting_id setting_id;
+  const struct leme_option_group *group;
+  const struct leme_option *option;
   char **path;
   size_t path_count;
   const struct leme_public_value *value;
   struct leme_public_builder *builder;
-  union {
-    int int_val;
-    double num_val;
-    bool bool_val;
-    char *str_val;
-    float color_val[4];
-  } parsed;
+  union leme_option_value parsed;
   bool is_noop;
   struct wlr_xcursor_manager *prepared_cursor;
 };
@@ -508,136 +558,29 @@ static enum leme_control_code set_err(struct leme_control_error *error,
   return leme_control_refuse(error, code, msg);
 }
 
-static int find_live_setting(const char *const *path, size_t path_count) {
-  if (path == NULL || path_count < 2 || path_count > 3) {
-    return -1;
-  }
-  if (path_count == 2) {
-    if (strcmp(path[0], "desktop") == 0) {
-      return strcmp(path[1], "minimized_strip") == 0
-                 ? LEME_LIVE_DESKTOP_MINIMIZED_STRIP
-                 : -1;
+static const struct leme_option *
+find_live_setting(const char *const *path, size_t path_count,
+                  const struct leme_option_group **group) {
+  for (size_t i = 0; i < LEME_OPTION_COUNT(leme_live_groups); i++) {
+    const struct leme_option_group *candidate = &leme_live_groups[i];
+
+    if (path_count != candidate->path_count + 1 ||
+        strcmp(path[0], candidate->path[0]) != 0 ||
+        (candidate->path_count == 2 &&
+         strcmp(path[1], candidate->path[1]) != 0)) {
+      continue;
     }
-    if (strcmp(path[0], "style") == 0) {
-      if (strcmp(path[1], "gap") == 0)
-        return LEME_LIVE_STYLE_GAP;
-      if (strcmp(path[1], "smart_gaps") == 0)
-        return LEME_LIVE_STYLE_SMART_GAPS;
-      if (strcmp(path[1], "border_width") == 0)
-        return LEME_LIVE_STYLE_BORDER_WIDTH;
-      if (strcmp(path[1], "corner_radius") == 0)
-        return LEME_LIVE_STYLE_CORNER_RADIUS;
-      if (strcmp(path[1], "blur") == 0)
-        return LEME_LIVE_STYLE_BLUR;
-      if (strcmp(path[1], "border_active") == 0)
-        return LEME_LIVE_STYLE_BORDER_ACTIVE;
-      if (strcmp(path[1], "border_inactive") == 0)
-        return LEME_LIVE_STYLE_BORDER_INACTIVE;
-      if (strcmp(path[1], "opacity_active") == 0)
-        return LEME_LIVE_STYLE_OPACITY_ACTIVE;
-      if (strcmp(path[1], "opacity_inactive") == 0)
-        return LEME_LIVE_STYLE_OPACITY_INACTIVE;
-      if (strcmp(path[1], "fullscreen_covers") == 0)
-        return LEME_LIVE_STYLE_FULLSCREEN_COVERS;
-      return -1;
-    }
-    if (strcmp(path[0], "output_policy") == 0) {
-      if (strcmp(path[1], "cross_output_focus") == 0)
-        return LEME_LIVE_OUTPUT_CROSS_FOCUS;
-      if (strcmp(path[1], "cross_output_move") == 0)
-        return LEME_LIVE_OUTPUT_CROSS_MOVE;
-      if (strcmp(path[1], "cross_output_drag") == 0)
-        return LEME_LIVE_OUTPUT_CROSS_DRAG;
-      if (strcmp(path[1], "warp_cursor") == 0)
-        return LEME_LIVE_OUTPUT_WARP_CURSOR;
-      return -1;
-    }
-    if (strcmp(path[0], "cursor") == 0) {
-      if (strcmp(path[1], "theme") == 0)
-        return LEME_LIVE_CURSOR_THEME;
-      if (strcmp(path[1], "size") == 0)
-        return LEME_LIVE_CURSOR_SIZE;
-      return -1;
-    }
-    if (strcmp(path[0], "pointer") == 0) {
-      if (strcmp(path[1], "accel_profile") == 0)
-        return LEME_LIVE_POINTER_ACCEL_PROFILE;
-      if (strcmp(path[1], "accel_speed") == 0)
-        return LEME_LIVE_POINTER_ACCEL_SPEED;
-      if (strcmp(path[1], "natural_scroll") == 0)
-        return LEME_LIVE_POINTER_NATURAL_SCROLL;
-      if (strcmp(path[1], "left_handed") == 0)
-        return LEME_LIVE_POINTER_LEFT_HANDED;
-      if (strcmp(path[1], "tap") == 0)
-        return LEME_LIVE_POINTER_TAP;
-      if (strcmp(path[1], "focus_follows_mouse") == 0)
-        return LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE;
-      if (strcmp(path[1], "disable_while_typing") == 0)
-        return LEME_LIVE_POINTER_DISABLE_WHILE_TYPING;
-      if (strcmp(path[1], "click_method") == 0)
-        return LEME_LIVE_POINTER_CLICK_METHOD;
-      if (strcmp(path[1], "scroll_method") == 0)
-        return LEME_LIVE_POINTER_SCROLL_METHOD;
-      if (strcmp(path[1], "scroll_button") == 0)
-        return LEME_LIVE_POINTER_SCROLL_BUTTON;
-      if (strcmp(path[1], "middle_emulation") == 0)
-        return LEME_LIVE_POINTER_MIDDLE_EMULATION;
-      if (strcmp(path[1], "tap_button_map") == 0)
-        return LEME_LIVE_POINTER_TAP_BUTTON_MAP;
-      if (strcmp(path[1], "tap_drag") == 0)
-        return LEME_LIVE_POINTER_TAP_DRAG;
-      if (strcmp(path[1], "drag_lock") == 0)
-        return LEME_LIVE_POINTER_DRAG_LOCK;
-      if (strcmp(path[1], "drag_fingers") == 0)
-        return LEME_LIVE_POINTER_DRAG_FINGERS;
-      if (strcmp(path[1], "scroll_factor") == 0)
-        return LEME_LIVE_POINTER_SCROLL_FACTOR;
-      return -1;
-    }
-    if (strcmp(path[0], "publication") == 0) {
-      if (strcmp(path[1], "activation") == 0)
-        return LEME_LIVE_PUBLICATION_ACTIVATION;
-      return -1;
-    }
-  } else if (path_count == 3) {
-    if (strcmp(path[0], "style") == 0 && strcmp(path[1], "gap_outer") == 0) {
-      if (strcmp(path[2], "top") == 0)
-        return LEME_LIVE_STYLE_GAP_OUTER_TOP;
-      if (strcmp(path[2], "right") == 0)
-        return LEME_LIVE_STYLE_GAP_OUTER_RIGHT;
-      if (strcmp(path[2], "bottom") == 0)
-        return LEME_LIVE_STYLE_GAP_OUTER_BOTTOM;
-      if (strcmp(path[2], "left") == 0)
-        return LEME_LIVE_STYLE_GAP_OUTER_LEFT;
-      return -1;
-    }
-    if (strcmp(path[0], "gestures") == 0 &&
-        strcmp(path[1], "workspace_switch") == 0) {
-      if (strcmp(path[2], "mode") == 0)
-        return LEME_LIVE_GESTURES_MODE;
-      if (strcmp(path[2], "fingers") == 0)
-        return LEME_LIVE_GESTURES_FINGERS;
-      if (strcmp(path[2], "distance") == 0)
-        return LEME_LIVE_GESTURES_DISTANCE;
-      if (strcmp(path[2], "threshold") == 0)
-        return LEME_LIVE_GESTURES_THRESHOLD;
-      if (strcmp(path[2], "deceleration") == 0)
-        return LEME_LIVE_GESTURES_DECELERATION;
-      if (strcmp(path[2], "velocity_window") == 0)
-        return LEME_LIVE_GESTURES_VELOCITY_WINDOW;
-      if (strcmp(path[2], "occupied") == 0)
-        return LEME_LIVE_GESTURES_OCCUPIED;
-      return -1;
-    }
-    if (strcmp(path[0], "gestures") == 0 && strcmp(path[1], "edges") == 0) {
-      if (strcmp(path[2], "size") == 0)
-        return LEME_LIVE_GESTURES_EDGE_SIZE;
-      if (strcmp(path[2], "step") == 0)
-        return LEME_LIVE_GESTURES_EDGE_STEP;
-      return -1;
+    for (size_t j = 0; j < candidate->block->count; j++) {
+      const struct leme_option *option = &candidate->block->options[j];
+
+      if (option->effect != LEME_OPTION_EFFECT_NONE &&
+          strcmp(path[path_count - 1], option->name) == 0) {
+        *group = candidate;
+        return option;
+      }
     }
   }
-  return -1;
+  return NULL;
 }
 
 static bool is_unwritable_section(const char *name) {
@@ -679,10 +622,6 @@ static bool parse_hex_color(struct leme_public_text text, float out[4]) {
   return true;
 }
 
-static bool color_equal(const float a[4], const float b[4]) {
-  return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3];
-}
-
 static void cleanup_prepared_set(struct leme_config_prepared_set *prep) {
   if (prep == NULL) {
     return;
@@ -691,9 +630,9 @@ static void cleanup_prepared_set(struct leme_config_prepared_set *prep) {
     leme_desktop_discard_cursor_config(prep->prepared_cursor);
     prep->prepared_cursor = NULL;
   }
-  if (prep->setting_id == LEME_LIVE_CURSOR_THEME) {
-    free(prep->parsed.str_val);
-    prep->parsed.str_val = NULL;
+  if (prep->option->kind == LEME_OPTION_STRING) {
+    free(prep->parsed.string);
+    prep->parsed.string = NULL;
   }
   if (prep->path != NULL) {
     for (size_t i = 0; i < prep->path_count; i++) {
@@ -709,48 +648,141 @@ static void cleanup_prepared_set(struct leme_config_prepared_set *prep) {
   free(prep);
 }
 
+static enum leme_control_code
+convert_value(const struct leme_server *server,
+              const struct leme_option *option,
+              const struct leme_public_value *value,
+              union leme_option_value *out, struct leme_control_error *error) {
+  struct leme_public_text text = {0};
+
+  switch (option->kind) {
+  case LEME_OPTION_INT:
+  case LEME_OPTION_U16:
+  case LEME_OPTION_U32:
+    if (leme_public_as_integer(value, &out->integer) != LEME_PUBLIC_OK) {
+      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected integer value");
+    }
+    if (!leme_option_in_range(option, out)) {
+      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
+                     "integer out of range");
+    }
+    if ((option->effect == LEME_OPTION_EFFECT_FINGERS ||
+         option == &leme_live_pointer_options[1]) &&
+        (out->integer == 1 || out->integer == 2)) {
+      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
+                     "disallowed finger count");
+    }
+    for (size_t i = 0; option->effect == LEME_OPTION_EFFECT_FINGERS &&
+                       out->integer != 0 && i < server->config->mode_count;
+         i++) {
+      const struct leme_mode *mode = &server->config->modes[i];
+
+      for (size_t j = 0; j < mode->binding_count; j++) {
+        const struct leme_binding *binding = &mode->bindings[j];
+
+        if (binding->trigger == LEME_BINDING_SWIPE &&
+            binding->fingers == out->integer &&
+            binding->direction != LEME_GESTURE_UP &&
+            binding->direction != LEME_GESTURE_DOWN) {
+          return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
+                         "fingers overlap a swipe binding");
+        }
+      }
+    }
+    return LEME_CONTROL_OK;
+  case LEME_OPTION_DECIMAL:
+    if (leme_public_as_number(value, &out->decimal) != LEME_PUBLIC_OK) {
+      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected number value");
+    }
+    if (!leme_option_in_range(option, out)) {
+      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
+                     "number out of range");
+    }
+    return LEME_CONTROL_OK;
+  case LEME_OPTION_BOOL:
+    if (leme_public_kind(value) != LEME_PUBLIC_BOOLEAN) {
+      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected boolean value");
+    }
+    (void)leme_public_as_bool(value, &out->boolean);
+    return LEME_CONTROL_OK;
+  case LEME_OPTION_COLOR:
+    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
+      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected color string");
+    }
+    (void)leme_public_as_text(value, &text);
+    if (!parse_hex_color(text, out->color)) {
+      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
+                     "invalid color format");
+    }
+    return LEME_CONTROL_OK;
+  case LEME_OPTION_CHOICE:
+    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
+      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected string value");
+    }
+    (void)leme_public_as_text(value, &text);
+    for (out->choice = 0; out->choice < option->choice_count; out->choice++) {
+      const char *name = option->choices[out->choice];
+
+      if (strlen(name) == text.length &&
+          memcmp(name, text.data, text.length) == 0) {
+        return LEME_CONTROL_OK;
+      }
+    }
+    return set_err(error, LEME_CONTROL_INVALID_ARGUMENT, "invalid value");
+  case LEME_OPTION_STRING:
+    if (leme_public_kind(value) == LEME_PUBLIC_NULL) {
+      out->string = NULL;
+      return LEME_CONTROL_OK;
+    }
+    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
+      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected string or null");
+    }
+    (void)leme_public_as_text(value, &text);
+    out->string = strndup(text.data, text.length);
+    if (out->string == NULL) {
+      return set_err(error, LEME_CONTROL_OUT_OF_MEMORY, "out of memory");
+    }
+    return LEME_CONTROL_OK;
+  case LEME_OPTION_CUSTOM:
+    break;
+  }
+  return set_err(error, LEME_CONTROL_UNSUPPORTED, "unsupported setting");
+}
+
 static enum leme_control_code prepare_set(struct leme_server *server,
                                           const char *const *path,
                                           size_t path_count,
                                           const struct leme_public_value *value,
                                           struct leme_config_prepared_set **out,
                                           struct leme_control_error *error) {
-  if (out == NULL) {
-    return set_err(error, LEME_CONTROL_INVALID_ARGUMENT, "null out pointer");
-  }
+  const struct leme_option_group *group = NULL;
+
   *out = NULL;
-  if (server == NULL || path == NULL || path_count == 0 || value == NULL) {
+  if (value == NULL) {
     return set_err(error, LEME_CONTROL_INVALID_ARGUMENT, "invalid arguments");
   }
-  if (server->config_store == NULL) {
-    if (!leme_config_live_init(server)) {
-      return set_err(error, LEME_CONTROL_OUT_OF_MEMORY,
-                     "failed to initialize config store");
-    }
+  if (server->config_store == NULL && !leme_config_live_init(server)) {
+    return set_err(error, LEME_CONTROL_OUT_OF_MEMORY,
+                   "failed to initialize config store");
   }
-
-  int setting_idx = find_live_setting(path, path_count);
-  if (setting_idx < 0) {
+  const struct leme_option *option =
+      find_live_setting(path, path_count, &group);
+  if (option == NULL) {
     if (is_unwritable_section(path[0])) {
       return set_err(error, LEME_CONTROL_UNSUPPORTED,
                      "unsupported unwritable config path");
     }
     return set_err(error, LEME_CONTROL_NOT_FOUND, "setting not found");
   }
-
-  enum leme_live_setting_id id = (enum leme_live_setting_id)setting_idx;
-
-  if (id == LEME_LIVE_STYLE_CORNER_RADIUS || id == LEME_LIVE_STYLE_BLUR) {
-    if (!leme_graphics_effects_supported(server)) {
-      return set_err(error, LEME_CONTROL_UNSUPPORTED,
-                     "effects not supported at runtime");
-    }
+  if (option->effect == LEME_OPTION_EFFECT_EFFECTS &&
+      !leme_graphics_effects_supported(server)) {
+    return set_err(error, LEME_CONTROL_UNSUPPORTED,
+                   "effects not supported at runtime");
   }
-  if (id == LEME_LIVE_CURSOR_THEME || id == LEME_LIVE_CURSOR_SIZE) {
-    if (!leme_desktop_has_cursor(server)) {
-      return set_err(error, LEME_CONTROL_UNSUPPORTED,
-                     "cursor system not initialized");
-    }
+  if (option->effect == LEME_OPTION_EFFECT_CURSOR &&
+      !leme_desktop_has_cursor(server)) {
+    return set_err(error, LEME_CONTROL_UNSUPPORTED,
+                   "cursor system not initialized");
   }
 
   struct leme_config_prepared_set *prep = calloc(1, sizeof(*prep));
@@ -758,488 +790,30 @@ static enum leme_control_code prepare_set(struct leme_server *server,
     return set_err(error, LEME_CONTROL_OUT_OF_MEMORY,
                    "out of memory allocating prepared set");
   }
-  prep->setting_id = id;
-
-  switch (id) {
-  case LEME_LIVE_STYLE_GAP:
-  case LEME_LIVE_STYLE_GAP_OUTER_TOP:
-  case LEME_LIVE_STYLE_GAP_OUTER_RIGHT:
-  case LEME_LIVE_STYLE_GAP_OUTER_BOTTOM:
-  case LEME_LIVE_STYLE_GAP_OUTER_LEFT:
-  case LEME_LIVE_STYLE_BORDER_WIDTH:
-  case LEME_LIVE_STYLE_CORNER_RADIUS:
-  case LEME_LIVE_STYLE_BLUR:
-  case LEME_LIVE_CURSOR_SIZE:
-  case LEME_LIVE_GESTURES_FINGERS:
-  case LEME_LIVE_GESTURES_VELOCITY_WINDOW:
-  case LEME_LIVE_POINTER_DRAG_FINGERS: {
-    int64_t ival = 0;
-    if (leme_public_as_integer(value, &ival) != LEME_PUBLIC_OK) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected integer value");
-    }
-    int64_t min_bound = 0;
-    int64_t max_bound = 2147483647;
-    if (id == LEME_LIVE_STYLE_BLUR) {
-      max_bound = 64;
-    } else if (id == LEME_LIVE_CURSOR_SIZE) {
-      min_bound = 1;
-      max_bound = 512;
-    } else if (id == LEME_LIVE_GESTURES_VELOCITY_WINDOW) {
-      min_bound = 1;
-    } else if (id == LEME_LIVE_POINTER_DRAG_FINGERS) {
-      max_bound = 4;
-    }
-    if (ival < min_bound || ival > max_bound) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "integer out of range");
-    }
-    if ((id == LEME_LIVE_GESTURES_FINGERS ||
-         id == LEME_LIVE_POINTER_DRAG_FINGERS) &&
-        (ival == 1 || ival == 2)) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "disallowed finger count");
-    }
-    for (size_t i = 0; id == LEME_LIVE_GESTURES_FINGERS && ival != 0 &&
-                       i < server->config->mode_count;
-         i++) {
-      const struct leme_mode *mode = &server->config->modes[i];
-      for (size_t j = 0; j < mode->binding_count; j++) {
-        const struct leme_binding *binding = &mode->bindings[j];
-        if (binding->trigger == LEME_BINDING_SWIPE &&
-            binding->fingers == ival && binding->direction != LEME_GESTURE_UP &&
-            binding->direction != LEME_GESTURE_DOWN) {
-          free(prep);
-          return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                         "fingers overlap a swipe binding");
-        }
-      }
-    }
-    prep->parsed.int_val = (int)ival;
-    break;
-  }
-  case LEME_LIVE_STYLE_OPACITY_ACTIVE:
-  case LEME_LIVE_STYLE_OPACITY_INACTIVE:
-  case LEME_LIVE_POINTER_ACCEL_SPEED:
-  case LEME_LIVE_POINTER_SCROLL_FACTOR:
-  case LEME_LIVE_GESTURES_DISTANCE:
-  case LEME_LIVE_GESTURES_THRESHOLD:
-  case LEME_LIVE_GESTURES_DECELERATION:
-  case LEME_LIVE_GESTURES_EDGE_SIZE:
-  case LEME_LIVE_GESTURES_EDGE_STEP: {
-    double dval = 0.0;
-    if (leme_public_as_number(value, &dval) != LEME_PUBLIC_OK) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected number value");
-    }
-    if (!isfinite(dval)) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "nonfinite number value");
-    }
-    if (id == LEME_LIVE_STYLE_OPACITY_ACTIVE ||
-        id == LEME_LIVE_STYLE_OPACITY_INACTIVE) {
-      if (dval < 0.0 || dval > 1.0) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                       "opacity out of range 0..1");
-      }
-    } else if (id == LEME_LIVE_POINTER_ACCEL_SPEED) {
-      if (dval < -1.0 || dval > 1.0) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                       "accel speed out of range -1..1");
-      }
-    } else if (id == LEME_LIVE_POINTER_SCROLL_FACTOR) {
-      if (dval <= 0.0 || dval > LEME_POINTER_SCROLL_FACTOR_MAX) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                       "scroll factor out of range 0..100");
-      }
-    } else if (id == LEME_LIVE_GESTURES_DISTANCE) {
-      if (dval <= 0.0) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                       "distance must be positive");
-      }
-    } else if (id == LEME_LIVE_GESTURES_THRESHOLD ||
-               id == LEME_LIVE_GESTURES_DECELERATION) {
-      if (dval <= 0.0 || dval >= 1.0) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                       "value must be strictly between 0 and 1");
-      }
-    } else if (id == LEME_LIVE_GESTURES_EDGE_SIZE) {
-      if (dval < LEME_EDGE_SIZE_MIN || dval > LEME_EDGE_SIZE_MAX) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                       "edge size out of range 2..30");
-      }
-    } else if (id == LEME_LIVE_GESTURES_EDGE_STEP) {
-      if (dval < LEME_EDGE_STEP_MIN || dval > LEME_EDGE_STEP_MAX) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                       "edge step out of range 1..50");
-      }
-    }
-    prep->parsed.num_val = dval;
-    break;
-  }
-  case LEME_LIVE_STYLE_SMART_GAPS:
-  case LEME_LIVE_DESKTOP_MINIMIZED_STRIP:
-  case LEME_LIVE_OUTPUT_CROSS_FOCUS:
-  case LEME_LIVE_OUTPUT_CROSS_MOVE:
-  case LEME_LIVE_OUTPUT_CROSS_DRAG:
-  case LEME_LIVE_OUTPUT_WARP_CURSOR:
-  case LEME_LIVE_POINTER_NATURAL_SCROLL:
-  case LEME_LIVE_POINTER_LEFT_HANDED:
-  case LEME_LIVE_POINTER_TAP:
-  case LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE:
-  case LEME_LIVE_POINTER_DISABLE_WHILE_TYPING:
-  case LEME_LIVE_POINTER_MIDDLE_EMULATION:
-  case LEME_LIVE_POINTER_TAP_DRAG:
-  case LEME_LIVE_GESTURES_OCCUPIED: {
-    if (leme_public_kind(value) != LEME_PUBLIC_BOOLEAN) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected boolean value");
-    }
-    bool bval = false;
-    leme_public_as_bool(value, &bval);
-    prep->parsed.bool_val = bval;
-    break;
-  }
-  case LEME_LIVE_STYLE_BORDER_ACTIVE:
-  case LEME_LIVE_STYLE_BORDER_INACTIVE: {
-    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected color string");
-    }
-    struct leme_public_text txt = {0};
-    leme_public_as_text(value, &txt);
-    if (!parse_hex_color(txt, prep->parsed.color_val)) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "invalid color format");
-    }
-    break;
-  }
-  case LEME_LIVE_STYLE_FULLSCREEN_COVERS: {
-    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR,
-                     "expected string for fullscreen covers");
-    }
-    struct leme_public_text txt = {0};
-    leme_public_as_text(value, &txt);
-    if (txt.length == 4 && memcmp(txt.data, "none", 4) == 0) {
-      prep->parsed.int_val = LEME_FULLSCREEN_COVERS_NONE;
-    } else if (txt.length == 3 && memcmp(txt.data, "top", 3) == 0) {
-      prep->parsed.int_val = LEME_FULLSCREEN_COVERS_TOP;
-    } else if (txt.length == 7 && memcmp(txt.data, "overlay", 7) == 0) {
-      prep->parsed.int_val = LEME_FULLSCREEN_COVERS_OVERLAY;
-    } else {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "invalid fullscreen covers enum");
-    }
-    break;
-  }
-  case LEME_LIVE_CURSOR_THEME: {
-    if (leme_public_kind(value) == LEME_PUBLIC_NULL) {
-      prep->parsed.str_val = NULL;
-    } else if (leme_public_kind(value) == LEME_PUBLIC_STRING) {
-      struct leme_public_text txt = {0};
-      leme_public_as_text(value, &txt);
-      prep->parsed.str_val = strndup(txt.data, txt.length);
-      if (prep->parsed.str_val == NULL) {
-        free(prep);
-        return set_err(error, LEME_CONTROL_OUT_OF_MEMORY, "out of memory");
-      }
-    } else {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR,
-                     "expected string or null for cursor theme");
-    }
-    break;
-  }
-  case LEME_LIVE_POINTER_ACCEL_PROFILE: {
-    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR,
-                     "expected string for accel profile");
-    }
-    struct leme_public_text txt = {0};
-    leme_public_as_text(value, &txt);
-    if (txt.length == 8 && memcmp(txt.data, "adaptive", 8) == 0) {
-      prep->parsed.int_val = LEME_POINTER_ACCEL_ADAPTIVE;
-    } else if (txt.length == 4 && memcmp(txt.data, "flat", 4) == 0) {
-      prep->parsed.int_val = LEME_POINTER_ACCEL_FLAT;
-    } else {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "invalid accel profile enum");
-    }
-    break;
-  }
-  case LEME_LIVE_POINTER_CLICK_METHOD:
-  case LEME_LIVE_POINTER_SCROLL_METHOD:
-  case LEME_LIVE_POINTER_SCROLL_BUTTON:
-  case LEME_LIVE_POINTER_TAP_BUTTON_MAP:
-  case LEME_LIVE_POINTER_DRAG_LOCK: {
-    const enum leme_pointer_choice choice =
-        id == LEME_LIVE_POINTER_CLICK_METHOD ? LEME_POINTER_CHOICE_CLICK_METHOD
-        : id == LEME_LIVE_POINTER_SCROLL_METHOD
-            ? LEME_POINTER_CHOICE_SCROLL_METHOD
-        : id == LEME_LIVE_POINTER_SCROLL_BUTTON
-            ? LEME_POINTER_CHOICE_SCROLL_BUTTON
-        : id == LEME_LIVE_POINTER_TAP_BUTTON_MAP
-            ? LEME_POINTER_CHOICE_TAP_BUTTON_MAP
-            : LEME_POINTER_CHOICE_DRAG_LOCK;
-    struct leme_public_text txt = {0};
-    unsigned index = 0;
-    if (leme_public_as_text(value, &txt) != LEME_PUBLIC_OK) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR, "expected string value");
-    }
-    if (!leme_pointer_choice_find(choice, txt.data, txt.length, &index)) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "invalid pointer enum");
-    }
-    prep->parsed.int_val = (int)index;
-    break;
-  }
-  case LEME_LIVE_GESTURES_MODE: {
-    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR,
-                     "expected string for gesture mode");
-    }
-    struct leme_public_text txt = {0};
-    leme_public_as_text(value, &txt);
-    if (txt.length == 6 && memcmp(txt.data, "single", 6) == 0) {
-      prep->parsed.int_val = LEME_WORKSPACE_GESTURE_SINGLE;
-    } else if (txt.length == 5 && memcmp(txt.data, "scrub", 5) == 0) {
-      prep->parsed.int_val = LEME_WORKSPACE_GESTURE_SCRUB;
-    } else if (txt.length == 4 && memcmp(txt.data, "free", 4) == 0) {
-      prep->parsed.int_val = LEME_WORKSPACE_GESTURE_FREE;
-    } else {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "invalid gesture mode enum");
-    }
-    break;
-  }
-  case LEME_LIVE_PUBLICATION_ACTIVATION: {
-    if (leme_public_kind(value) != LEME_PUBLIC_STRING) {
-      free(prep);
-      return set_err(error, LEME_CONTROL_TYPE_ERROR,
-                     "expected string for activation policy");
-    }
-    struct leme_public_text txt = {0};
-    leme_public_as_text(value, &txt);
-    if (txt.length == 6 && memcmp(txt.data, "follow", 6) == 0) {
-      prep->parsed.int_val = LEME_ACTIVATION_FOLLOW;
-    } else if (txt.length == 6 && memcmp(txt.data, "urgent", 6) == 0) {
-      prep->parsed.int_val = LEME_ACTIVATION_URGENT;
-    } else if (txt.length == 6 && memcmp(txt.data, "ignore", 6) == 0) {
-      prep->parsed.int_val = LEME_ACTIVATION_IGNORE;
-    } else {
-      free(prep);
-      return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
-                     "invalid activation enum");
-    }
-    break;
-  }
-  default:
+  prep->group = group;
+  prep->option = option;
+  const enum leme_control_code converted =
+      convert_value(server, option, value, &prep->parsed, error);
+  if (converted != LEME_CONTROL_OK) {
     free(prep);
-    return set_err(error, LEME_CONTROL_UNSUPPORTED, "unsupported setting");
+    return converted;
   }
 
   struct leme_config *cur = server->config;
-  bool noop = false;
-  switch (id) {
-  case LEME_LIVE_STYLE_GAP:
-    noop = (cur->gap == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_TOP:
-    noop = (cur->gap_outer.top == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_RIGHT:
-    noop = (cur->gap_outer.right == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_BOTTOM:
-    noop = (cur->gap_outer.bottom == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_LEFT:
-    noop = (cur->gap_outer.left == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_SMART_GAPS:
-    noop = (cur->smart_gaps == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_STYLE_BORDER_WIDTH:
-    noop = (cur->border_width == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_CORNER_RADIUS:
-    noop = (cur->corner_radius == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_BLUR:
-    noop = (cur->blur == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_STYLE_BORDER_ACTIVE:
-    noop = color_equal(cur->border_active, prep->parsed.color_val);
-    break;
-  case LEME_LIVE_STYLE_BORDER_INACTIVE:
-    noop = color_equal(cur->border_inactive, prep->parsed.color_val);
-    break;
-  case LEME_LIVE_STYLE_OPACITY_ACTIVE:
-    noop = (cur->opacity_active == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_STYLE_OPACITY_INACTIVE:
-    noop = (cur->opacity_inactive == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_STYLE_FULLSCREEN_COVERS:
-    noop = (cur->fullscreen_covers ==
-            (enum leme_fullscreen_coverage)prep->parsed.int_val);
-    break;
-  case LEME_LIVE_OUTPUT_CROSS_FOCUS:
-    noop = (cur->output_policy.cross_output_focus == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_OUTPUT_CROSS_MOVE:
-    noop = (cur->output_policy.cross_output_move == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_OUTPUT_CROSS_DRAG:
-    noop = (cur->output_policy.cross_output_drag == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_OUTPUT_WARP_CURSOR:
-    noop = (cur->output_policy.warp_cursor == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_DESKTOP_MINIMIZED_STRIP:
-    noop = (cur->desktop_minimized_strip == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_CURSOR_THEME:
-    noop = ((cur->cursor.theme == NULL && prep->parsed.str_val == NULL) ||
-            (cur->cursor.theme != NULL && prep->parsed.str_val != NULL &&
-             strcmp(cur->cursor.theme, prep->parsed.str_val) == 0));
-    break;
-  case LEME_LIVE_CURSOR_SIZE:
-    noop = (cur->cursor.size == prep->parsed.int_val);
-    break;
-  case LEME_LIVE_POINTER_ACCEL_PROFILE:
-    noop = (cur->pointer_defaults.profile ==
-            (enum leme_pointer_accel_profile)prep->parsed.int_val);
-    break;
-  case LEME_LIVE_POINTER_ACCEL_SPEED:
-    noop = (cur->pointer_defaults.speed == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_POINTER_NATURAL_SCROLL:
-    noop = (cur->pointer_defaults.natural_scroll == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_POINTER_LEFT_HANDED:
-    noop = (cur->pointer_defaults.left_handed == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_POINTER_TAP:
-    noop = (cur->pointer_defaults.tap == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE:
-    noop = (cur->focus_follows_mouse == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_POINTER_DISABLE_WHILE_TYPING:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_DISABLE_WHILE_TYPING) !=
-               0 &&
-           cur->pointer_defaults.disable_while_typing == prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_POINTER_CLICK_METHOD:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_CLICK_METHOD) != 0 &&
-           cur->pointer_defaults.click_method ==
-               (enum leme_pointer_click_method)prep->parsed.int_val;
-    break;
-  case LEME_LIVE_POINTER_SCROLL_METHOD:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_SCROLL_METHOD) != 0 &&
-           cur->pointer_defaults.scroll_method ==
-               (enum leme_pointer_scroll_method)prep->parsed.int_val;
-    break;
-  case LEME_LIVE_POINTER_SCROLL_BUTTON:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_SCROLL_BUTTON) != 0 &&
-           cur->pointer_defaults.scroll_button ==
-               (enum leme_pointer_button)prep->parsed.int_val;
-    break;
-  case LEME_LIVE_POINTER_MIDDLE_EMULATION:
-    noop =
-        (cur->pointer_defaults.fields & LEME_POINTER_MIDDLE_EMULATION) != 0 &&
-        cur->pointer_defaults.middle_emulation == prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_POINTER_TAP_BUTTON_MAP:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_TAP_BUTTON_MAP) != 0 &&
-           cur->pointer_defaults.tap_button_map ==
-               (enum leme_pointer_tap_button_map)prep->parsed.int_val;
-    break;
-  case LEME_LIVE_POINTER_TAP_DRAG:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_TAP_DRAG) != 0 &&
-           cur->pointer_defaults.tap_drag == prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_POINTER_DRAG_LOCK:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_DRAG_LOCK) != 0 &&
-           cur->pointer_defaults.drag_lock ==
-               (enum leme_pointer_drag_lock)prep->parsed.int_val;
-    break;
-  case LEME_LIVE_POINTER_DRAG_FINGERS:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_DRAG_FINGERS) != 0 &&
-           cur->pointer_defaults.drag_fingers == (uint32_t)prep->parsed.int_val;
-    break;
-  case LEME_LIVE_POINTER_SCROLL_FACTOR:
-    noop = (cur->pointer_defaults.fields & LEME_POINTER_SCROLL_FACTOR) != 0 &&
-           cur->pointer_defaults.scroll_factor == prep->parsed.num_val;
-    break;
-  case LEME_LIVE_GESTURES_MODE:
-    noop = (cur->gestures.workspace_switch.mode ==
-            (enum leme_workspace_gesture_mode)prep->parsed.int_val);
-    break;
-  case LEME_LIVE_GESTURES_FINGERS:
-    noop = (cur->gestures.workspace_switch.fingers ==
-            (uint32_t)prep->parsed.int_val);
-    break;
-  case LEME_LIVE_GESTURES_DISTANCE:
-    noop = (cur->gestures.workspace_switch.distance == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_GESTURES_THRESHOLD:
-    noop = (cur->gestures.workspace_switch.threshold == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_GESTURES_DECELERATION:
-    noop =
-        (cur->gestures.workspace_switch.deceleration == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_GESTURES_VELOCITY_WINDOW:
-    noop = (cur->gestures.workspace_switch.velocity_window_ms ==
-            (uint32_t)prep->parsed.int_val);
-    break;
-  case LEME_LIVE_GESTURES_OCCUPIED:
-    noop = (cur->gestures.workspace_switch.occupied == prep->parsed.bool_val);
-    break;
-  case LEME_LIVE_GESTURES_EDGE_SIZE:
-    noop = (cur->gestures.edges.size == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_GESTURES_EDGE_STEP:
-    noop = (cur->gestures.edges.step == prep->parsed.num_val);
-    break;
-  case LEME_LIVE_PUBLICATION_ACTIVATION:
-    noop = (cur->publication.activation ==
-            (enum leme_activation_policy)prep->parsed.int_val);
-    break;
-  default:
-    break;
-  }
-  prep->is_noop = noop;
+  const uint32_t fields =
+      group->fields == 0
+          ? option->field
+          : *(const uint32_t *)((const char *)cur + group->fields);
 
-  if (!noop && (id == LEME_LIVE_CURSOR_THEME || id == LEME_LIVE_CURSOR_SIZE)) {
-    const char *theme = (id == LEME_LIVE_CURSOR_THEME) ? prep->parsed.str_val
-                                                       : cur->cursor.theme;
-    int size =
-        (id == LEME_LIVE_CURSOR_SIZE) ? prep->parsed.int_val : cur->cursor.size;
-    prep->prepared_cursor =
-        leme_desktop_prepare_cursor_config(server, theme, size);
+  prep->is_noop =
+      (fields & option->field) == option->field &&
+      leme_option_equal(option, (const char *)cur + group->base, &prep->parsed);
+  if (!prep->is_noop && option->effect == LEME_OPTION_EFFECT_CURSOR) {
+    const bool theme = option->kind == LEME_OPTION_STRING;
+
+    prep->prepared_cursor = leme_desktop_prepare_cursor_config(
+        server, theme ? prep->parsed.string : cur->cursor.theme,
+        theme ? cur->cursor.size : (int)prep->parsed.integer);
     if (prep->prepared_cursor == NULL) {
       cleanup_prepared_set(prep);
       return set_err(error, LEME_CONTROL_INVALID_ARGUMENT,
@@ -1290,6 +864,11 @@ static enum leme_control_code prepare_set(struct leme_server *server,
   *out = prep;
   return LEME_CONTROL_OK;
 }
+
+static enum leme_control_code
+leme_config_live_set(struct leme_server *server, const char *const *path,
+                     size_t path_count, const struct leme_public_value *value,
+                     bool *applied, struct leme_control_error *error);
 
 enum leme_control_code
 leme_config_live_run(struct leme_server *server,
@@ -1342,6 +921,43 @@ cleanup:
   return code;
 }
 
+static void refresh_setting(struct leme_server *server,
+                            enum leme_option_effect effect) {
+  switch (effect) {
+  case LEME_OPTION_EFFECT_NONE:
+  case LEME_OPTION_EFFECT_STORE:
+  case LEME_OPTION_EFFECT_CURSOR:
+    return;
+  case LEME_OPTION_EFFECT_LAYOUT:
+    leme_view_arrange_instant(server);
+    return;
+  case LEME_OPTION_EFFECT_ARRANGE:
+    leme_view_arrange_instant(server);
+    leme_render_refresh_views(server);
+    return;
+  case LEME_OPTION_EFFECT_REDRAW:
+  case LEME_OPTION_EFFECT_EFFECTS:
+    leme_render_refresh_views(server);
+    return;
+  case LEME_OPTION_EFFECT_FULLSCREEN:
+    leme_render_apply_fullscreen_coverage(server);
+    leme_view_refresh_fullscreen(server);
+    leme_view_arrange_instant(server);
+    leme_render_refresh_views(server);
+    return;
+  case LEME_OPTION_EFFECT_POINTERS:
+    leme_input_apply_pointer_config(server, server->config);
+    return;
+  case LEME_OPTION_EFFECT_SWIPE:
+    leme_input_workspace_gesture_reset(server);
+    return;
+  case LEME_OPTION_EFFECT_FINGERS:
+    leme_input_workspace_gesture_reset(server);
+    leme_input_apply_pointer_config(server, server->config);
+    return;
+  }
+}
+
 static enum leme_control_code apply(struct leme_server *server,
                                     struct leme_config_prepared_set *prep,
                                     bool *applied,
@@ -1352,229 +968,17 @@ static enum leme_control_code apply(struct leme_server *server,
 
   leme_public_server_config_changed(server);
   struct leme_config *cfg = server->config;
-  switch (prep->setting_id) {
-  case LEME_LIVE_STYLE_GAP:
-    cfg->gap = prep->parsed.int_val;
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_TOP:
-    cfg->gap_outer.top = prep->parsed.int_val;
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_RIGHT:
-    cfg->gap_outer.right = prep->parsed.int_val;
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_BOTTOM:
-    cfg->gap_outer.bottom = prep->parsed.int_val;
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_GAP_OUTER_LEFT:
-    cfg->gap_outer.left = prep->parsed.int_val;
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_SMART_GAPS:
-    cfg->smart_gaps = prep->parsed.bool_val;
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_BORDER_WIDTH:
-    cfg->border_width = prep->parsed.int_val;
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_CORNER_RADIUS:
-    cfg->corner_radius = prep->parsed.int_val;
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_BLUR:
-    cfg->blur = prep->parsed.int_val;
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_BORDER_ACTIVE:
-    memcpy(cfg->border_active, prep->parsed.color_val, sizeof(float) * 4);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_BORDER_INACTIVE:
-    memcpy(cfg->border_inactive, prep->parsed.color_val, sizeof(float) * 4);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_OPACITY_ACTIVE:
-    cfg->opacity_active = prep->parsed.num_val;
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_OPACITY_INACTIVE:
-    cfg->opacity_inactive = prep->parsed.num_val;
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_STYLE_FULLSCREEN_COVERS:
-    cfg->fullscreen_covers =
-        (enum leme_fullscreen_coverage)prep->parsed.int_val;
-    leme_render_apply_fullscreen_coverage(server);
-    leme_view_refresh_fullscreen(server);
-    leme_view_arrange_instant(server);
-    leme_render_refresh_views(server);
-    break;
-  case LEME_LIVE_OUTPUT_CROSS_FOCUS:
-    cfg->output_policy.cross_output_focus = prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_OUTPUT_CROSS_MOVE:
-    cfg->output_policy.cross_output_move = prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_OUTPUT_CROSS_DRAG:
-    cfg->output_policy.cross_output_drag = prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_OUTPUT_WARP_CURSOR:
-    cfg->output_policy.warp_cursor = prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_DESKTOP_MINIMIZED_STRIP:
-    cfg->desktop_minimized_strip = prep->parsed.bool_val;
-    leme_view_arrange_instant(server);
-    break;
-  case LEME_LIVE_CURSOR_THEME:
-    if (prep->prepared_cursor != NULL) {
-      leme_desktop_commit_cursor_config(server, prep->prepared_cursor);
-      prep->prepared_cursor = NULL;
-    }
-    free(cfg->cursor.theme);
-    cfg->cursor.theme =
-        prep->parsed.str_val != NULL ? strdup(prep->parsed.str_val) : NULL;
-    break;
-  case LEME_LIVE_CURSOR_SIZE:
-    if (prep->prepared_cursor != NULL) {
-      leme_desktop_commit_cursor_config(server, prep->prepared_cursor);
-      prep->prepared_cursor = NULL;
-    }
-    cfg->cursor.size = prep->parsed.int_val;
-    break;
-  case LEME_LIVE_POINTER_ACCEL_PROFILE:
-    cfg->pointer_defaults.profile =
-        (enum leme_pointer_accel_profile)prep->parsed.int_val;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_ACCEL_SPEED:
-    cfg->pointer_defaults.speed = prep->parsed.num_val;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_NATURAL_SCROLL:
-    cfg->pointer_defaults.natural_scroll = prep->parsed.bool_val;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_LEFT_HANDED:
-    cfg->pointer_defaults.left_handed = prep->parsed.bool_val;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_TAP:
-    cfg->pointer_defaults.tap = prep->parsed.bool_val;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_FOCUS_FOLLOWS_MOUSE:
-    cfg->focus_follows_mouse = prep->parsed.bool_val;
-    break;
-  case LEME_LIVE_POINTER_DISABLE_WHILE_TYPING:
-    cfg->pointer_defaults.disable_while_typing = prep->parsed.bool_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_DISABLE_WHILE_TYPING;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_CLICK_METHOD:
-    cfg->pointer_defaults.click_method =
-        (enum leme_pointer_click_method)prep->parsed.int_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_CLICK_METHOD;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_SCROLL_METHOD:
-    cfg->pointer_defaults.scroll_method =
-        (enum leme_pointer_scroll_method)prep->parsed.int_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_SCROLL_METHOD;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_SCROLL_BUTTON:
-    cfg->pointer_defaults.scroll_button =
-        (enum leme_pointer_button)prep->parsed.int_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_SCROLL_BUTTON;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_MIDDLE_EMULATION:
-    cfg->pointer_defaults.middle_emulation = prep->parsed.bool_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_MIDDLE_EMULATION;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_TAP_BUTTON_MAP:
-    cfg->pointer_defaults.tap_button_map =
-        (enum leme_pointer_tap_button_map)prep->parsed.int_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_TAP_BUTTON_MAP;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_TAP_DRAG:
-    cfg->pointer_defaults.tap_drag = prep->parsed.bool_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_TAP_DRAG;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_DRAG_LOCK:
-    cfg->pointer_defaults.drag_lock =
-        (enum leme_pointer_drag_lock)prep->parsed.int_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_DRAG_LOCK;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_DRAG_FINGERS:
-    cfg->pointer_defaults.drag_fingers = (uint32_t)prep->parsed.int_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_DRAG_FINGERS;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_POINTER_SCROLL_FACTOR:
-    cfg->pointer_defaults.scroll_factor = prep->parsed.num_val;
-    cfg->pointer_defaults.fields |= LEME_POINTER_SCROLL_FACTOR;
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_GESTURES_MODE:
-    cfg->gestures.workspace_switch.mode =
-        (enum leme_workspace_gesture_mode)prep->parsed.int_val;
-    leme_input_workspace_gesture_reset(server);
-    break;
-  case LEME_LIVE_GESTURES_FINGERS:
-    cfg->gestures.workspace_switch.fingers = (uint32_t)prep->parsed.int_val;
-    leme_input_workspace_gesture_reset(server);
-    leme_input_apply_pointer_config(server, cfg);
-    break;
-  case LEME_LIVE_GESTURES_DISTANCE:
-    cfg->gestures.workspace_switch.distance = prep->parsed.num_val;
-    leme_input_workspace_gesture_reset(server);
-    break;
-  case LEME_LIVE_GESTURES_THRESHOLD:
-    cfg->gestures.workspace_switch.threshold = prep->parsed.num_val;
-    leme_input_workspace_gesture_reset(server);
-    break;
-  case LEME_LIVE_GESTURES_DECELERATION:
-    cfg->gestures.workspace_switch.deceleration = prep->parsed.num_val;
-    leme_input_workspace_gesture_reset(server);
-    break;
-  case LEME_LIVE_GESTURES_VELOCITY_WINDOW:
-    cfg->gestures.workspace_switch.velocity_window_ms =
-        (uint32_t)prep->parsed.int_val;
-    leme_input_workspace_gesture_reset(server);
-    break;
-  case LEME_LIVE_GESTURES_OCCUPIED:
-    cfg->gestures.workspace_switch.occupied = prep->parsed.bool_val;
-    leme_input_workspace_gesture_reset(server);
-    break;
-  case LEME_LIVE_GESTURES_EDGE_SIZE:
-    cfg->gestures.edges.size = prep->parsed.num_val;
-    break;
-  case LEME_LIVE_GESTURES_EDGE_STEP:
-    cfg->gestures.edges.step = prep->parsed.num_val;
-    break;
-  case LEME_LIVE_PUBLICATION_ACTIVATION:
-    cfg->publication.activation =
-        (enum leme_activation_policy)prep->parsed.int_val;
-    break;
-  default:
-    break;
+
+  if (prep->prepared_cursor != NULL) {
+    leme_desktop_commit_cursor_config(server, prep->prepared_cursor);
+    prep->prepared_cursor = NULL;
   }
+  leme_option_store(prep->option, (char *)cfg + prep->group->base,
+                    &prep->parsed);
+  if (prep->group->fields != 0) {
+    *(uint32_t *)((char *)cfg + prep->group->fields) |= prep->option->field;
+  }
+  refresh_setting(server, prep->option->effect);
 
   enum leme_control_code ov_code = leme_config_store_add_override(
       server->config_store, NULL, (const char *const *)prep->path,
@@ -1588,7 +992,7 @@ static enum leme_control_code apply(struct leme_server *server,
   return LEME_CONTROL_OK;
 }
 
-enum leme_control_code
+static enum leme_control_code
 leme_config_live_set(struct leme_server *server, const char *const *path,
                      size_t path_count, const struct leme_public_value *value,
                      bool *applied, struct leme_control_error *error) {

@@ -114,12 +114,8 @@ struct leme_layout_node *leme_layout_insert(struct leme_layout_node *root,
                                             struct leme_view *focused,
                                             struct leme_view *added,
                                             double ratio, struct leme_box area);
-struct leme_layout_node *leme_layout_remove(struct leme_layout_node *root,
-                                            struct leme_view *removed);
 void leme_layout_arrange(struct leme_layout_node *root, struct leme_box area,
                          int gap, leme_layout_apply_fn apply, void *data);
-struct leme_view *leme_layout_neighbor(const struct leme_layout_node *root,
-                                       const struct leme_view *view);
 struct leme_view *leme_layout_directional_candidate(
     const struct leme_layout_candidate *candidates, size_t count,
     const struct leme_view *origin, enum leme_direction direction);

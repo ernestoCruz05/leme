@@ -50,14 +50,10 @@ leme_control_compile(const struct leme_control_limits *limits,
 uint32_t leme_control_program_roots(const struct leme_control_program *program);
 void leme_control_program_destroy(struct leme_control_program *program);
 
-size_t
-leme_control_program_node_count(const struct leme_control_program *program);
 const struct leme_control_node *
 leme_control_program_node(const struct leme_control_program *program,
                           size_t index);
 uint32_t
 leme_control_program_root_index(const struct leme_control_program *program);
-const struct leme_control_type *
-leme_control_program_type(const struct leme_control_program *program);
 
 #endif

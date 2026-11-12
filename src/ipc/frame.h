@@ -14,18 +14,10 @@ enum leme_control_code
 leme_control_frame_create(const char *bytes, size_t length,
                           struct leme_control_frame **out);
 
-enum leme_control_code
-leme_control_frame_create_capacity(size_t capacity,
-                                   struct leme_control_frame **out);
-
 void leme_control_frame_destroy(struct leme_control_frame *frame);
 
 const char *leme_control_frame_bytes(const struct leme_control_frame *frame);
-char *leme_control_frame_buffer(struct leme_control_frame *frame,
-                                size_t *out_capacity);
 size_t leme_control_frame_length(const struct leme_control_frame *frame);
-void leme_control_frame_set_length(struct leme_control_frame *frame,
-                                   size_t length);
 
 enum leme_control_frame_kind {
   LEME_CONTROL_FRAME_OTHER = 0,
@@ -73,9 +65,5 @@ enum leme_control_code
 leme_control_framer_feed(struct leme_control_framer *framer, const char *bytes,
                          size_t length, size_t *consumed,
                          struct leme_control_frame **out);
-
-bool leme_control_framer_is_empty(const struct leme_control_framer *framer);
-size_t
-leme_control_framer_pending_bytes(const struct leme_control_framer *framer);
 
 #endif

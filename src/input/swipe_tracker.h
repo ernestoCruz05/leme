@@ -31,8 +31,6 @@ double
 leme_swipe_tracker_projected_position(const struct leme_swipe_tracker *tracker,
                                       double current_position,
                                       uint32_t now_msec);
-bool leme_swipe_tracker_threshold_reached(double projected, double threshold,
-                                          bool forward);
 
 double leme_swipe_continuous_target(double projected, double threshold,
                                     bool forward);

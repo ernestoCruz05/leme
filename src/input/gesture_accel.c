@@ -28,9 +28,10 @@ bool leme_gesture_accel_restore(struct leme_gesture_accel *state) {
          profile_status == LIBINPUT_CONFIG_STATUS_SUCCESS;
 }
 
-bool leme_gesture_accel_begin_with_ops(
-    struct leme_gesture_accel *state, struct libinput_device *device,
-    const struct leme_gesture_accel_ops *ops) {
+static bool
+leme_gesture_accel_begin_with_ops(struct leme_gesture_accel *state,
+                                  struct libinput_device *device,
+                                  const struct leme_gesture_accel_ops *ops) {
   if (state == NULL || device == NULL || ops == NULL) {
     return false;
   }

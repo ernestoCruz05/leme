@@ -8,8 +8,6 @@
 struct leme_control_peer;
 
 enum leme_control_code
-leme_control_watch_peer_open(struct leme_control_peer *peer);
-enum leme_control_code
 leme_control_watch_peer_request(struct leme_control_peer *peer,
                                 struct leme_control_request *request, int slot);
 

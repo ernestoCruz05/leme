@@ -28,16 +28,7 @@
 
 #include "config/internal.h"
 
-static bool leme_command_require_view(struct leme_server *server,
-                                      const char *name) {
-  if (server->focused_view != NULL) {
-    return true;
-  }
-  wlr_log(WLR_ERROR, "leme: %s requires a focused view", name);
-  return false;
-}
-
-bool leme_command_warp_cursor(const struct leme_server *server) {
+static bool leme_command_warp_cursor(const struct leme_server *server) {
   return server->config == NULL || server->config->output_policy.warp_cursor;
 }
 
@@ -89,23 +80,6 @@ static bool leme_command_reload(struct leme_server *server) {
   return true;
 }
 
-static bool leme_command_uses_tags(enum leme_command_type type) {
-  switch (type) {
-  case LEME_COMMAND_FOCUS_NEXT_TAG:
-  case LEME_COMMAND_FOCUS_PREVIOUS_TAG:
-  case LEME_COMMAND_FOCUS_TAG:
-  case LEME_COMMAND_FOCUS_LAST_TAG:
-  case LEME_COMMAND_MOVE_VIEW_TO_TAG:
-  case LEME_COMMAND_SET_LAYOUT:
-  case LEME_COMMAND_SWITCH_LAYOUT:
-  case LEME_COMMAND_REMOVE_EMPTY_TAG:
-  case LEME_COMMAND_RESTORE_MINIMIZED:
-    return true;
-  default:
-    return false;
-  }
-}
-
 static bool leme_command_place(struct leme_view *view,
                                const struct leme_command *command) {
   struct leme_container *container = view->container;
@@ -140,35 +114,29 @@ bool leme_command_execute(struct leme_server *server,
   if (server == NULL || command == NULL) {
     return false;
   }
-  if ((command->type == LEME_COMMAND_SCRATCHPAD_SEND ||
-       command->type == LEME_COMMAND_SCRATCHPAD_TOGGLE ||
-       command->type == LEME_COMMAND_SCRATCHPAD_RETRIEVE ||
-       command->type == LEME_COMMAND_TOGGLE_STICKY) &&
+  const struct leme_command_spec *spec = leme_command_spec(command->type);
+  if ((spec->flags & LEME_COMMAND_FLAG_LOCKED_REFUSED) != 0 &&
       leme_session_locked(server)) {
-    wlr_log(WLR_ERROR, "leme: %s refused while locked",
-            command->type == LEME_COMMAND_TOGGLE_STICKY ? "toggle_sticky"
-                                                        : "scratchpad command");
+    wlr_log(WLR_ERROR, "leme: %s refused while locked", spec->name);
     return false;
   }
   tags = leme_focused_tags(server);
-  if (tags == NULL && leme_command_uses_tags(command->type)) {
+  if (tags == NULL && (spec->flags & LEME_COMMAND_FLAG_NEEDS_TAGS) != 0) {
     wlr_log(WLR_ERROR, "%s",
             "leme: tag command refused without an enabled output");
     return false;
   }
   view = server->focused_view;
-  if (leme_sticky_is_dependent(view)) {
-    switch (command->type) {
-    case LEME_COMMAND_MOVE_VIEW_TO_TAG:
-    case LEME_COMMAND_MOVE_VIEW_TO_OUTPUT:
-    case LEME_COMMAND_TOGGLE_FLOATING:
-    case LEME_COMMAND_TOGGLE_STICKY:
-    case LEME_COMMAND_TOGGLE_FULLSCREEN:
-      view = leme_sticky_group_root(view);
-      break;
-    default:
-      break;
-    }
+  if ((spec->flags & LEME_COMMAND_FLAG_NEEDS_VIEW) != 0 && view == NULL) {
+    wlr_log(WLR_ERROR, "leme: %s requires a focused view", spec->name);
+    return false;
+  }
+  if ((spec->flags & LEME_COMMAND_FLAG_STICKY_ROOT) != 0 &&
+      leme_sticky_is_dependent(view)) {
+    view = leme_sticky_group_root(view);
+  }
+  if ((spec->flags & LEME_COMMAND_FLAG_CANCELS_GRAB) != 0) {
+    leme_input_pointer_grab_cancel_tiled(server);
   }
   switch (command->type) {
   case LEME_COMMAND_FOCUS_NEXT_TAG:
@@ -177,7 +145,6 @@ bool leme_command_execute(struct leme_server *server,
         command->type == LEME_COMMAND_FOCUS_NEXT_TAG ? LEME_TAG_CHANGE_FORWARD
                                                      : LEME_TAG_CHANGE_BACKWARD;
 
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!command->occupied) {
       leme_tags_step(tags, direction);
     } else if (leme_tags_step_occupied(tags, direction) == NULL) {
@@ -187,7 +154,6 @@ bool leme_command_execute(struct leme_server *server,
     return true;
   }
   case LEME_COMMAND_FOCUS_TAG:
-    leme_input_pointer_grab_cancel_tiled(server);
     tag = leme_tags_focus_id(tags, command->tag_id);
     if (tag == NULL &&
         !(tags->focused_id == command->tag_id && tags->focused_is_candidate)) {
@@ -197,13 +163,11 @@ bool leme_command_execute(struct leme_server *server,
     leme_command_refresh_tag(server);
     return true;
   case LEME_COMMAND_FOCUS_DIRECTION:
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!leme_view_focus_direction(server, command->direction)) {
       wlr_log(WLR_DEBUG, "%s", "leme: no directional focus candidate");
     }
     return true;
   case LEME_COMMAND_FOCUS_LAST_TAG:
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!leme_tags_focus_last(tags)) {
       wlr_log(WLR_ERROR, "%s", "leme: no previous tag");
       return false;
@@ -211,7 +175,6 @@ bool leme_command_execute(struct leme_server *server,
     leme_command_refresh_tag(server);
     return true;
   case LEME_COMMAND_FOCUS_PREVIOUS_VIEW:
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!leme_view_focus_previous(server)) {
       wlr_log(WLR_DEBUG, "%s", "leme: no previous view");
     }
@@ -235,9 +198,6 @@ bool leme_command_execute(struct leme_server *server,
     return true;
   }
   case LEME_COMMAND_MOVE_DIRECTION:
-    if (!leme_command_require_view(server, "move")) {
-      return false;
-    }
     if (!leme_view_move_direction(server, command->direction,
                                   command->amount)) {
       wlr_log(WLR_ERROR, "%s", "leme: cannot move focused view");
@@ -251,9 +211,6 @@ bool leme_command_execute(struct leme_server *server,
             : LEME_TAG_CHANGE_FORWARD;
     uint16_t target = command->tag_id;
 
-    if (!leme_command_require_view(server, "move_view_to_tag")) {
-      return false;
-    }
     if (command->has_direction) {
       target = leme_tags_adjacent_id(tags, tag_direction);
       if (target == 0) {
@@ -310,9 +267,6 @@ bool leme_command_execute(struct leme_server *server,
   case LEME_COMMAND_MOVE_VIEW_TO_OUTPUT: {
     struct leme_output *target;
 
-    if (!leme_command_require_view(server, "move_view_to_output")) {
-      return false;
-    }
     target = leme_command_resolve_output(server, command);
     if (target == NULL || target == leme_output_focused(server)) {
       wlr_log(WLR_DEBUG, "%s", "leme: no output in that direction");
@@ -334,7 +288,6 @@ bool leme_command_execute(struct leme_server *server,
     return true;
   }
   case LEME_COMMAND_SET_LAYOUT:
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!leme_tags_set_layout(tags, command->layout)) {
       wlr_log(WLR_ERROR, "%s", "leme: cannot set the layout");
       return false;
@@ -345,7 +298,6 @@ bool leme_command_execute(struct leme_server *server,
     leme_view_refresh_end(server);
     return true;
   case LEME_COMMAND_SWITCH_LAYOUT:
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!leme_tags_cycle_layout(tags)) {
       wlr_log(WLR_ERROR, "%s", "leme: cannot switch the layout");
       return false;
@@ -356,7 +308,6 @@ bool leme_command_execute(struct leme_server *server,
     leme_view_refresh_end(server);
     return true;
   case LEME_COMMAND_REMOVE_EMPTY_TAG:
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!leme_tags_remove_empty(tags, command->tag_id)) {
       wlr_log(WLR_ERROR, "leme: tag %u is invalid, occupied, or the last tag",
               command->tag_id);
@@ -365,24 +316,12 @@ bool leme_command_execute(struct leme_server *server,
     leme_command_refresh_tag(server);
     return true;
   case LEME_COMMAND_TOGGLE_FLOATING:
-    if (!leme_command_require_view(server, "toggle_floating")) {
-      return false;
-    }
     return leme_view_set_floating(view, !view->floating);
   case LEME_COMMAND_TOGGLE_STICKY:
-    if (!leme_command_require_view(server, "toggle_sticky")) {
-      return false;
-    }
     return leme_sticky_toggle(view);
   case LEME_COMMAND_TOGGLE_FULLSCREEN:
-    if (!leme_command_require_view(server, "toggle_fullscreen")) {
-      return false;
-    }
     return leme_view_set_fullscreen(view, !view->fullscreen);
   case LEME_COMMAND_RESIZE:
-    if (!leme_command_require_view(server, "resize")) {
-      return false;
-    }
     if (!leme_view_resize(server->focused_view, command->edge,
                           command->amount)) {
       wlr_log(WLR_ERROR, "%s", "leme: resize has no matching edge");
@@ -390,8 +329,7 @@ bool leme_command_execute(struct leme_server *server,
     }
     return true;
   case LEME_COMMAND_MINIMIZE_VIEW:
-    return leme_command_require_view(server, "minimize_view") &&
-           leme_view_set_minimized(view, true);
+    return leme_view_set_minimized(view, true);
   case LEME_COMMAND_RESTORE_MINIMIZED: {
     if (leme_session_locked(server)) {
       return false;
@@ -461,12 +399,9 @@ bool leme_command_execute(struct leme_server *server,
                : leme_container_dissolve(view->container);
   case LEME_COMMAND_SNAP:
   case LEME_COMMAND_PLACE:
-    return leme_command_require_view(
-               server, command->type == LEME_COMMAND_SNAP ? "snap" : "place") &&
-           leme_command_place(view, command);
+    return leme_command_place(view, command);
   case LEME_COMMAND_WINDOW_MENU:
-    return leme_command_require_view(server, "window_menu") &&
-           leme_command_window_menu(server, view);
+    return leme_command_window_menu(server, view);
   case LEME_COMMAND_SHOW_DESKTOP:
     return leme_view_show_desktop(server);
   case LEME_COMMAND_FOCUS_DESKTOP:
@@ -488,17 +423,34 @@ bool leme_command_execute(struct leme_server *server,
   case LEME_COMMAND_GRID_SELECT:
     return leme_desk_grid_select(server, command->direction, command->extend);
   case LEME_COMMAND_FOCUS_CYCLE:
-    leme_input_pointer_grab_cancel_tiled(server);
     if (!leme_view_focus_cycle(server, command->backward)) {
       wlr_log(WLR_DEBUG, "%s", "leme: no window to cycle to");
     }
     return true;
   case LEME_COMMAND_CLOSE_VIEW:
-    if (!leme_command_require_view(server, "close_view")) {
-      return false;
-    }
     leme_view_protocol_close(server->focused_view);
     return true;
+  case LEME_COMMAND_OUTPUT_ENABLE:
+  case LEME_COMMAND_OUTPUT_DISABLE:
+  case LEME_COMMAND_OUTPUT_TOGGLE:
+  case LEME_COMMAND_OUTPUT_POWER: {
+    struct leme_output *target = leme_output_find(server, command->text);
+
+    if (target == NULL) {
+      wlr_log(WLR_ERROR, "leme: no output named %s", command->text);
+      return false;
+    }
+    const bool power = command->type == LEME_COMMAND_OUTPUT_POWER;
+    const bool current = power ? target->power_on : !target->disabled;
+    const bool on =
+        command->type == LEME_COMMAND_OUTPUT_TOGGLE ||
+                (power && command->output_switch == LEME_OUTPUT_SWITCH_TOGGLE)
+            ? !current
+            : command->type == LEME_COMMAND_OUTPUT_ENABLE ||
+                  (power && command->output_switch == LEME_OUTPUT_SWITCH_ON);
+    return power ? leme_output_set_power(target, on)
+                 : leme_output_set_enabled(target, on);
+  }
   case LEME_COMMAND_GESTURE_MOVE:
   case LEME_COMMAND_GESTURE_RESIZE:
     wlr_log(WLR_ERROR, "%s",
@@ -537,9 +489,6 @@ bool leme_command_execute(struct leme_server *server,
     wl_display_terminate(server->display);
     return true;
   case LEME_COMMAND_SCRATCHPAD_SEND:
-    if (!leme_command_require_view(server, "scratchpad_send")) {
-      return false;
-    }
     return leme_scratchpad_send(server, server->focused_view);
   case LEME_COMMAND_SCRATCHPAD_TOGGLE:
     if (command->text != NULL) {

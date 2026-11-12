@@ -65,7 +65,6 @@ leme_public_snapshot_project(struct leme_public_model *model, uint32_t roots,
 
 enum leme_public_status
 leme_public_system_entropy(void *context, unsigned char *out, size_t count);
-const char *leme_public_entity_name(enum leme_public_entity kind);
 bool leme_public_parse_id(const struct leme_public_model *model,
                           enum leme_public_entity kind,
                           struct leme_public_text text,

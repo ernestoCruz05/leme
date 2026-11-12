@@ -240,12 +240,6 @@ struct leme_view *leme_sticky_group_root(const struct leme_view *view) {
   return group == NULL ? NULL : group->root;
 }
 
-struct wlr_scene_tree *leme_sticky_render_parent(const struct leme_view *view) {
-  const struct leme_sticky_group *group = leme_sticky_group(view);
-
-  return group == NULL ? NULL : group->scene_tree;
-}
-
 bool
 // The parent and dependent roles are deliberately distinct.
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)

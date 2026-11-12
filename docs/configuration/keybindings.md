@@ -157,3 +157,22 @@ binds "common" {
 The slide has to start within `size` mm of the edge and move along it right
 away. Anything else is a normal touch. `size` and `step` are set in the
 [gestures block](gestures.md#touchpad-edges).
+
+## Lid and tablet switches
+
+The laptop lid and the tablet-mode switch are bound like keys, without
+modifiers:
+
+```scfg
+binds "common" {
+    switch:lid:on   output_disable eDP-1
+    switch:lid:off  output_enable eDP-1
+}
+```
+
+| Switch | `on` | `off` |
+| --- | --- | --- |
+| `switch:lid:STATE` | the lid closes | the lid opens |
+| `switch:tablet:STATE` | the laptop folds into a tablet | it unfolds |
+
+Suspending when the lid closes is up to logind, not Leme.

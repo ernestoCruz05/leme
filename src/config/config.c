@@ -325,25 +325,66 @@ void leme_config_set_pointer_defaults(struct leme_config *config) {
   config->focus_follows_mouse = true;
 }
 
-static const char *const leme_pointer_click_names[] = {
+const char *const leme_choice_activation[3] = {
+    "follow",
+    "urgent",
+    "ignore",
+};
+const char *const leme_choice_banner[2] = {
+    "top",
+    "bottom",
+};
+const char *const leme_choice_accel_profile[2] = {
+    "adaptive",
+    "flat",
+};
+const char *const leme_choice_drop_mode[2] = {
+    "simple",
+    "edges",
+};
+const char *const leme_choice_fullscreen_covers[3] = {
+    "none",
+    "top",
+    "overlay",
+};
+const char *const leme_choice_gesture_mode[3] = {
+    "single",
+    "scrub",
+    "free",
+};
+const char *const leme_choice_layout[3] = {
+    "dwindle",
+    "master_stack",
+    "desktop",
+};
+const char *const leme_choice_secondary_gpu[2] = {
+    "on_demand",
+    "always",
+};
+
+const char *const leme_choice_workspace_style[2] = {
+    "full_slide",
+    "glide_fade",
+};
+const char *const leme_pointer_click_names[3] = {
     "none",
     "button_areas",
     "clickfinger",
 };
-static const char *const leme_pointer_scroll_names[] = {
+const char *const leme_pointer_scroll_names[4] = {
     "none",
     "two_finger",
     "edge",
     "on_button_down",
 };
-static const char *const leme_pointer_button_names[] = {
+const char *const leme_pointer_button_names[8] = {
     "left", "right", "middle", "side", "extra", "forward", "back", "task",
 };
-static const char *const leme_pointer_tap_map_names[] = {
+const char *const leme_pointer_tap_map_names[2] = {
     "lrm",
     "lmr",
 };
-static const char *const leme_pointer_drag_lock_names[] = {
+const char *const leme_pointer_drag_lock_names[3] = {
     "none",
     "timeout",
     "sticky",

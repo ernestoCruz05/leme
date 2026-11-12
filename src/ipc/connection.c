@@ -136,6 +136,17 @@ void leme_control_peer_close(struct leme_control_peer *peer) {
   peer_close_socket(peer);
 }
 
+static void leme_control_peer_update_events(struct leme_control_peer *peer) {
+  uint32_t mask = peer->write_blocked ? WL_EVENT_WRITABLE : 0;
+
+  if (peer->outstanding_count < peer->limits.outstanding) {
+    mask |= WL_EVENT_READABLE;
+  }
+  if (peer->source != NULL) {
+    wl_event_source_fd_update(peer->source, mask);
+  }
+}
+
 static void leme_control_peer_flush(struct leme_control_peer *peer) {
   if (peer->fd < 0 || peer->state == LEME_PEER_STATE_CLOSED) {
     return;
@@ -159,15 +170,9 @@ static void leme_control_peer_flush(struct leme_control_peer *peer) {
   size_t written = 0;
   enum leme_control_flush_status status =
       leme_control_queue_flush(peer->queue, peer->fd, &written);
-  if (status == LEME_CONTROL_FLUSH_AGAIN) {
-    if (peer->source != NULL) {
-      wl_event_source_fd_update(peer->source,
-                                WL_EVENT_READABLE | WL_EVENT_WRITABLE);
-    }
-  } else {
-    if (peer->source != NULL) {
-      wl_event_source_fd_update(peer->source, WL_EVENT_READABLE);
-    }
+  peer->write_blocked = status == LEME_CONTROL_FLUSH_AGAIN;
+  leme_control_peer_update_events(peer);
+  if (!peer->write_blocked) {
     if (status == LEME_CONTROL_FLUSH_CLOSED ||
         status == LEME_CONTROL_FLUSH_ERROR ||
         (peer->state == LEME_PEER_STATE_DRAINING &&
@@ -416,6 +421,8 @@ bool leme_control_peer_has_work(const struct leme_control_peer *peer) {
          (watch_pending(peer) && !watch_paced(peer));
 }
 
+static void leme_control_peer_ready(struct leme_control_peer *peer);
+
 static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
   struct leme_control_peer *peer = data;
   (void)fd;
@@ -440,6 +447,7 @@ static int leme_control_peer_handle_fd(int fd, uint32_t len, void *data) {
 
     while (!should_stop) {
       if (peer->outstanding_count >= peer->limits.outstanding) {
+        leme_control_peer_update_events(peer);
         break;
       }
       ssize_t ret = read(peer->fd, buf, sizeof(buf));
@@ -770,20 +778,8 @@ void leme_control_peer_destroy(struct leme_control_peer *peer) {
   free(peer);
 }
 
-void leme_control_peer_ready(struct leme_control_peer *peer) {
+static void leme_control_peer_ready(struct leme_control_peer *peer) {
   if (peer != NULL && peer->scheduler != NULL) {
     leme_control_scheduler_peer_ready(peer->scheduler, peer);
   }
-}
-
-enum leme_control_code
-leme_control_peer_reserve_reply(struct leme_control_peer *peer, size_t bytes) {
-  if (peer == NULL || peer->queue == NULL) {
-    return LEME_CONTROL_INVALID_ARGUMENT;
-  }
-  return leme_control_queue_reserve(peer->queue, bytes);
-}
-
-int leme_control_peer_fd(const struct leme_control_peer *peer) {
-  return peer != NULL ? peer->fd : -1;
 }

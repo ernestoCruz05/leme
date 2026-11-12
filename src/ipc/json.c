@@ -20,7 +20,7 @@ static void leme_json_fail(struct leme_json *json, enum leme_json_error error) {
   json->error = error;
 }
 
-bool leme_json_reserve(struct leme_json *json, size_t extra) {
+static bool leme_json_reserve(struct leme_json *json, size_t extra) {
   if (json->failed)
     return false;
   if (json->limit == SIZE_MAX || json->length > json->limit ||
@@ -72,22 +72,8 @@ void leme_json_init_limit(struct leme_json *json, size_t limit) {
     leme_json_fail(json, LEME_JSON_ERROR_LIMIT);
 }
 
-void leme_json_init(struct leme_json *json) {
+static void leme_json_init(struct leme_json *json) {
   leme_json_init_limit(json, SIZE_MAX - 1);
-}
-
-void leme_json_init_fixed(struct leme_json *json, char *buffer,
-                          size_t capacity) {
-  *json = (struct leme_json){
-      .data = buffer,
-      .capacity = capacity,
-      .limit = (capacity > 0) ? (capacity - 1) : 0,
-      .fixed = true,
-  };
-  if (buffer == NULL || capacity == 0)
-    leme_json_fail(json, LEME_JSON_ERROR_LIMIT);
-  else
-    buffer[0] = '\0';
 }
 
 void leme_json_finish(struct leme_json *json) {
@@ -244,10 +230,6 @@ void leme_json_integer(struct leme_json *json, int64_t value) {
   json->need_comma = true;
 }
 
-void leme_json_number(struct leme_json *json, long value) {
-  leme_json_integer(json, (int64_t)value);
-}
-
 void leme_json_real(struct leme_json *json, double value) {
   if (json->failed)
     return;
@@ -286,8 +268,4 @@ void leme_json_null(struct leme_json *json) {
   leme_json_separate(json);
   leme_json_append(json, "null", 4);
   json->need_comma = true;
-}
-
-const char *leme_json_result(const struct leme_json *json) {
-  return json->failed ? NULL : json->data;
 }

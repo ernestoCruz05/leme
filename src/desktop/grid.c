@@ -23,9 +23,10 @@ size_t leme_desk_grid_rows(struct leme_box area,
              : (size_t)((area.height - 2 * metrics->padding) / row_height);
 }
 
-size_t leme_desk_grid_capacity(struct leme_box area,
-                               const struct leme_desk_grid_metrics *metrics,
-                               int row_height) {
+static size_t
+leme_desk_grid_capacity(struct leme_box area,
+                        const struct leme_desk_grid_metrics *metrics,
+                        int row_height) {
   const size_t columns = leme_desk_grid_columns(area, metrics);
   const size_t rows = leme_desk_grid_rows(area, metrics, row_height);
   return rows == 0 || columns > SIZE_MAX / rows ? 0 : columns * rows;

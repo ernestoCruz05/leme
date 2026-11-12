@@ -59,6 +59,5 @@ void leme_session_output_changed(struct leme_server *server);
 bool leme_session_prepare_output_wake(struct leme_server *server,
                                       const struct leme_box *box);
 void leme_session_restore_output_wake(struct leme_server *server);
-void leme_session_restore_focus(struct leme_server *server);
 
 #endif

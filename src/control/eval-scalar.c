@@ -38,8 +38,9 @@ make_number(struct evaluator *ev, double n,
   return LEME_CONTROL_OK;
 }
 
-bool eval_equal(struct evaluator *ev, const struct leme_public_value *left,
-                const struct leme_public_value *right) {
+static bool eval_equal(struct evaluator *ev,
+                       const struct leme_public_value *left,
+                       const struct leme_public_value *right) {
   if (left == right)
     return true;
   if (left == NULL || right == NULL)

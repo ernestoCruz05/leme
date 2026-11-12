@@ -8,11 +8,6 @@
 
 struct leme_server;
 
-enum leme_control_code
-leme_shell_control_run(struct leme_server *server,
-                       const struct leme_control_call *call, bool *applied,
-                       struct leme_control_error *error);
-
 struct leme_control_domain
 leme_server_control_domain(struct leme_server *server);
 bool leme_server_control_act(struct leme_server *server, const char *source);

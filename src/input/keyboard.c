@@ -420,9 +420,8 @@ static bool leme_input_keysym_locks(xkb_keysym_t keysym) {
 }
 
 static bool leme_input_binding_reserved(const struct leme_binding *binding) {
-  return binding->command.type == LEME_COMMAND_SWITCH_VT ||
-         binding->command.type == LEME_COMMAND_QUIT ||
-         binding->command.type == LEME_COMMAND_TOGGLE_SHORTCUTS_INHIBIT;
+  return (leme_command_spec(binding->command.type)->flags &
+          LEME_COMMAND_FLAG_RESERVED) != 0;
 }
 
 static int leme_input_handle_binding_repeat(void *data) {
@@ -570,7 +569,9 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
     if (binding != NULL && inhibited && !leme_input_binding_reserved(binding)) {
       binding = NULL;
     }
-    if (binding != NULL && leme_command_grid_only(&binding->command) &&
+    if (binding != NULL &&
+        (leme_command_spec(binding->command.type)->flags &
+         LEME_COMMAND_FLAG_GRID_ONLY) != 0 &&
         !leme_desk_focused(keyboard->server)) {
       binding = NULL;
     }

@@ -19,7 +19,9 @@
 #include "shell/layer.h"
 #include "output/gpu.h"
 #include "output/output.h"
+#include "protocols/gamma.h"
 #include "protocols/output_power.h"
+#include "protocols/security.h"
 #include "render/render.h"
 #include "render/timing.h"
 #include "protocols/session.h"
@@ -282,6 +284,14 @@ bool leme_server_init(struct leme_server *server) {
             "leme: failed to initialize output power management");
     return false;
   }
+  if (!leme_gamma_init(server)) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to initialize gamma control");
+    return false;
+  }
+  if (!leme_security_init(server)) {
+    wlr_log(WLR_ERROR, "%s", "leme: failed to initialize security contexts");
+    return false;
+  }
 
   if (!leme_publication_init(server)) {
     return false;
@@ -326,6 +336,7 @@ int leme_server_run(struct leme_server *server) {
   }
 
   server->started = true;
+  leme_input_switches_sync(server);
   wlr_log(WLR_INFO, "leme: WAYLAND_DISPLAY=%s", server->socket);
   leme_session_environment_publish(server);
   leme_config_launch_startup(server);
@@ -367,6 +378,7 @@ void leme_server_finish(struct leme_server *server) {
   leme_ipc_finish(server);
   leme_decoration_protocol_finish(server);
   leme_publication_finish(server);
+  leme_gamma_finish(server);
   leme_output_power_finish(server);
   leme_output_finish(server);
 

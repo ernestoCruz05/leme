@@ -320,7 +320,7 @@ static uint32_t leme_animation_seconds_to_ms(double seconds) {
   return (uint32_t)ms;
 }
 
-double leme_animation_spring_displacement_at(
+static double leme_animation_spring_displacement_at(
     const struct leme_animation_spring *spring, double displacement,
     double velocity, double seconds) {
   if (spring == NULL || !isfinite(displacement) || !isfinite(velocity) ||
@@ -355,7 +355,7 @@ double leme_animation_spring_displacement_at(
   }
 }
 
-uint32_t leme_animation_spring_displacement_duration_ms(
+static uint32_t leme_animation_spring_displacement_duration_ms(
     const struct leme_animation_spring *spring, double displacement,
     double velocity) {
   double beta;
@@ -487,7 +487,7 @@ uint32_t leme_animation_spring_displacement_duration_ms(
   return leme_animation_seconds_to_ms(hi);
 }
 
-double
+static double
 leme_animation_spring_value_at(const struct leme_animation_spring *spring,
                                double initial_velocity, double seconds) {
   if (spring == NULL || seconds <= 0.0) {
@@ -519,12 +519,6 @@ void leme_animation_manager_init(struct leme_animation_manager *manager) {
 
 void leme_animation_manager_finish(struct leme_animation_manager *manager) {
   leme_animation_manager_finish_all(manager);
-}
-
-bool leme_animation_manager_active(
-    const struct leme_animation_manager *manager) {
-  return leme_animation_manager_ready(manager) &&
-         !wl_list_empty(&manager->animations);
 }
 
 static struct leme_animation *
@@ -788,6 +782,13 @@ static void leme_animation_gate_start(struct leme_animation_manager *manager,
   gate->start = *now;
 }
 
+static double leme_animation_curve_at(const struct leme_animation_curve *curve,
+                                      double t);
+
+static double leme_animation_elapsed(const struct timespec *start,
+                                     const struct timespec *now,
+                                     uint32_t duration_ms);
+
 void leme_animation_manager_tick(struct leme_animation_manager *manager,
                                  const struct timespec *now) {
   struct leme_animation *animation;
@@ -897,8 +898,8 @@ static double leme_animation_bezier(double a, double b, double t) {
          t * t * t;
 }
 
-double leme_animation_curve_at(const struct leme_animation_curve *curve,
-                               double t) {
+static double leme_animation_curve_at(const struct leme_animation_curve *curve,
+                                      double t) {
   double low = 0.0;
   double high = 1.0;
   int step;
@@ -922,9 +923,9 @@ double leme_animation_curve_at(const struct leme_animation_curve *curve,
   return leme_animation_bezier(curve->y1, curve->y2, (low + high) / 2.0);
 }
 
-double leme_animation_elapsed(const struct timespec *start,
-                              const struct timespec *now,
-                              uint32_t duration_ms) {
+static double leme_animation_elapsed(const struct timespec *start,
+                                     const struct timespec *now,
+                                     uint32_t duration_ms) {
   double seconds;
   double progress;
 

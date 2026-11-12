@@ -257,15 +257,6 @@ void leme_render_container_finish_move(struct leme_container *container) {
   }
 }
 
-bool leme_render_container_animation_box(const struct leme_container *container,
-                                         struct leme_box *out) {
-  if (container == NULL || container->animation_state == NULL || out == NULL) {
-    return false;
-  }
-  *out = container->animation_state->current;
-  return true;
-}
-
 void leme_render_container_move(struct leme_container *container,
                                 struct leme_box from, struct leme_box to) {
   struct leme_server *server = leme_render_container_server(container);

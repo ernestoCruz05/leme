@@ -143,8 +143,6 @@ void leme_animation_run(struct leme_animation_manager *manager,
                         const struct leme_animation_subject *subject);
 void leme_animation_manager_tick(struct leme_animation_manager *manager,
                                  const struct timespec *now);
-bool leme_animation_manager_active(
-    const struct leme_animation_manager *manager);
 bool leme_animation_manager_active_for_owner(
     struct leme_animation_manager *manager, const void *owner);
 void leme_animation_manager_finish_all(struct leme_animation_manager *manager);
@@ -163,24 +161,10 @@ leme_animation_frame_at(const struct leme_animation_spec *spec,
                         double geometry_progress, double opacity_progress);
 struct leme_animation_curve
 leme_animation_curve_preset(enum leme_animation_curve_preset preset);
-double leme_animation_curve_at(const struct leme_animation_curve *curve,
-                               double t);
-double leme_animation_elapsed(const struct timespec *start,
-                              const struct timespec *now, uint32_t duration_ms);
 #define LEME_ANIMATION_SPRING_SETTLE_MAX_MS 10000u
 
-double
-leme_animation_spring_value_at(const struct leme_animation_spring *spring,
-                               double initial_velocity, double seconds);
 uint32_t
 leme_animation_spring_duration_ms(const struct leme_animation_spring *spring,
                                   double initial_velocity);
-
-double leme_animation_spring_displacement_at(
-    const struct leme_animation_spring *spring, double displacement,
-    double velocity, double seconds);
-uint32_t leme_animation_spring_displacement_duration_ms(
-    const struct leme_animation_spring *spring, double displacement,
-    double velocity);
 
 #endif

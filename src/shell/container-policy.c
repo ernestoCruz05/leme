@@ -33,25 +33,3 @@ bool leme_container_drop_at(struct leme_box content, double lx, double ly,
   *drop = candidate;
   return true;
 }
-
-enum leme_container_resolution leme_container_resolve_count(size_t count) {
-  if (count == 0) {
-    return LEME_CONTAINER_DESTROY;
-  }
-  return count == 1 ? LEME_CONTAINER_UNWRAP : LEME_CONTAINER_KEEP;
-}
-
-size_t leme_container_next_focus(const bool *eligible, size_t count,
-                                 size_t removed) {
-  if (eligible == NULL || removed >= count) {
-    return SIZE_MAX;
-  }
-  size_t index = removed;
-  for (size_t searched = 1; searched < count; searched++) {
-    index = index == count - 1 ? 0 : index + 1;
-    if (eligible[index]) {
-      return index;
-    }
-  }
-  return SIZE_MAX;
-}
