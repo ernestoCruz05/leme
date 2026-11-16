@@ -47,6 +47,10 @@ systemctl --user status leme-session.target graphical-session.target xdg-desktop
 If the target is missing, check that `leme-session.target` is installed in a
 user unit directory such as `/usr/lib/systemd/user`.
 
+Leme restarts `xdg-desktop-portal.service` when it starts the target. A portal
+left over from an earlier session cannot capture, and OBS reports it as
+`Unavailable cursor mode 1`.
+
 On exit Leme stops the target and removes its display variables from the
 systemd environment. A Leme that crashed without `leme-session` leaves the
 target running with the old display, so stop it before the next session:

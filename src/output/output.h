@@ -43,6 +43,7 @@ struct leme_output {
   bool disabled;
   bool gamma_changed;
   bool tearing_fallback;
+  bool adaptive_sync_fullscreen;
 };
 
 bool leme_output_init(struct leme_server *server);
@@ -51,6 +52,7 @@ bool leme_output_test_config(struct leme_server *server,
                              const struct leme_config *config);
 bool leme_output_apply_config(struct leme_server *server,
                               const struct leme_config *config, bool startup);
+bool leme_output_has_fullscreen(const struct leme_output *output);
 bool leme_output_set_power(struct leme_output *output, bool on);
 bool leme_output_set_enabled(struct leme_output *output, bool enabled);
 void leme_output_apply_enabled(struct leme_server *server,

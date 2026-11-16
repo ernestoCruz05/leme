@@ -398,11 +398,15 @@ leme_config_public_scalars(struct leme_public_builder *b,
       output_policy_value(b, config, &policy) != LEME_PUBLIC_OK ||
       pointer_value(b, config, &pointer) != LEME_PUBLIC_OK ||
       gestures_value(b, config, &gestures) != LEME_PUBLIC_OK ||
-      leme_public_object(b, 2, &cursor) != LEME_PUBLIC_OK ||
+      leme_public_object(b, 4, &cursor) != LEME_PUBLIC_OK ||
       leme_public_put_cstr(b, cursor, LEME_PUBLIC_TEXT("theme"),
                            config->cursor.theme) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, cursor, LEME_PUBLIC_TEXT("size"),
                           config->cursor.size) != LEME_PUBLIC_OK ||
+      leme_public_put_int(b, cursor, LEME_PUBLIC_TEXT("hide_after"),
+                          config->cursor.hide_after) != LEME_PUBLIC_OK ||
+      leme_public_put_bool(b, cursor, LEME_PUBLIC_TEXT("hide_when_typing"),
+                           config->cursor.hide_when_typing) != LEME_PUBLIC_OK ||
       leme_public_object(b, 1, &publication) != LEME_PUBLIC_OK ||
       put_enum(b, publication, LEME_PUBLIC_TEXT("activation"),
                leme_choice_activation[config->publication.activation]) !=

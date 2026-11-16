@@ -489,11 +489,13 @@ leme_config_parse_animation_block(const struct leme_option_parse *parse) {
                : LEME_OPTION_FATAL;
   }
   const enum leme_animation_event event =
-      strcmp(entry->name, "open") == 0    ? LEME_ANIMATION_OPEN
-      : strcmp(entry->name, "close") == 0 ? LEME_ANIMATION_CLOSE
-                                          : LEME_ANIMATION_MOVE;
+      strcmp(entry->name, "open") == 0       ? LEME_ANIMATION_OPEN
+      : strcmp(entry->name, "close") == 0    ? LEME_ANIMATION_CLOSE
+      : strcmp(entry->name, "overview") == 0 ? LEME_ANIMATION_OVERVIEW
+                                             : LEME_ANIMATION_MOVE;
   return leme_config_parse_animation_event(config, entry,
-                                           event != LEME_ANIMATION_MOVE,
+                                           event == LEME_ANIMATION_OPEN ||
+                                               event == LEME_ANIMATION_CLOSE,
                                            &config->animation[event])
              ? LEME_OPTION_ACCEPTED
              : LEME_OPTION_FATAL;
@@ -513,6 +515,10 @@ static const struct leme_option leme_animation_options[] = {
      .flags = LEME_OPTION_MULTI,
      .parse = leme_config_parse_animation_block},
     {.name = "move",
+     .kind = LEME_OPTION_CUSTOM,
+     .flags = LEME_OPTION_MULTI,
+     .parse = leme_config_parse_animation_block},
+    {.name = "overview",
      .kind = LEME_OPTION_CUSTOM,
      .flags = LEME_OPTION_MULTI,
      .parse = leme_config_parse_animation_block},

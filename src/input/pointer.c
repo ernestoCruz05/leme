@@ -64,6 +64,10 @@ void leme_input_process_motion(struct leme_server *server, uint32_t time_msec,
   struct leme_render_hit local;
   struct leme_render_hit *hit = result == NULL ? &local : result;
 
+  if (server->cursor_hidden) {
+    *hit = (struct leme_render_hit){0};
+    return;
+  }
   if (leme_desk_owner_handle_motion(server)) {
     *hit = (struct leme_render_hit){0};
     leme_input_pointer_resize_hover(server, hit);
@@ -175,6 +179,7 @@ static void leme_input_handle_motion(struct wl_listener *listener, void *data) {
                                     LEME_EDGE_EVENT_MOTION, 0)) {
     return;
   }
+  leme_input_cursor_activity(server, event->time_msec);
   if (leme_input_pointer_grab_active(server)) {
     wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
     wlr_seat_pointer_notify_motion(server->seat, event->time_msec,
@@ -203,6 +208,7 @@ static void leme_input_handle_motion_absolute(struct wl_listener *listener,
   double dy;
 
   leme_session_notify_activity(server);
+  leme_input_cursor_activity(server, event->time_msec);
   wlr_cursor_absolute_to_layout_coords(server->cursor, &event->pointer->base,
                                        event->x, event->y, &layout_x,
                                        &layout_y);
@@ -238,6 +244,7 @@ static void leme_input_handle_button(struct wl_listener *listener, void *data) {
                                     event->button)) {
     return;
   }
+  leme_input_cursor_activity(server, event->time_msec);
   if (leme_desk_owner_handle_button(server, event)) {
     return;
   }
@@ -288,6 +295,7 @@ static void leme_input_handle_axis(struct wl_listener *listener, void *data) {
       leme_input_edge_mutes(pointer->edge, LEME_EDGE_EVENT_AXIS, 0)) {
     return;
   }
+  leme_input_cursor_activity(server, event->time_msec);
   if (leme_desk_owner_handle_axis(server, event)) {
     return;
   }
@@ -330,6 +338,7 @@ static void leme_input_handle_swipe_begin(struct wl_listener *listener,
 
   if (!leme_input_pointer_edge_mutes(server, event->pointer,
                                      LEME_EDGE_EVENT_GESTURE, 0)) {
+    leme_input_cursor_activity(server, event->time_msec);
     leme_input_gesture_swipe_begin(server, event);
   }
 }
@@ -358,6 +367,7 @@ static void leme_input_handle_pinch_begin(struct wl_listener *listener,
 
   if (!leme_input_pointer_edge_mutes(server, event->pointer,
                                      LEME_EDGE_EVENT_GESTURE, 0)) {
+    leme_input_cursor_activity(server, event->time_msec);
     leme_input_gesture_pinch_begin(server, event);
   }
 }
@@ -386,6 +396,7 @@ static void leme_input_handle_hold_begin(struct wl_listener *listener,
 
   if (!leme_input_pointer_edge_mutes(server, event->pointer,
                                      LEME_EDGE_EVENT_GESTURE, 0)) {
+    leme_input_cursor_activity(server, event->time_msec);
     leme_input_gesture_hold_begin(server, event);
   }
 }

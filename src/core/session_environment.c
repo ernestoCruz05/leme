@@ -114,11 +114,17 @@ static bool leme_session_environment_target(char *action) {
 static bool leme_session_environment_reset_portals(void) {
   static char command[] = "systemctl";
   static char user_flag[] = "--user";
-  static char action[] = "reset-failed";
+  static char no_block_flag[] = "--no-block";
+  static char reset[] = "reset-failed";
   static char units[] = "xdg-desktop-portal*.service";
-  char *arguments[] = {command, user_flag, action, units, NULL};
+  static char restart[] = "try-restart";
+  static char frontend[] = "xdg-desktop-portal.service";
+  char *reset_arguments[] = {command, user_flag, reset, units, NULL};
+  char *restart_arguments[] = {command, user_flag, no_block_flag,
+                               restart, frontend,  NULL};
 
-  return leme_session_environment_spawn(arguments);
+  return leme_session_environment_spawn(reset_arguments) &&
+         leme_session_environment_spawn(restart_arguments);
 }
 
 static bool leme_session_environment_unset(void) {

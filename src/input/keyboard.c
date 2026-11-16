@@ -500,11 +500,12 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
                                                  keycode, layout, 0, &syms);
   modifiers = wlr_keyboard_get_modifiers(keyboard->keyboard);
   inhibited = leme_input_protocols_shortcuts_inhibited(keyboard->server);
-  if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
-      (modifiers &
-       (WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO)) == 0 &&
-      xkb_keysym_to_utf32(xkb_state_key_get_one_sym(
-          keyboard->keyboard->xkb_state, keycode)) != 0) {
+  const bool typing = event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+                      (modifiers & (WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT |
+                                    WLR_MODIFIER_LOGO)) == 0 &&
+                      xkb_keysym_to_utf32(xkb_state_key_get_one_sym(
+                          keyboard->keyboard->xkb_state, keycode)) != 0;
+  if (typing) {
     keyboard->server->typed_msec = event->time_msec;
   }
   if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
@@ -579,6 +580,16 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
         !leme_session_command_allowed(keyboard->server, &binding->command)) {
       binding = NULL;
     }
+    if (binding != NULL && binding->command.type == LEME_COMMAND_PASS) {
+      if (event->keycode < LEME_ARRAY_LENGTH(keyboard->handled) &&
+          leme_input_pass_press(keyboard->server, keyboard->keyboard,
+                                binding->command.text, event->time_msec,
+                                event->keycode)) {
+        keyboard->handled[event->keycode] = true;
+        return;
+      }
+      binding = NULL;
+    }
     if (binding != NULL) {
       const bool locks = leme_input_keysym_locks(binding->keysym);
 
@@ -610,6 +621,11 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
       }
       leme_command_execute(keyboard->server, &binding->command);
     }
+    if (!handled && keyboard->server->overview != NULL &&
+        event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
+      handled = true;
+      keyboard->handled[event->keycode] = true;
+    }
     if (!handled && !inhibited &&
         event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
       for (index = 0; index < count; index++) {
@@ -625,6 +641,8 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
              keyboard->handled[event->keycode]) {
     keyboard->handled[event->keycode] = false;
     keyboard->desktop_handled[event->keycode] = false;
+    leme_input_pass_release(keyboard->server, keyboard->keyboard,
+                            event->time_msec, event->keycode);
     if (keyboard->state_skipped[event->keycode]) {
       keyboard->state_skipped[event->keycode] = false;
       event->update_state = false;
@@ -632,6 +650,10 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
     handled = true;
   }
   if (!handled) {
+    if (typing && keyboard->server->config != NULL &&
+        keyboard->server->config->cursor.hide_when_typing) {
+      leme_input_cursor_hide(keyboard->server);
+    }
     wlr_seat_set_keyboard(keyboard->server->seat, keyboard->keyboard);
     wlr_seat_keyboard_notify_key(keyboard->server->seat, event->time_msec,
                                  event->keycode, event->state);
@@ -662,6 +684,7 @@ static void leme_input_handle_keyboard_destroy(struct wl_listener *listener,
 
   (void)data;
   leme_input_binding_repeat_stop(server);
+  leme_input_pass_keyboard_destroyed(server, keyboard->keyboard);
   wl_list_remove(&keyboard->keymap.link);
   wl_list_remove(&keyboard->key.link);
   wl_list_remove(&keyboard->modifiers.link);

@@ -29,7 +29,7 @@ output "HDMI-A-1" {
 | `position` | `X Y` | position in the layout |
 | `left_of`, `right_of`, `top_of`, `bottom_of` | a connector name | position next to another output |
 | `enabled` | `true`, `false` | `false` turns the output off and moves its windows to another one |
-| `adaptive_sync` | `true`, `false` | adaptive sync (VRR), off by default and ignored where unsupported |
+| `adaptive_sync` | `true`, `false`, `fullscreen` | adaptive sync (VRR), off by default and ignored where unsupported; `fullscreen` turns it on only while a window is fullscreen |
 
 `wlr-randr` lists connector names and modes. A block takes one relation, and
 `position` wins over it. Outputs that cannot be placed go to the right.

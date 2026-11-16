@@ -335,6 +335,16 @@ static const struct leme_option leme_cursor_options[] = {
      .min = 1,
      .max = LEME_CURSOR_SIZE_MAX,
      .effect = LEME_OPTION_EFFECT_CURSOR},
+    {.name = "hide_after",
+     .kind = LEME_OPTION_INT,
+     .offset = offsetof(struct leme_config, cursor.hide_after),
+     .max = 600000,
+     .unit = "ms",
+     .effect = LEME_OPTION_EFFECT_STORE},
+    {.name = "hide_when_typing",
+     .kind = LEME_OPTION_BOOL,
+     .offset = offsetof(struct leme_config, cursor.hide_when_typing),
+     .effect = LEME_OPTION_EFFECT_STORE},
 };
 
 const struct leme_option_block leme_cursor_block = {

@@ -4,6 +4,7 @@
 #include "desktop/drag.h"
 #include "desktop/buttons.h"
 #include "desktop/strip.h"
+#include "overview/overview.h"
 
 #include "config/config.h"
 #include "config/live.h"
@@ -354,6 +355,7 @@ void leme_server_finish(struct leme_server *server) {
   leme_session_environment_withdraw(server);
   leme_desk_buttons_finish(server);
   leme_desk_drag_finish(server);
+  leme_overview_close(server);
   leme_desk_owner_finish(server);
   leme_desk_decoration_finish(server);
   leme_desk_strip_finish(server);

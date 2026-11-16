@@ -10,6 +10,7 @@ struct leme_container;
 struct leme_output;
 struct leme_view;
 struct leme_workspace_transition;
+struct wlr_scene_tree;
 
 struct leme_workspace_transition *leme_render_workspace_transition_prepare(
     struct leme_output *output, uint16_t source_id, uint16_t destination_id,
@@ -27,6 +28,12 @@ bool leme_render_workspace_transition_set_gesture_range(
 bool leme_render_workspace_transition_presented_position(
     const struct leme_output *output, double *position);
 void leme_render_workspace_transition_finish(struct leme_output *output);
+bool leme_render_workspace_collect_tag(struct leme_output *output,
+                                       uint16_t tag_id,
+                                       struct wlr_scene_tree *composition,
+                                       const struct leme_view *active_view,
+                                       bool borders);
+void leme_render_workspace_refresh_views(struct leme_output *output);
 void leme_render_output_animations_finish(struct leme_output *output);
 bool leme_render_workspace_transition_active(const struct leme_output *output);
 void leme_render_workspace_transition_set_position(struct leme_output *output,

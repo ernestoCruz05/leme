@@ -166,6 +166,7 @@ bool leme_config_validate_command(const struct leme_config *config,
   }
   switch (command->type) {
   case LEME_COMMAND_MOVE_VIEW_TO_TAG:
+  case LEME_COMMAND_MOVE_TAG:
     return command->has_direction || command->tag_id <= config->max_tags;
   case LEME_COMMAND_FOCUS_TAG:
   case LEME_COMMAND_REMOVE_EMPTY_TAG:

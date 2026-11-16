@@ -882,12 +882,19 @@ bool leme_config_parse_output(struct leme_config *config,
       }
       target->disabled = !enabled;
     } else if (strcmp(entry->name, "adaptive_sync") == 0) {
+      bool adaptive;
+
       field = OUTPUT_ADAPTIVE_SYNC;
-      if (!leme_config_parse_boolean(entry->params[0],
-                                     &target->adaptive_sync)) {
+      if (strcmp(entry->params[0], "fullscreen") == 0) {
+        target->adaptive_sync = LEME_ADAPTIVE_SYNC_FULLSCREEN;
+      } else if (leme_config_parse_boolean(entry->params[0], &adaptive)) {
+        target->adaptive_sync =
+            adaptive ? LEME_ADAPTIVE_SYNC_ON : LEME_ADAPTIVE_SYNC_OFF;
+      } else {
         leme_config_set_error(
-            error, "%s:%d: output adaptive_sync must be true or false", path,
-            entry->lineno);
+            error,
+            "%s:%d: output adaptive_sync must be true, false or fullscreen",
+            path, entry->lineno);
         return false;
       }
     } else {

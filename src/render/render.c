@@ -23,6 +23,7 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/util/log.h>
 
 static void
 leme_render_handle_output_layout_change(struct wl_listener *listener,
@@ -64,6 +65,7 @@ void leme_render_init(struct leme_server *server) {
   server->scene_floating = wlr_scene_tree_create(&server->scene->tree);
   server->scene_minimized = wlr_scene_tree_create(&server->scene->tree);
   server->scene_durable = wlr_scene_tree_create(&server->scene->tree);
+  server->scene_overview = wlr_scene_tree_create(&server->scene->tree);
   server->scene_top = wlr_scene_tree_create(&server->scene->tree);
   server->scene_fullscreen = wlr_scene_tree_create(&server->scene->tree);
   server->scene_unmanaged = wlr_scene_tree_create(&server->scene->tree);
@@ -73,9 +75,10 @@ void leme_render_init(struct leme_server *server) {
   if (server->scene_output_layout == NULL || server->scene_background == NULL ||
       server->scene_bottom == NULL || server->scene_tiled == NULL ||
       server->scene_floating == NULL || server->scene_durable == NULL ||
-      server->scene_top == NULL || server->scene_fullscreen == NULL ||
-      server->scene_unmanaged == NULL || server->scene_overlay == NULL ||
-      server->scene_drag == NULL || server->scene_lock == NULL) {
+      server->scene_overview == NULL || server->scene_top == NULL ||
+      server->scene_fullscreen == NULL || server->scene_unmanaged == NULL ||
+      server->scene_overlay == NULL || server->scene_drag == NULL ||
+      server->scene_lock == NULL) {
     leme_render_finish(server);
     return;
   }
@@ -103,6 +106,7 @@ void leme_render_finish(struct leme_server *server) {
   server->scene_floating = NULL;
   server->scene_minimized = NULL;
   server->scene_durable = NULL;
+  server->scene_overview = NULL;
   server->scene_top = NULL;
   server->scene_fullscreen = NULL;
   server->scene_unmanaged = NULL;
@@ -279,6 +283,22 @@ void leme_render_output_frame(struct leme_output *output) {
   if (output->gamma_changed) {
     leme_gamma_apply(output, &state);
   }
+  if (output->adaptive_sync_fullscreen &&
+      output->wlr_output->adaptive_sync_supported) {
+    const bool adaptive = leme_output_has_fullscreen(output);
+
+    if (adaptive != (output->wlr_output->adaptive_sync_status ==
+                     WLR_OUTPUT_ADAPTIVE_SYNC_ENABLED)) {
+      wlr_output_state_set_adaptive_sync_enabled(&state, adaptive);
+      if (!wlr_output_test_state(output->wlr_output, &state)) {
+        state.committed &= ~(uint32_t)WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
+        output->adaptive_sync_fullscreen = false;
+        wlr_log(WLR_ERROR,
+                "leme: output %s refused the adaptive sync change, leaving it",
+                output->wlr_output->name);
+      }
+    }
+  }
   request_tearing = !output->tearing_fallback &&
                     leme_tearing_can_tear(output->server, output);
   if (output->tearing_fallback) {
@@ -295,9 +315,14 @@ void leme_render_output_frame(struct leme_output *output) {
     output->tearing_fallback = true;
     wlr_output_schedule_frame(output->wlr_output);
   }
+  const bool adaptive_changed =
+      (state.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED) != 0;
   wlr_output_state_finish(&state);
   if (!committed) {
     return;
+  }
+  if (adaptive_changed) {
+    leme_output_publish_configuration(output->server);
   }
   clock_gettime(CLOCK_MONOTONIC, &now);
   wlr_scene_output_send_frame_done(output->scene_output, &now);

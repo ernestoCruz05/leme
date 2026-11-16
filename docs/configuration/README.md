@@ -31,7 +31,7 @@ running config in place. See [configuration errors](config-errors.md).
 | [Keyboard](keyboard.md) | XKB layouts and repeat |
 | [Pointer](pointer.md) | libinput settings, per device |
 | [Gestures](gestures.md) | touchpad workspace swipes |
-| [Cursor](cursor.md) | cursor theme and size |
+| [Cursor](cursor.md) | cursor theme, size and hiding |
 | [Keybindings](keybindings.md) | binds, modes, binding groups |
 | [Startup and environment](startup-and-environment.md) | `exec` and `env` |
 | [Configuration errors](config-errors.md) | reading diagnostics, reload behavior |

@@ -33,7 +33,7 @@ the [syntax `timao` uses](timao.md#expressions). The roots are `views`, `tags`,
 `outputs`, `inputs`, `session`, `config`, `runtime` and `status`. An `act`
 expression has an action at its root, or an `if` that chooses between actions.
 `act` accepts the [commands](commands.md) except `spawn`, `quit`,
-`switch_vt` and `act`.
+`switch_vt`, `act` and `pass`.
 
 A reply has `type: "reply"`, the request `id`, `ok` and either `value` or
 `error`. An error has `code`, `message` and `phase`, plus `expr_path` when it

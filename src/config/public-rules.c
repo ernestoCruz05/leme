@@ -129,6 +129,18 @@ static const char *transform_name(enum leme_output_transform transform) {
   return NULL;
 }
 
+static const char *adaptive_sync_name(enum leme_adaptive_sync adaptive_sync) {
+  switch (adaptive_sync) {
+  case LEME_ADAPTIVE_SYNC_OFF:
+    return "off";
+  case LEME_ADAPTIVE_SYNC_ON:
+    return "on";
+  case LEME_ADAPTIVE_SYNC_FULLSCREEN:
+    return "fullscreen";
+  }
+  return NULL;
+}
+
 static const char *relation_name(enum leme_output_relation relation) {
   switch (relation) {
   case LEME_OUTPUT_RELATION_NONE:
@@ -196,8 +208,8 @@ output_value(struct leme_public_builder *b,
   if (output->configured &&
       (leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("enabled"),
                             !output->disabled) != LEME_PUBLIC_OK ||
-       leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("adaptive_sync"),
-                            output->adaptive_sync) != LEME_PUBLIC_OK ||
+       put_name(b, record, LEME_PUBLIC_TEXT("adaptive_sync"),
+                adaptive_sync_name(output->adaptive_sync)) != LEME_PUBLIC_OK ||
        leme_public_put_number(b, record, LEME_PUBLIC_TEXT("scale"),
                               (double)output->scale) != LEME_PUBLIC_OK ||
        put_name(b, record, LEME_PUBLIC_TEXT("transform"),

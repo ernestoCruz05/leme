@@ -2,7 +2,8 @@
 
 Animations are off until the `animation` block turns them on, one event at a
 time: `open` and `close` for windows appearing and disappearing, `move` for
-windows changing place or size, and `workspace` for tag switches.
+windows changing place or size, `workspace` for tag switches, and `overview`
+for the [tag overview](tags.md#overview).
 
 ```scfg
 animation {
@@ -31,7 +32,7 @@ An empty block such as `open { }` turns that event on with the defaults below.
 
 ## Window events
 
-`open`, `close` and `move` take these keys:
+`open`, `close`, `move` and `overview` take these keys:
 
 | Key | Values | Default | Effect |
 | --- | --- | --- | --- |
@@ -48,8 +49,8 @@ Switching a tag to or from the desktop layout uses `move` too.
 
 ## Springs
 
-A `spring` block in `open`, `close`, `move` or `workspace` replaces `duration`,
-`curve` and `opacity_curve`:
+A `spring` block in `open`, `close`, `move`, `overview` or `workspace` replaces
+`duration`, `curve` and `opacity_curve`:
 
 ```scfg
 animation {

@@ -1,7 +1,7 @@
 # Commands
 
 Commands go in [bindings](../configuration/keybindings.md), desktop menus and
-`timao`. `timao` cannot run `spawn`, `quit`, `switch_vt` or `act`.
+`timao`. `timao` cannot run `spawn`, `quit`, `switch_vt`, `act` or `pass`.
 
 `DIR` is `left`, `right`, `up` or `down`. Ids, counts and pixel amounts are
 positive integers unless a row says otherwise.
@@ -15,6 +15,8 @@ positive integers unless a row says otherwise.
 | `focus_tag ID` | tag `ID` |
 | `focus_last_tag` | the tag you were on before |
 | `move_view_to_tag next\|previous\|ID [follow]` | moves the focused window to a tag; `follow` goes with it |
+| `move_tag next\|previous\|ID` | moves the current tag to another slot |
+| `toggle_overview` | opens or closes the [tag overview](../configuration/tags.md#overview) |
 | `remove_empty_tag ID` | removes an empty tag above `initial` |
 | `set_layout dwindle\|master_stack\|desktop` | layout of the focused tag |
 | `switch_layout` | cycles dwindle, master-stack and desktop |
@@ -126,6 +128,7 @@ can be bound to plain keys.
 | --- | --- |
 | `spawn PROGRAM [ARG ...]` | starts a program, without a shell |
 | `act EXPRESSION` | runs an [action expression](../configuration/keybindings.md#expressions) |
+| `pass APP` | sends the binding's key to the window whose app id matches `APP`, focused or not |
 | `reload_config` | reloads the config file |
 | `mode NAME` | switches to a [binding mode](../configuration/keybindings.md#modes) |
 | `cycle_keyboard_layout` | next keyboard layout |

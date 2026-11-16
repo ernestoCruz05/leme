@@ -2,6 +2,7 @@
 #include "output/control.h"
 #include "output/home.h"
 #include "output/output.h"
+#include "overview/overview.h"
 #include "desktop/menu.h"
 #include "desktop/owner.h"
 #include "public/server.h"
@@ -168,6 +169,24 @@ static bool leme_output_logical_size(
   return true;
 }
 
+bool leme_output_has_fullscreen(const struct leme_output *output) {
+  const struct leme_view *view;
+
+  if (output->tags.focused_is_candidate) {
+    return false;
+  }
+  wl_list_for_each(view, &output->server->views, link) {
+    const struct leme_tag *tag = leme_ownership_tag(view);
+
+    if (view->mapped && view->fullscreen && tag != NULL &&
+        tag->id == output->tags.focused_id &&
+        leme_view_output(view) == output) {
+      return true;
+    }
+  }
+  return false;
+}
+
 struct leme_output_plan {
   struct leme_output *output;
   struct leme_output_config entry;
@@ -221,7 +240,7 @@ static bool leme_output_build_plans(struct leme_server *server,
     if (plan->mode == NULL) {
       plan->mode = wlr_output_preferred_mode(output->wlr_output);
     }
-    if (startup && plan->entry.adaptive_sync &&
+    if (startup && plan->entry.adaptive_sync != LEME_ADAPTIVE_SYNC_OFF &&
         !output->wlr_output->adaptive_sync_supported) {
       wlr_log(WLR_INFO,
               "leme: output %s does not support adaptive sync, leaving it off",
@@ -339,8 +358,10 @@ leme_output_build_persistent(struct leme_server *server,
       head->state.scale = plan->entry.scale;
       head->state.transform = leme_output_transform(plan->entry.transform);
       head->state.adaptive_sync_enabled =
-          plan->entry.adaptive_sync &&
-          plan->output->wlr_output->adaptive_sync_supported;
+          plan->output->wlr_output->adaptive_sync_supported &&
+          (plan->entry.adaptive_sync == LEME_ADAPTIVE_SYNC_ON ||
+           (plan->entry.adaptive_sync == LEME_ADAPTIVE_SYNC_FULLSCREEN &&
+            leme_output_has_fullscreen(plan->output)));
     }
   }
   if (leme_output_heads_overlap(configuration)) {
@@ -1135,6 +1156,19 @@ bool leme_output_test_config(struct leme_server *server,
   return valid;
 }
 
+static void leme_output_follow_fullscreen(struct leme_server *server,
+                                          const struct leme_config *config) {
+  struct leme_output *output;
+
+  wl_list_for_each(output, &server->outputs, link) {
+    const struct leme_output_config *entry =
+        leme_output_config_for(config, output->wlr_output->name);
+
+    output->adaptive_sync_fullscreen =
+        entry != NULL && entry->adaptive_sync == LEME_ADAPTIVE_SYNC_FULLSCREEN;
+  }
+}
+
 bool leme_output_apply_config(struct leme_server *server,
                               const struct leme_config *config, bool startup) {
   struct wlr_output_configuration_v1 *configuration;
@@ -1150,6 +1184,7 @@ bool leme_output_apply_config(struct leme_server *server,
   if (!startup &&
       leme_output_configuration_matches_current(server, configuration)) {
     wlr_output_configuration_v1_destroy(configuration);
+    leme_output_follow_fullscreen(server, config);
     return true;
   }
   committed = leme_output_commit_and_reconcile(server, configuration);
@@ -1157,6 +1192,7 @@ bool leme_output_apply_config(struct leme_server *server,
   if (!committed) {
     return false;
   }
+  leme_output_follow_fullscreen(server, config);
   leme_output_publish_configuration(server);
   if (server->focused_output != NULL) {
     wlr_log(WLR_INFO, "leme: output %s active at %dx%d %.3f Hz scale %.2f",
@@ -1425,6 +1461,7 @@ static void leme_output_handle_manager_apply(struct wl_listener *listener,
     struct leme_output *output;
 
     wl_list_for_each(output, &server->outputs, link) {
+      output->adaptive_sync_fullscreen = false;
       if (output->disabled && output->wlr_output->enabled) {
         output->disabled = false;
         leme_output_restore_homes(output);
@@ -1659,7 +1696,7 @@ static void leme_output_handle_destroy(struct wl_listener *listener,
   bool was_active = server->focused_output == output;
 
   (void)data;
-  if (was_active) {
+  if (was_active || leme_overview_hides(output)) {
     leme_desk_owner_cancel(server);
   } else {
     leme_desk_menu_close(server);

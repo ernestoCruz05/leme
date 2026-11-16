@@ -94,6 +94,7 @@ uint16_t leme_tags_adjacent_id(const struct leme_tags *tags,
 bool leme_tags_focus_last(struct leme_tags *tags);
 bool leme_tags_restore_focus(struct leme_tags *tags, uint16_t id);
 bool leme_tags_remove_empty(struct leme_tags *tags, uint16_t id);
+bool leme_tags_move(struct leme_tags *tags, uint16_t from, uint16_t to);
 bool leme_tags_assign_view_to(struct leme_tags *tags, struct leme_view *view,
                               uint16_t id);
 struct leme_view *leme_tags_insert_anchor(const struct leme_tag *tag,

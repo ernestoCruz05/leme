@@ -5,6 +5,7 @@
 #include "desktop/desktop.h"
 #include "input/input.h"
 #include "output/output.h"
+#include "overview/overview.h"
 #include "protocols/session.h"
 #include "render/animation.h"
 #include "render/render.h"
@@ -151,6 +152,7 @@ static bool leme_workspace_tag_is_capturable(const struct leme_output *output,
 struct leme_workspace_collection {
   struct wlr_scene_tree *source;
   struct wlr_scene_tree *destination;
+  bool borders;
 };
 
 static bool leme_workspace_collect_parent(
@@ -198,6 +200,13 @@ static bool leme_workspace_collect_parent(
       return false;
     }
     leme_render_view_apply_snapshot(view, &nodes, view == active_view);
+    for (size_t index = 0;
+         !collection->borders && index < LEME_ARRAY_LENGTH(nodes.border);
+         index++) {
+      if (nodes.border[index] != NULL) {
+        wlr_scene_node_set_enabled(&nodes.border[index]->node, false);
+      }
+    }
     wlr_scene_node_set_position(
         &copy->node,
         leme_workspace_coordinate_subtract(copy->node.x, output->full_box.x),
@@ -223,10 +232,11 @@ static bool leme_workspace_tag_is_desktop(const struct leme_output *output,
   return settings.layout == LEME_LAYOUT_DESKTOP;
 }
 
-static bool leme_workspace_collect_tag(struct leme_output *output,
+bool leme_render_workspace_collect_tag(struct leme_output *output,
                                        uint16_t tag_id,
                                        struct wlr_scene_tree *composition,
-                                       const struct leme_view *active_view) {
+                                       const struct leme_view *active_view,
+                                       bool borders) {
   if (!leme_workspace_tag_is_capturable(output, tag_id)) {
     return false;
   }
@@ -244,6 +254,7 @@ static bool leme_workspace_collect_tag(struct leme_output *output,
              &(struct leme_workspace_collection){
                  .source = output->server->scene_tiled,
                  .destination = composition,
+                 .borders = borders,
              },
              active_view) &&
          leme_workspace_collect_parent(
@@ -251,6 +262,7 @@ static bool leme_workspace_collect_tag(struct leme_output *output,
              &(struct leme_workspace_collection){
                  .source = output->server->scene_floating,
                  .destination = composition,
+                 .borders = borders,
              },
              active_view);
 }
@@ -391,8 +403,8 @@ leme_workspace_transition_prepare_with_ops(
     goto fail;
   }
   if (previous == NULL) {
-    if (!leme_workspace_collect_tag(output, source_id, transition->outgoing,
-                                    NULL)) {
+    if (!leme_render_workspace_collect_tag(output, source_id,
+                                           transition->outgoing, NULL, true)) {
       goto fail;
     }
   } else {
@@ -410,8 +422,9 @@ leme_workspace_transition_prepare_with_ops(
     leme_render_output_animations_finish(output);
     previous_finished = true;
   }
-  if (!leme_workspace_collect_tag(output, destination_id, transition->incoming,
-                                  destination_focus)) {
+  if (!leme_render_workspace_collect_tag(output, destination_id,
+                                         transition->incoming,
+                                         destination_focus, true)) {
     goto fail;
   }
   transition->cache[0] = (struct leme_workspace_snapshot_slot){
@@ -475,8 +488,7 @@ leme_render_workspace_transition_prepare_gesture(
   return transition;
 }
 
-static void
-leme_render_workspace_transition_refresh_views(struct leme_output *output) {
+void leme_render_workspace_refresh_views(struct leme_output *output) {
   struct leme_view *view;
 
   if (output == NULL || output->server == NULL ||
@@ -540,7 +552,7 @@ static void leme_render_workspace_transition_done(void *data) {
         leme_output_tags(output)->position_active = false;
       }
     }
-    leme_render_workspace_transition_refresh_views(output);
+    leme_render_workspace_refresh_views(output);
     leme_desk_sync(output->server);
     leme_input_pointer_rebase(output->server);
   }
@@ -570,7 +582,7 @@ void leme_render_workspace_transition_commit(
   output->workspace_transition = transition;
   wlr_scene_node_set_enabled(&transition->master->node, true);
   leme_workspace_transition_sync_cache_visibility(transition);
-  leme_render_workspace_transition_refresh_views(output);
+  leme_render_workspace_refresh_views(output);
   leme_desk_sync(output->server);
 
   for (i = 0; i < transition->ring_count; i++) {
@@ -646,7 +658,7 @@ void leme_render_workspace_transition_begin_gesture(
       }
     }
   }
-  leme_render_workspace_transition_refresh_views(output);
+  leme_render_workspace_refresh_views(output);
   leme_desk_sync(output->server);
 }
 
@@ -825,8 +837,8 @@ static struct wlr_scene_tree *leme_workspace_transition_get_or_create_slot(
     return NULL;
   }
   wlr_scene_node_set_enabled(&scratch->node, false);
-  if (!leme_workspace_collect_tag(transition->output, tag_id, scratch,
-                                  active_view)) {
+  if (!leme_render_workspace_collect_tag(transition->output, tag_id, scratch,
+                                         active_view, true)) {
     wlr_scene_node_destroy(&scratch->node);
     return NULL;
   }
@@ -932,7 +944,7 @@ static bool leme_workspace_transition_apply_position(struct leme_output *output,
     transition->incoming_id = new_incoming_id;
     transition->destination_id = new_incoming_id;
     leme_workspace_transition_sync_cache_visibility(transition);
-    leme_render_workspace_transition_refresh_views(output);
+    leme_render_workspace_refresh_views(output);
   }
 
   spec = leme_workspace_effect_animation_spec(transition->effect,
@@ -1087,13 +1099,16 @@ bool leme_render_workspace_transition_hides_view(const struct leme_view *view) {
       leme_ownership_tag(view)->owner == NULL) {
     return false;
   }
-  return leme_workspace_transition_hides_tag(
-      leme_ownership_tag(view)->owner->output, leme_ownership_tag(view)->id);
+  return leme_overview_hides(leme_ownership_tag(view)->owner->output) ||
+         leme_workspace_transition_hides_tag(
+             leme_ownership_tag(view)->owner->output,
+             leme_ownership_tag(view)->id);
 }
 
 bool leme_render_workspace_transition_hides_container(
     const struct leme_container *container) {
-  return leme_workspace_transition_hides_tag(container->tag->owner->output,
+  return leme_overview_hides(container->tag->owner->output) ||
+         leme_workspace_transition_hides_tag(container->tag->owner->output,
                                              container->tag->id);
 }
 

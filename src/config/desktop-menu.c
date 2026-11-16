@@ -200,6 +200,12 @@ static bool leme_config_desktop_menu_row(struct leme_config *config,
     leme_config_finish_command(&entry->command);
     return false;
   }
+  if (entry->command.type == LEME_COMMAND_PASS) {
+    *fatal =
+        !leme_config_reject(config, row, 1, "pass only works on key bindings");
+    leme_config_finish_command(&entry->command);
+    return false;
+  }
   if (!leme_config_desktop_menu_placeholders(config, row, menu, &entry->command,
                                              fatal)) {
     leme_config_finish_command(&entry->command);

@@ -183,7 +183,7 @@ PUBLIC_SCHEMA(OUTPUT_CONFIG, "output_config", true,
       "Transform supported by the configuration adapter"),
   PUBLIC_FIELD("enabled", BOOLEAN, false, false, NULL, SENSITIVE, ALWAYS, NULL,
       "False keeps the output off and its windows on other outputs"),
-  PUBLIC_FIELD("adaptive_sync", BOOLEAN, false, false, NULL, SENSITIVE, ALWAYS, NULL,
+  PUBLIC_FIELD("adaptive_sync", ADAPTIVE_SYNC, false, false, NULL, SENSITIVE, ALWAYS, NULL,
       "Requested adaptive sync; ignored on outputs that do not support it")
 )
 PUBLIC_SCHEMA(CONFIGURED_MODE, "configured_mode", false,
@@ -216,7 +216,11 @@ PUBLIC_SCHEMA(CURSOR, "cursor", false,
   PUBLIC_FIELD("theme", STRING, true, true, NULL, SENSITIVE, ALWAYS, "config_writes",
       "Requested cursor theme; null selects backend default"),
   PUBLIC_FIELD("size", CURSOR_SIZE, false, true, "logical_px", SENSITIVE, ALWAYS, "config_writes",
-      "Requested cursor size")
+      "Requested cursor size"),
+  PUBLIC_FIELD("hide_after", CURSOR_HIDE_AFTER, false, true, "ms", SENSITIVE, ALWAYS, "config_writes",
+      "Idle time before the cursor hides; 0 never hides it"),
+  PUBLIC_FIELD("hide_when_typing", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
+      "Whether typing hides the cursor")
 )
 PUBLIC_SCHEMA(POINTER_DEFAULTS, "pointer_defaults", false,
   PUBLIC_FIELD("accel_profile", PROFILE, false, true, NULL, SENSITIVE, ALWAYS, "config_writes",
@@ -451,6 +455,8 @@ PUBLIC_SCHEMA(ANIMATION, "animation", false,
       "Window close animation"),
   PUBLIC_FIELD("move", ANIMATION_EVENT, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Tiled window move and resize animation"),
+  PUBLIC_FIELD("overview", ANIMATION_EVENT, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Tag overview animation"),
   PUBLIC_FIELD("workspace", WORKSPACE_ANIMATION, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Workspace switching animation")
 )

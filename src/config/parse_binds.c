@@ -514,6 +514,24 @@ bool leme_config_parse_bind_block(struct leme_config *config,
       }
       continue;
     }
+    if (binding->command.type == LEME_COMMAND_PASS &&
+        (binding->trigger != LEME_BINDING_KEY || binding->repeat)) {
+      const struct leme_reject_extra extra = {
+          .help = "a held key already repeats in the app that gets it"};
+      const bool kept =
+          binding->repeat
+              ? leme_config_reject_detailed(config, entry, 0, &extra, "%s",
+                                            "pass cannot repeat")
+              : leme_config_reject(config, entry, 0,
+                                   "pass only works on key bindings");
+
+      leme_command_finish(&binding->command);
+      if (!kept) {
+        free(binding_directives);
+        return false;
+      }
+      continue;
+    }
     binding_directives[group->binding_count] = entry;
     group->binding_count++;
   }

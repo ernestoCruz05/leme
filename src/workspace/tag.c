@@ -12,6 +12,7 @@
 #include "shell/container.h"
 #include "core/server.h"
 #include "output/output.h"
+#include "overview/overview.h"
 #include "protocols/publication.h"
 #include "render/render.h"
 #include "render/workspace_transition.h"
@@ -737,6 +738,55 @@ bool leme_tags_remove_empty(struct leme_tags *tags, uint16_t id) {
   return leme_tags_prune_empty(tags, tags->table[id]);
 }
 
+bool leme_tags_move(struct leme_tags *tags, uint16_t from, uint16_t to) {
+  uint16_t ids[LEME_TAGS_RING_MAX];
+  const size_t count = leme_tags_navigable(tags, ids, LEME_ARRAY_LENGTH(ids));
+  size_t source = count;
+  size_t target = count;
+
+  for (size_t index = 0; index < count; index++) {
+    if (ids[index] == from) {
+      source = index;
+    }
+    if (ids[index] == to) {
+      target = index;
+    }
+  }
+  if (source == count || target == count || source == target) {
+    return false;
+  }
+  if (tags->focused_is_candidate) {
+    if (materialize(tags, tags->focused_id) == NULL) {
+      return false;
+    }
+    tags->focused_is_candidate = false;
+  }
+  struct leme_tag *moved = tags->table[from];
+  const struct leme_tag *focused = tags->table[tags->focused_id];
+  const struct leme_tag *previous =
+      tags->previous_valid ? tags->table[tags->previous_id] : NULL;
+
+  for (size_t index = source; index != target;) {
+    const size_t next = source < target ? index + 1 : index - 1;
+
+    tags->table[ids[index]] = tags->table[ids[next]];
+    tags->table[ids[index]]->id = ids[index];
+    index = next;
+  }
+  tags->table[to] = moved;
+  moved->id = to;
+  tags->focused_id = focused->id;
+  if (previous != NULL) {
+    tags->previous_id = previous->id;
+  }
+  for (size_t index = 0; index < count; index++) {
+    (void)leme_tags_prune_empty(tags, tags->table[ids[index]]);
+  }
+  leme_public_server_invalidate(tags->server);
+  leme_publication_invalidate(tags->server);
+  return true;
+}
+
 bool leme_tags_assign_view_to(struct leme_tags *tags, struct leme_view *view,
                               uint16_t id) {
   struct leme_tag *tag;
@@ -1407,6 +1457,9 @@ void leme_tags_refresh_visibility(struct leme_tags *tags) {
   leme_view_refresh_begin(server);
   leme_tags_refresh_visibility_with_focus(tags, true);
   leme_view_refresh_end(server);
+  if (tags != NULL) {
+    leme_overview_refresh(tags->output);
+  }
 }
 
 void leme_tags_refresh_visibility_passive(struct leme_tags *tags) {
@@ -1414,6 +1467,9 @@ void leme_tags_refresh_visibility_passive(struct leme_tags *tags) {
   leme_view_refresh_begin(server);
   leme_tags_refresh_visibility_with_focus(tags, false);
   leme_view_refresh_end(server);
+  if (tags != NULL) {
+    leme_overview_refresh(tags->output);
+  }
 }
 
 static size_t leme_tags_collect_members(const struct leme_tags *tags,

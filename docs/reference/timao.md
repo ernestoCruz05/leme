@@ -15,7 +15,7 @@ timao watch '(get (session) "mode")'
 
 | Form | Effect |
 | --- | --- |
-| `timao COMMAND [ARG ...]` | runs a [command](commands.md), except `spawn`, `quit`, `switch_vt` and `act` |
+| `timao COMMAND [ARG ...]` | runs a [command](commands.md), except `spawn`, `quit`, `switch_vt`, `act` and `pass` |
 | `timao get ROOT [FIELD ...]` | prints a value once |
 | `timao watch ROOT [FIELD ...]` | prints a value every time it changes |
 | `timao query EXPRESSION` | evaluates an expression once |

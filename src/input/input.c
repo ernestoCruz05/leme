@@ -119,6 +119,10 @@ void leme_input_finish(struct leme_server *server) {
     server->binding_repeat_timer = NULL;
   }
   server->binding_repeat = NULL;
+  if (server->cursor_hide_timer != NULL) {
+    wl_event_source_remove(server->cursor_hide_timer);
+    server->cursor_hide_timer = NULL;
+  }
   leme_input_listener_remove(&server->new_input);
   leme_input_listener_remove(&server->new_virtual_keyboard);
   leme_input_listener_remove(&server->new_virtual_pointer);

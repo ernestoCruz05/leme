@@ -178,13 +178,16 @@ leme_config_public_animation(struct leme_public_builder *b,
   if (config == NULL)
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
   struct leme_public_value *record = NULL, *open = NULL, *close = NULL,
-                           *move = NULL, *workspace = NULL, *wrapper = NULL;
-  if (leme_public_object(b, 4, &record) != LEME_PUBLIC_OK ||
+                           *move = NULL, *overview = NULL, *workspace = NULL,
+                           *wrapper = NULL;
+  if (leme_public_object(b, 5, &record) != LEME_PUBLIC_OK ||
       event_value(b, &config->animation[LEME_ANIMATION_OPEN], &open) !=
           LEME_PUBLIC_OK ||
       event_value(b, &config->animation[LEME_ANIMATION_CLOSE], &close) !=
           LEME_PUBLIC_OK ||
       event_value(b, &config->animation[LEME_ANIMATION_MOVE], &move) !=
+          LEME_PUBLIC_OK ||
+      event_value(b, &config->animation[LEME_ANIMATION_OVERVIEW], &overview) !=
           LEME_PUBLIC_OK ||
       workspace_value(b, &config->workspace_animation, &workspace) !=
           LEME_PUBLIC_OK ||
@@ -194,6 +197,8 @@ leme_config_public_animation(struct leme_public_builder *b,
           LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("move"), move) !=
           LEME_PUBLIC_OK ||
+      leme_public_object_set(b, record, LEME_PUBLIC_TEXT("overview"),
+                             overview) != LEME_PUBLIC_OK ||
       leme_public_object_set(b, record, LEME_PUBLIC_TEXT("workspace"),
                              workspace) != LEME_PUBLIC_OK ||
       leme_public_object(b, 1, &wrapper) != LEME_PUBLIC_OK ||

@@ -56,3 +56,18 @@ one block.
 Outer and smart gaps come from [appearance](appearance.md#gaps). A reload only
 resets a tag's runtime layout and resize changes when its settings in the file
 changed.
+
+## Overview
+
+`toggle_overview` shows the focused output's tags as thumbnails, to pick one or
+reorder them. A moved tag takes the number of the slot it lands in, and the
+tags in between shift by one.
+
+| Key | Effect |
+| --- | --- |
+| arrows | select a tag |
+| `Return` | go to the selected tag |
+| `Space` | lift the selected tag, move it with the arrows, drop it with `Space` or `Return` |
+| `Escape` | put a lifted tag back, or close |
+
+A click goes to a tag and a drag moves it.

@@ -82,3 +82,9 @@ LEME_COMMAND(OUTPUT_TOGGLE, "output_toggle", "NAME", LOCKED_ALLOWED,
 LEME_COMMAND(OUTPUT_POWER, "output_power", "NAME on|off|toggle", LOCKED_ALLOWED,
              ARG_NAME(false) ARG_CHOICE(leme_command_switches, output_switch))
 LEME_COMMAND(ACT, "act", "EXPRESSION", LOCAL_ONLY, ARG_TEXT)
+LEME_COMMAND(PASS, "pass", "APP", LOCAL_ONLY | LOCKED_REFUSED,
+             ARG_NAME(false))
+LEME_COMMAND(MOVE_TAG, "move_tag", "next|previous|ID",
+             NEEDS_TAGS | CANCELS_GRAB, ARG_TAG_OR_STEP)
+LEME_COMMAND(TOGGLE_OVERVIEW, "toggle_overview", "",
+             NEEDS_TAGS | CANCELS_GRAB | LOCKED_REFUSED, )

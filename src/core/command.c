@@ -9,6 +9,7 @@
 #include "desktop/target.h"
 #include "core/server.h"
 #include "output/output.h"
+#include "overview/overview.h"
 #include "workspace/tag.h"
 #include "shell/scratchpad.h"
 #include "shell/sticky.h"
@@ -19,6 +20,7 @@
 #include "protocols/input.h"
 #include "protocols/session.h"
 #include "protocols/toplevel.h"
+#include "render/workspace_transition.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -138,6 +140,12 @@ bool leme_command_execute(struct leme_server *server,
   if ((spec->flags & LEME_COMMAND_FLAG_CANCELS_GRAB) != 0) {
     leme_input_pointer_grab_cancel_tiled(server);
   }
+  if (command->type != LEME_COMMAND_TOGGLE_OVERVIEW &&
+      (spec->flags &
+       (LEME_COMMAND_FLAG_NEEDS_TAGS | LEME_COMMAND_FLAG_NEEDS_VIEW |
+        LEME_COMMAND_FLAG_CANCELS_GRAB)) != 0) {
+    leme_overview_close(server);
+  }
   switch (command->type) {
   case LEME_COMMAND_FOCUS_NEXT_TAG:
   case LEME_COMMAND_FOCUS_PREVIOUS_TAG: {
@@ -162,6 +170,36 @@ bool leme_command_execute(struct leme_server *server,
     }
     leme_command_refresh_tag(server);
     return true;
+  case LEME_COMMAND_TOGGLE_OVERVIEW:
+    leme_overview_toggle(server);
+    return true;
+  case LEME_COMMAND_MOVE_TAG: {
+    uint16_t ids[LEME_TAGS_RING_MAX];
+    const size_t count = leme_tags_navigable(tags, ids, LEME_ARRAY_LENGTH(ids));
+    uint16_t target = command->tag_id;
+
+    for (size_t index = 0; command->has_direction && index < count; index++) {
+      if (ids[index] != tags->focused_id) {
+        continue;
+      }
+      if (command->direction == LEME_DIRECTION_RIGHT) {
+        target = index + 1 < count ? ids[index + 1] : ids[index];
+      } else {
+        target = index > 0 ? ids[index - 1] : ids[index];
+      }
+    }
+    if (target == tags->focused_id) {
+      return true;
+    }
+    leme_render_workspace_transition_finish(tags->output);
+    leme_input_workspace_gesture_cancel(server);
+    if (!leme_tags_move(tags, tags->focused_id, target)) {
+      wlr_log(WLR_ERROR, "leme: cannot move the tag to %u", target);
+      return false;
+    }
+    leme_command_refresh_tag(server);
+    return true;
+  }
   case LEME_COMMAND_FOCUS_DIRECTION:
     if (!leme_view_focus_direction(server, command->direction)) {
       wlr_log(WLR_DEBUG, "%s", "leme: no directional focus candidate");
@@ -456,6 +494,9 @@ bool leme_command_execute(struct leme_server *server,
     wlr_log(WLR_ERROR, "%s",
             "leme: gesture_move and gesture_resize only run from a swipe "
             "binding");
+    return false;
+  case LEME_COMMAND_PASS:
+    wlr_log(WLR_ERROR, "%s", "leme: pass only runs from a key binding");
     return false;
   case LEME_COMMAND_SPAWN:
     return leme_process_spawn_detached(server, command->argv);

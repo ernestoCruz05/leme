@@ -155,6 +155,16 @@ const struct leme_binding *leme_input_gesture_binding(
     enum leme_edge_side edge);
 void leme_input_gesture_run(struct leme_server *server,
                             const struct leme_binding *binding);
+void leme_input_cursor_hide(struct leme_server *server);
+void leme_input_cursor_activity(struct leme_server *server, uint32_t time_msec);
+bool leme_input_pass_press(struct leme_server *server,
+                           struct wlr_keyboard *keyboard, const char *pattern,
+                           uint32_t time_msec, uint32_t keycode);
+void leme_input_pass_release(struct leme_server *server,
+                             const struct wlr_keyboard *keyboard,
+                             uint32_t time_msec, uint32_t keycode);
+void leme_input_pass_keyboard_destroyed(struct leme_server *server,
+                                        const struct wlr_keyboard *keyboard);
 bool leme_input_pointer_gesture_grab_begin(struct leme_server *server,
                                            bool resize);
 void leme_input_pointer_gesture_grab_motion(struct leme_server *server,

@@ -143,6 +143,7 @@ struct leme_server {
   struct wlr_scene_tree *scene_floating;
   struct wlr_scene_tree *scene_minimized;
   struct wlr_scene_tree *scene_durable;
+  struct wlr_scene_tree *scene_overview;
   struct wlr_scene_tree *scene_top;
   struct wlr_scene_tree *scene_fullscreen;
   struct wlr_scene_tree *scene_unmanaged;
@@ -170,6 +171,8 @@ struct leme_server {
   struct wl_event_source *publication_idle;
   struct wl_event_source *pointer_rebase_idle;
   struct wl_event_source *binding_repeat_timer;
+  struct wl_event_source *cursor_hide_timer;
+  bool cursor_hidden;
   const struct leme_binding *binding_repeat;
   int binding_repeat_interval;
   struct wl_list workspace_entries;
@@ -194,6 +197,7 @@ struct leme_server {
   struct leme_desk_owner_state desk_owner;
   struct leme_desk_drag *desk_drag;
   struct leme_desk_menu *desk_menu;
+  struct leme_overview *overview;
   struct leme_desk_prompt *desk_prompt;
   struct leme_xwayland *xwayland;
   struct leme_input_protocols *input_protocols;
@@ -212,6 +216,11 @@ struct leme_server {
   struct wl_list pointers;
   struct wl_list switches;
   struct wl_event_source *switch_sync;
+  struct wlr_surface *pass_surface;
+  struct wl_listener pass_surface_destroy;
+  const struct wlr_keyboard *pass_keyboards[8];
+  uint32_t pass_keycodes[8];
+  size_t pass_count;
   struct wlr_cursor *cursor;
   struct leme_mode *modes;
   size_t mode_count;

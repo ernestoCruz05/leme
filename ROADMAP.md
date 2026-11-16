@@ -42,14 +42,16 @@ in [limitations](docs/reference/limitations.md).
 ## Next
 
 - Input methods and text input.
-- Drop shadows, and animations for bars, launchers and notifications.
-- Monocle, grid and centered master layouts.
+- Animations for bars, launchers and notifications.
+- Grid and centered master layouts.
 - Moving and swapping tags between monitors.
 - Terminal swallowing.
 - An overview of all windows and tags.
 
 ## Planned
 
+- Drop shadows.
+- A monocle layout.
 - Touchscreens, drawing tablets and pads.
 - Custom shaders: shaders compiled to SPIR-V, applied to windows or outputs on
   both the GLES2 and Vulkan renderers.

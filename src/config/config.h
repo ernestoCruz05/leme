@@ -44,6 +44,12 @@ enum leme_output_transform {
   LEME_OUTPUT_TRANSFORM_270,
 };
 
+enum leme_adaptive_sync {
+  LEME_ADAPTIVE_SYNC_OFF,
+  LEME_ADAPTIVE_SYNC_ON,
+  LEME_ADAPTIVE_SYNC_FULLSCREEN,
+};
+
 struct leme_output_config {
   char *name;
   int width;
@@ -57,7 +63,7 @@ struct leme_output_config {
   enum leme_output_relation relation;
   bool configured;
   bool disabled;
-  bool adaptive_sync;
+  enum leme_adaptive_sync adaptive_sync;
   bool has_mode;
   bool has_refresh;
   bool has_position;
@@ -87,6 +93,8 @@ struct leme_output_policy {
 struct leme_cursor_config {
   char *theme;
   int size;
+  int hide_after;
+  bool hide_when_typing;
 };
 
 enum leme_tag_field {
