@@ -70,6 +70,7 @@ bool leme_config_bindings_overlap(const struct leme_binding *first,
                                   const struct leme_binding *second);
 void leme_config_set_error(char **error, const char *format, ...);
 void leme_config_finish_command(struct leme_command *command);
+bool leme_config_add_overview_mode(struct leme_config *config);
 bool leme_config_check_command(const struct leme_command *command,
                                char **error);
 bool leme_config_copy_command(struct leme_command *destination,

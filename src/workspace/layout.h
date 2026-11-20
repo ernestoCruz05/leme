@@ -121,8 +121,8 @@ struct leme_view *leme_layout_directional_candidate(
     const struct leme_view *origin, enum leme_direction direction);
 bool leme_layout_swap_views(struct leme_layout_node *root,
                             struct leme_view *first, struct leme_view *second);
-struct leme_layout_detach *
-leme_layout_detach_view(struct leme_layout_node **root, struct leme_view *view);
+struct leme_layout_detach *leme_layout_detach_view(struct leme_layout *layout,
+                                                   struct leme_view *view);
 bool leme_layout_restore_view(struct leme_layout_node **root,
                               struct leme_layout_detach **detach);
 bool leme_layout_insert_detached(struct leme_layout_node **root,

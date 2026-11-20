@@ -383,6 +383,8 @@ PUBLIC_SCHEMA(BINDING_MODE, "binding_mode", false,
       "Configured binding mode name"),
   PUBLIC_FIELD("escape_exits", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Escape returns from this mode"),
+  PUBLIC_FIELD("oneshot", BOOLEAN, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "The next key press returns from this mode"),
   PUBLIC_FIELD("bindings", BINDINGS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Bindings in configuration order")
 )
@@ -406,7 +408,7 @@ PUBLIC_SCHEMA(GESTURE, "gesture", false,
   PUBLIC_FIELD("fingers", GESTURE_FINGERS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Fingers on the touchpad"),
   PUBLIC_FIELD("direction", GESTURE_DIRECTION, true, true, NULL, SENSITIVE, ALWAYS, NULL,
-      "Direction the fingers move; null for holds and directionless swipes"),
+      "Direction the fingers move, or begin for a hold that runs at once; null for holds and directionless swipes"),
   PUBLIC_FIELD("edge", EDGE_SIDE, true, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Touchpad edge the finger slides along; null for other gestures")
 )

@@ -312,16 +312,23 @@ static bool leme_layout_direction_valid(enum leme_direction direction) {
   return direction >= LEME_DIRECTION_LEFT && direction <= LEME_DIRECTION_DOWN;
 }
 
-struct leme_layout_detach *
-leme_layout_detach_view(struct leme_layout_node **root,
-                        struct leme_view *view) {
+struct leme_layout_detach *leme_layout_detach_view(struct leme_layout *layout,
+                                                   struct leme_view *view) {
   struct leme_layout_detach *detach;
   struct leme_layout_node *leaf;
   struct leme_layout_node *branch;
   struct leme_layout_node *sibling;
   struct leme_layout_node *grandparent;
 
-  if (root == NULL || *root == NULL || view == NULL) {
+  if (layout == NULL || view == NULL) {
+    return NULL;
+  }
+  if (layout->kind == LEME_LAYOUT_MASTER_STACK) {
+    return calloc(1, sizeof(*detach));
+  }
+  struct leme_layout_node **const root = &layout->root;
+
+  if (*root == NULL) {
     return NULL;
   }
   leaf = leme_layout_find(*root, view);
@@ -371,6 +378,11 @@ bool leme_layout_restore_view(struct leme_layout_node **root,
     return false;
   }
   detach = *detach_ptr;
+  if (detach->leaf == NULL) {
+    free(detach);
+    *detach_ptr = NULL;
+    return true;
+  }
   if (detach->branch == NULL) {
     if (*root != NULL) {
       return false;

@@ -108,9 +108,10 @@ static enum leme_public_status binding_value(struct leme_public_builder *b,
       [LEME_EDGE_BOTTOM] = "bottom",
   };
   static const char *const directions[] = {
-      [LEME_GESTURE_UP] = "up",     [LEME_GESTURE_DOWN] = "down",
-      [LEME_GESTURE_LEFT] = "left", [LEME_GESTURE_RIGHT] = "right",
-      [LEME_GESTURE_IN] = "in",     [LEME_GESTURE_OUT] = "out",
+      [LEME_GESTURE_UP] = "up",       [LEME_GESTURE_DOWN] = "down",
+      [LEME_GESTURE_LEFT] = "left",   [LEME_GESTURE_RIGHT] = "right",
+      [LEME_GESTURE_IN] = "in",       [LEME_GESTURE_OUT] = "out",
+      [LEME_GESTURE_BEGIN] = "begin",
   };
   const bool key = binding->trigger == LEME_BINDING_KEY;
   char keysym[128] = {0};
@@ -193,13 +194,15 @@ leme_config_public_modes(struct leme_public_builder *b,
     if (mode->binding_count != 0 && mode->bindings == NULL)
       return leme_public_fail(b, LEME_PUBLIC_INVALID);
     struct leme_public_value *record = NULL, *bindings = NULL;
-    if (leme_public_object(b, 3, &record) != LEME_PUBLIC_OK ||
+    if (leme_public_object(b, 4, &record) != LEME_PUBLIC_OK ||
         leme_public_array(b, mode->binding_count, &bindings) !=
             LEME_PUBLIC_OK ||
         leme_public_put_cstr(b, record, LEME_PUBLIC_TEXT("name"), mode->name) !=
             LEME_PUBLIC_OK ||
         leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("escape_exits"),
-                             mode->escape_exits) != LEME_PUBLIC_OK)
+                             mode->escape_exits) != LEME_PUBLIC_OK ||
+        leme_public_put_bool(b, record, LEME_PUBLIC_TEXT("oneshot"),
+                             mode->oneshot) != LEME_PUBLIC_OK)
       return leme_public_builder_status(b);
     for (size_t n = 0; n < mode->binding_count; ++n) {
       struct leme_public_value *binding = NULL;

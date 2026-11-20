@@ -475,6 +475,48 @@ static bool leme_config_default_binding(struct leme_mode *mode, size_t index,
   return true;
 }
 
+bool leme_config_add_overview_mode(struct leme_config *config) {
+  static const struct {
+    xkb_keysym_t keysym;
+    enum leme_overview_action action;
+  } keys[] = {
+      {XKB_KEY_Left, LEME_OVERVIEW_LEFT},
+      {XKB_KEY_Right, LEME_OVERVIEW_RIGHT},
+      {XKB_KEY_Up, LEME_OVERVIEW_UP},
+      {XKB_KEY_Down, LEME_OVERVIEW_DOWN},
+      {XKB_KEY_space, LEME_OVERVIEW_LIFT},
+      {XKB_KEY_Return, LEME_OVERVIEW_ACCEPT},
+      {XKB_KEY_KP_Enter, LEME_OVERVIEW_ACCEPT},
+      {XKB_KEY_Escape, LEME_OVERVIEW_CANCEL},
+  };
+  const size_t count = sizeof(keys) / sizeof(keys[0]);
+  struct leme_mode *modes =
+      realloc(config->modes, (config->mode_count + 1) * sizeof(*modes));
+  struct leme_mode *mode;
+
+  if (modes == NULL) {
+    return false;
+  }
+  config->modes = modes;
+  mode = &config->modes[config->mode_count];
+  *mode = (struct leme_mode){.escape_exits = true};
+  mode->name = strdup("overview");
+  mode->bindings = calloc(count, sizeof(*mode->bindings));
+  if (mode->name == NULL || mode->bindings == NULL) {
+    free(mode->name);
+    free(mode->bindings);
+    return false;
+  }
+  for (size_t index = 0; index < count; index++) {
+    leme_config_default_binding(mode, index, 0, keys[index].keysym,
+                                LEME_COMMAND_OVERVIEW);
+    mode->bindings[index].command.overview = keys[index].action;
+  }
+  mode->binding_count = count;
+  config->mode_count++;
+  return true;
+}
+
 struct leme_config *leme_config_defaults(void) {
   struct leme_config *config = calloc(1, sizeof(*config));
   struct leme_mode *common;
@@ -509,7 +551,7 @@ struct leme_config *leme_config_defaults(void) {
           .threshold = 0.5,
           .deceleration = 0.997,
           .velocity_window_ms = 150,
-  };
+      };
   config->gestures.edges =
       (struct leme_edge_gesture_settings){.size = 8.0, .step = 5.0};
   config->publication.activation = LEME_ACTIVATION_FOLLOW;
@@ -566,7 +608,8 @@ struct leme_config *leme_config_defaults(void) {
                               WLR_MODIFIER_LOGO | WLR_MODIFIER_SHIFT, XKB_KEY_m,
                               LEME_COMMAND_RESTORE_MINIMIZED);
   if (common->bindings[0].command.text == NULL ||
-      common->bindings[1].command.argv == NULL) {
+      common->bindings[1].command.argv == NULL ||
+      !leme_config_add_overview_mode(config)) {
     leme_config_destroy(config);
     return NULL;
   }

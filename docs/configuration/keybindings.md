@@ -70,6 +70,33 @@ binds "game" {
 }
 ```
 
+A mode with `oneshot true` goes back to `common` after the next key, bound or
+not:
+
+```scfg
+binds "tag" {
+    oneshot true
+    n focus_next_tag
+    p focus_previous_tag
+}
+```
+
+While the [tag overview](tags.md#overview) is open, the `overview` mode comes
+before `common`. Without a `binds "overview"` block it has these bindings:
+
+```scfg
+binds "overview" {
+    Left overview left
+    Right overview right
+    Up overview up
+    Down overview down
+    space overview lift
+    Return overview accept
+    KP_Enter overview accept
+    Escape overview cancel
+}
+```
+
 ## Binding groups
 
 A `bind_group` holds bindings that modes pull in with `inherit`:
@@ -125,9 +152,12 @@ binds "common" {
 | `swipe:F` | 3 to 5 | none, only with `gesture_move` or `gesture_resize` |
 | `pinch:F:DIR` | 2 to 5 | `in`, `out` |
 | `hold:F` | 1 to 5 | none |
+| `hold:F:begin` | 1 to 5 | none |
 | `edge:SIDE:DIR` | 1 | `up`, `down` on the `left` and `right` edges; `left`, `right` on the `top` and `bottom` edges |
 
 Swipes, pinches and holds run their command when you lift your fingers.
+`hold:F:begin` runs as soon as the fingers rest, even if they then swipe or
+pinch.
 Directions follow your fingers, whatever `natural_scroll` says, and `repeat`
 does not work on gestures.
 [`gesture_move` and `gesture_resize`](../reference/commands.md#gestures) move

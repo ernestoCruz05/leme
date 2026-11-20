@@ -12,6 +12,7 @@
 #include "desktop/buttons.h"
 #include "desktop/drag.h"
 #include "desktop/owner.h"
+#include "overview/overview.h"
 #include "protocols/input.h"
 #include "protocols/session.h"
 
@@ -313,22 +314,31 @@ static void leme_input_binding_repeat_stop(struct leme_server *server) {
   }
 }
 
+static struct leme_mode *leme_input_find_mode(const struct leme_server *server,
+                                              const char *name) {
+  for (size_t index = 0; index < server->mode_count; index++) {
+    if (strcmp(server->modes[index].name, name) == 0) {
+      return &server->modes[index];
+    }
+  }
+  return NULL;
+}
+
 bool leme_input_set_mode(struct leme_server *server, const char *name) {
-  size_t index;
+  struct leme_mode *mode;
 
   if (name == NULL) {
     return false;
   }
   leme_input_binding_repeat_stop(server);
-  for (index = 0; index < server->mode_count; index++) {
-    if (strcmp(server->modes[index].name, name) == 0) {
-      server->active_mode = &server->modes[index];
-      leme_public_server_invalidate(server);
-      leme_ipc_invalidate(server);
-      return true;
-    }
+  mode = leme_input_find_mode(server, name);
+  if (mode == NULL) {
+    return false;
   }
-  return false;
+  server->active_mode = mode;
+  leme_public_server_invalidate(server);
+  leme_ipc_invalidate(server);
+  return true;
 }
 
 void leme_input_replace_modes(struct leme_server *server,
@@ -345,22 +355,20 @@ void leme_input_replace_modes(struct leme_server *server,
   }
 }
 
-static struct leme_binding *leme_input_find_binding(struct leme_server *server,
-                                                    uint32_t modifiers,
-                                                    const xkb_keysym_t *syms,
-                                                    int count) {
+static struct leme_binding *
+leme_input_find_binding(const struct leme_mode *mode, uint32_t modifiers,
+                        const xkb_keysym_t *syms, int count) {
   size_t binding_index;
   int symbol_index;
 
-  if (server->active_mode == NULL) {
+  if (mode == NULL) {
     return NULL;
   }
   modifiers &= WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT |
                WLR_MODIFIER_LOGO;
-  for (binding_index = 0; binding_index < server->active_mode->binding_count;
+  for (binding_index = 0; binding_index < mode->binding_count;
        binding_index++) {
-    struct leme_binding *binding =
-        &server->active_mode->bindings[binding_index];
+    struct leme_binding *binding = &mode->bindings[binding_index];
     if (binding->trigger != LEME_BINDING_KEY ||
         binding->modifiers != modifiers) {
       continue;
@@ -445,31 +453,48 @@ static int leme_input_handle_binding_repeat(void *data) {
   return 0;
 }
 
-static struct leme_binding *leme_input_find_binding_other_layouts(
-    struct leme_keyboard *keyboard, xkb_keycode_t keycode,
-    xkb_layout_index_t active, uint32_t modifiers) {
+static struct leme_binding *
+leme_input_mode_binding(const struct leme_keyboard *keyboard,
+                        const struct leme_mode *mode, xkb_keycode_t keycode,
+                        xkb_layout_index_t active, uint32_t modifiers,
+                        const xkb_keysym_t *syms, int count) {
   struct xkb_keymap *keymap = keyboard->keyboard->keymap;
+  struct leme_binding *binding =
+      leme_input_find_binding(mode, modifiers, syms, count);
   xkb_layout_index_t layouts;
 
-  if (keymap == NULL) {
-    return NULL;
+  if (binding != NULL || mode == NULL || keymap == NULL) {
+    return binding;
   }
   layouts = xkb_keymap_num_layouts_for_key(keymap, keycode);
   for (xkb_layout_index_t layout = 0; layout < layouts; layout++) {
-    const xkb_keysym_t *syms = NULL;
-    struct leme_binding *binding;
-    int count;
+    const xkb_keysym_t *other = NULL;
+    int other_count;
 
     if (layout == active) {
       continue;
     }
-    count = xkb_keymap_key_get_syms_by_level(keymap, keycode, layout, 0, &syms);
-    binding = leme_input_find_binding(keyboard->server, modifiers, syms, count);
+    other_count =
+        xkb_keymap_key_get_syms_by_level(keymap, keycode, layout, 0, &other);
+    binding = leme_input_find_binding(mode, modifiers, other, other_count);
     if (binding != NULL) {
       return binding;
     }
   }
   return NULL;
+}
+
+static const struct leme_mode *
+leme_input_overlay_mode(const struct leme_server *server) {
+  return server->overview != NULL ? leme_input_find_mode(server, "overview")
+                                  : NULL;
+}
+
+static bool leme_input_keysym_modifier(xkb_keysym_t keysym) {
+  return (keysym >= XKB_KEY_Shift_L && keysym <= XKB_KEY_Hyper_R) ||
+         keysym == XKB_KEY_ISO_Level3_Shift ||
+         keysym == XKB_KEY_ISO_Level5_Shift || keysym == XKB_KEY_Mode_switch ||
+         keysym == XKB_KEY_Num_Lock;
 }
 
 static void leme_input_handle_key(struct wl_listener *listener, void *data) {
@@ -528,11 +553,13 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
       }
     }
     if (leme_desk_owner_modal(keyboard->server)) {
-      binding =
-          leme_input_find_binding(keyboard->server, modifiers, syms, count);
+      binding = leme_input_mode_binding(
+          keyboard, leme_input_overlay_mode(keyboard->server), keycode, layout,
+          modifiers, syms, count);
       if (binding == NULL) {
-        binding = leme_input_find_binding_other_layouts(keyboard, keycode,
-                                                        layout, modifiers);
+        binding =
+            leme_input_mode_binding(keyboard, keyboard->server->active_mode,
+                                    keycode, layout, modifiers, syms, count);
       }
       char utf8[128] = {0};
       const int length = xkb_state_key_get_utf8(keyboard->keyboard->xkb_state,
@@ -552,20 +579,35 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
         return;
       }
     }
-    if (!inhibited && !leme_session_locked(keyboard->server) &&
-        (keyboard->server->active_mode == NULL ||
-         keyboard->server->active_mode->escape_exits)) {
-      for (index = 0; index < count; index++) {
-        if (syms[index] == XKB_KEY_Escape) {
-          leme_input_set_mode(keyboard->server, "common");
-          break;
-        }
-      }
+    bool oneshot = !inhibited && !leme_session_locked(keyboard->server) &&
+                   keyboard->server->active_mode != NULL &&
+                   keyboard->server->active_mode->oneshot;
+    bool escape = false;
+
+    for (index = 0; index < count; index++) {
+      escape = escape || syms[index] == XKB_KEY_Escape;
+      oneshot = oneshot && !leme_input_keysym_modifier(syms[index]);
     }
-    binding = leme_input_find_binding(keyboard->server, modifiers, syms, count);
+    const struct leme_mode *const overlay =
+        leme_input_overlay_mode(keyboard->server);
+    const struct leme_mode *const active = keyboard->server->active_mode;
+    const bool entered = overlay != NULL && active != NULL &&
+                         strcmp(active->name, "common") != 0;
+    bool left = false;
+
+    binding = leme_input_mode_binding(keyboard, entered ? active : overlay,
+                                      keycode, layout, modifiers, syms, count);
     if (binding == NULL) {
-      binding = leme_input_find_binding_other_layouts(keyboard, keycode, layout,
-                                                      modifiers);
+      if (escape && !inhibited && !leme_session_locked(keyboard->server) &&
+          (active == NULL || active->escape_exits)) {
+        leme_input_set_mode(keyboard->server, "common");
+        left = entered;
+      }
+      if (!left) {
+        binding = leme_input_mode_binding(
+            keyboard, entered ? overlay : keyboard->server->active_mode,
+            keycode, layout, modifiers, syms, count);
+      }
     }
     if (binding != NULL && inhibited && !leme_input_binding_reserved(binding)) {
       binding = NULL;
@@ -586,6 +628,9 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
                                 binding->command.text, event->time_msec,
                                 event->keycode)) {
         keyboard->handled[event->keycode] = true;
+        if (oneshot) {
+          leme_input_set_mode(keyboard->server, "common");
+        }
         return;
       }
       binding = NULL;
@@ -619,12 +664,24 @@ static void leme_input_handle_key(struct wl_listener *listener, void *data) {
                                        delay > 0 ? delay : 1);
         }
       }
+      oneshot = oneshot && binding->command.type != LEME_COMMAND_SET_MODE;
       leme_command_execute(keyboard->server, &binding->command);
+    }
+    if (oneshot && keyboard->server->active_mode != NULL &&
+        keyboard->server->active_mode->oneshot) {
+      leme_input_set_mode(keyboard->server, "common");
+      if (event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
+        handled = true;
+        keyboard->handled[event->keycode] = true;
+      }
     }
     if (!handled && keyboard->server->overview != NULL &&
         event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {
       handled = true;
       keyboard->handled[event->keycode] = true;
+      if (escape && !left) {
+        leme_overview_act(keyboard->server, LEME_OVERVIEW_CANCEL);
+      }
     }
     if (!handled && !inhibited &&
         event->keycode < LEME_ARRAY_LENGTH(keyboard->handled)) {

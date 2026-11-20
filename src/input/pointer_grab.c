@@ -600,6 +600,11 @@ static void leme_input_pointer_grab_motion(
     }
     grab->drop_target = target;
     grab->drop_direction = drop.direction;
+    if (leme_ownership_tag(target) != NULL &&
+        leme_ownership_tag(target)->layout.kind == LEME_LAYOUT_MASTER_STACK &&
+        leme_ownership_tag(target) == leme_ownership_tag(grab->view)) {
+      drop.box = leme_render_view_content_box(target, target->box);
+    }
     if (!leme_render_view_show_drop_preview(target, drop.box) &&
         !grab->preview_failed) {
       wlr_log(WLR_ERROR, "%s", "leme: failed to render tiled drop preview");

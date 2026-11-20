@@ -755,10 +755,15 @@ bool leme_view_drop_to_output(struct leme_view *view,
   if (detach == NULL || *detach == NULL || !view->detached) {
     return false;
   }
+  const bool rooted =
+      leme_ownership_tag(view) != NULL &&
+      leme_ownership_tag(view)->layout.kind == LEME_LAYOUT_DWINDLE;
+
   if (!leme_view_adopt_to_output(view, output, true, false)) {
     return false;
   }
-  if (target != NULL) {
+  if (target != NULL && rooted &&
+      leme_ownership_tag(view)->layout.kind == LEME_LAYOUT_DWINDLE) {
     return leme_view_commit_tiled_drag(view, detach, target, direction);
   }
   leme_layout_discard_detached(detach);
@@ -1212,8 +1217,7 @@ bool leme_view_begin_tiled_drag(struct leme_view *view,
   if (view == NULL || detach == NULL || *detach != NULL || !view->mapped ||
       view->unmanaged ||
       leme_view_geometry_owner(view) != LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
-      view->detached || view->fullscreen || leme_ownership_tag(view) == NULL ||
-      !leme_layout_drag_supported(&leme_ownership_tag(view)->layout)) {
+      view->detached || view->fullscreen || leme_ownership_tag(view) == NULL) {
     return false;
   }
   tags = leme_focused_tags(view->server);
@@ -1223,8 +1227,7 @@ bool leme_view_begin_tiled_drag(struct leme_view *view,
     return false;
   }
   box = view->box;
-  *detach =
-      leme_layout_detach_view(&leme_ownership_tag(view)->layout.root, view);
+  *detach = leme_layout_detach_view(&leme_ownership_tag(view)->layout, view);
   if (*detach == NULL) {
     return false;
   }
@@ -1245,9 +1248,18 @@ bool leme_view_commit_tiled_drag(struct leme_view *view,
       leme_ownership_tag(target) != leme_ownership_tag(view) ||
       !target->mapped ||
       leme_view_geometry_owner(target) != LEME_VIEW_GEOMETRY_TAG_LAYOUT ||
-      target->detached || target->fullscreen ||
-      !leme_layout_insert_detached(&leme_ownership_tag(view)->layout.root,
-                                   detach, target, direction)) {
+      target->detached || target->fullscreen) {
+    return false;
+  }
+  struct leme_tag *tag = leme_ownership_tag(view);
+
+  if (tag->layout.kind == LEME_LAYOUT_MASTER_STACK) {
+    if (!leme_tags_swap_list_order(tag, view, target)) {
+      return false;
+    }
+    leme_layout_discard_detached(detach);
+  } else if (!leme_layout_insert_detached(&tag->layout.root, detach, target,
+                                          direction)) {
     return false;
   }
   view->detached = false;

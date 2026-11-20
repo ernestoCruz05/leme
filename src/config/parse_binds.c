@@ -151,6 +151,8 @@ static bool leme_config_parse_trigger(const char *text,
       binding->direction = LEME_GESTURE_IN;
     } else if (strcasecmp(direction, "out") == 0) {
       binding->direction = LEME_GESTURE_OUT;
+    } else if (strcasecmp(direction, "begin") == 0) {
+      binding->direction = LEME_GESTURE_BEGIN;
     } else {
       valid = false;
     }
@@ -158,14 +160,16 @@ static bool leme_config_parse_trigger(const char *text,
   switch (binding->trigger) {
   case LEME_BINDING_SWIPE:
     valid = valid && binding->direction != LEME_GESTURE_IN &&
-            binding->direction != LEME_GESTURE_OUT;
+            binding->direction != LEME_GESTURE_OUT &&
+            binding->direction != LEME_GESTURE_BEGIN;
     break;
   case LEME_BINDING_PINCH:
     valid = valid && (binding->direction == LEME_GESTURE_IN ||
                       binding->direction == LEME_GESTURE_OUT);
     break;
   case LEME_BINDING_HOLD:
-    valid = valid && direction == NULL;
+    valid = valid &&
+            (direction == NULL || binding->direction == LEME_GESTURE_BEGIN);
     break;
   case LEME_BINDING_EDGE:
     valid = valid &&
@@ -289,6 +293,7 @@ bool leme_config_parse_bind_block(struct leme_config *config,
   struct leme_bind_group *group;
   size_t index;
   bool seen_escape_exits = false;
+  bool seen_oneshot = false;
 
   if (directive->params_len != 1) {
     leme_config_set_error(error, "%s:%d: %s requires one name", path,
@@ -389,6 +394,30 @@ bool leme_config_parse_bind_block(struct leme_config *config,
       seen_escape_exits = true;
       continue;
     }
+    if (strcmp(entry->name, "oneshot") == 0) {
+      const char *problem = NULL;
+
+      if (!is_mode) {
+        problem = "oneshot belongs to a binds block, not a bind_group";
+      } else if (seen_oneshot || entry->params_len != 1) {
+        problem = "oneshot takes one value and may appear once";
+      } else if (strcmp(group->name, "common") == 0) {
+        problem = "oneshot cannot be set on common";
+      } else if (strcmp(entry->params[0], "true") == 0) {
+        group->oneshot = true;
+      } else if (strcmp(entry->params[0], "false") != 0) {
+        problem = "oneshot must be true or false";
+      }
+      if (problem != NULL) {
+        if (!leme_config_reject(config, entry, -1, problem)) {
+          free(binding_directives);
+          return false;
+        }
+        continue;
+      }
+      seen_oneshot = true;
+      continue;
+    }
     bindings = realloc(group->bindings,
                        (group->binding_count + 1) * sizeof(*bindings));
     if (bindings == NULL) {
@@ -419,10 +448,11 @@ bool leme_config_parse_bind_block(struct leme_config *config,
                            "with on or off";
       } else if (binding->trigger != LEME_BINDING_KEY) {
         what = "gesture";
-        extra.help = "gestures are swipe:3-5 with up, down, left or right, "
-                     "pinch:2-5 with in or out, hold:1-5, edge:left or "
-                     "edge:right with up or down, and edge:top or "
-                     "edge:bottom with left or right";
+        extra.help =
+            "gestures are swipe:3-5 with up, down, left or right, "
+            "pinch:2-5 with in or out, hold:1-5 or hold:1-5:begin, edge:left or "
+            "edge:right with up or down, and edge:top or "
+            "edge:bottom with left or right";
       }
       if (!leme_config_reject_detailed(config, entry, -1, &extra,
                                        "invalid %s %s", what, entry->name)) {
@@ -662,6 +692,7 @@ static bool leme_config_materialize_mode(struct leme_config *config,
   mode = &config->modes[config->mode_count];
   *mode = (struct leme_mode){0};
   mode->escape_exits = group->escape_exits;
+  mode->oneshot = group->oneshot;
   mode->name = strdup(group->name);
   if (mode->name == NULL) {
     leme_config_set_error(error, "%s:%d: out of memory", path, group->lineno);
@@ -699,7 +730,7 @@ static bool leme_config_materialize_mode(struct leme_config *config,
       has_exit = true;
     }
   }
-  if (!mode->escape_exits && !has_exit) {
+  if (!mode->escape_exits && !mode->oneshot && !has_exit) {
     leme_config_set_error(
         error, "%s:%d: mode %s keeps Escape but binds no mode command", path,
         group->lineno, mode->name);
@@ -724,6 +755,15 @@ bool leme_config_resolve_binds(struct leme_config *config,
                                       error)) {
       return false;
     }
+  }
+  for (index = 0; index < config->mode_count; index++) {
+    if (strcmp(config->modes[index].name, "overview") == 0) {
+      return true;
+    }
+  }
+  if (!leme_config_add_overview_mode(config)) {
+    leme_config_set_error(error, "%s:1: out of memory", path);
+    return false;
   }
   return true;
 }

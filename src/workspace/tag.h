@@ -95,6 +95,7 @@ bool leme_tags_focus_last(struct leme_tags *tags);
 bool leme_tags_restore_focus(struct leme_tags *tags, uint16_t id);
 bool leme_tags_remove_empty(struct leme_tags *tags, uint16_t id);
 bool leme_tags_move(struct leme_tags *tags, uint16_t from, uint16_t to);
+bool leme_tags_swap(struct leme_tags *tags, uint16_t first, uint16_t second);
 bool leme_tags_assign_view_to(struct leme_tags *tags, struct leme_view *view,
                               uint16_t id);
 struct leme_view *leme_tags_insert_anchor(const struct leme_tag *tag,
@@ -112,6 +113,8 @@ struct leme_view *
 leme_tags_pointer_drop_target(const struct leme_tags *tags,
                               const struct leme_view *excluded, double layout_x,
                               double layout_y);
+bool leme_tags_swap_list_order(struct leme_tag *tag, struct leme_view *first,
+                               struct leme_view *second);
 bool leme_tags_swap_directional(struct leme_tags *tags, struct leme_view *view,
                                 enum leme_direction direction);
 struct leme_box leme_tags_tiled_area(const struct leme_tag *tag,

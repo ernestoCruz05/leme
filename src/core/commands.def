@@ -88,3 +88,7 @@ LEME_COMMAND(MOVE_TAG, "move_tag", "next|previous|ID",
              NEEDS_TAGS | CANCELS_GRAB, ARG_TAG_OR_STEP)
 LEME_COMMAND(TOGGLE_OVERVIEW, "toggle_overview", "",
              NEEDS_TAGS | CANCELS_GRAB | LOCKED_REFUSED, )
+LEME_COMMAND(OVERVIEW, "overview", "left|right|up|down|lift|accept|cancel",
+             LOCKED_REFUSED, ARG_CHOICE(leme_command_overview, overview))
+LEME_COMMAND(OVERVIEW_SELECT, "overview_select", "ID", LOCKED_REFUSED, ARG_TAG)
+LEME_COMMAND(OVERVIEW_SWAP, "overview_swap", "ID", LOCKED_REFUSED, ARG_TAG)

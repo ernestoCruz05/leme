@@ -12,9 +12,10 @@ hides the others. At an output edge, `cross_output_focus` and
 | SUPER-drag | moves it | lifts it out and shows where it will drop |
 | SUPER-right-drag | resizes from the nearest edge or corner | moves the split at that edge |
 
-Escape during a tiled drag puts the window back. Dragging onto another output
-needs `cross_output_drag`. On desktop tags, windows also move by their
-titlebar; see [desktop layout](../configuration/desktop.md).
+Escape during a tiled drag puts the window back. On master-stack tags the drop
+swaps the two windows. Dragging onto another output needs `cross_output_drag`.
+On desktop tags, windows also move by their titlebar; see
+[desktop layout](../configuration/desktop.md).
 
 ## Sticky windows
 

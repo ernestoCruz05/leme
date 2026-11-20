@@ -70,4 +70,5 @@ tags in between shift by one.
 | `Space` | lift the selected tag, move it with the arrows, drop it with `Space` or `Return` |
 | `Escape` | put a lifted tag back, or close |
 
-A click goes to a tag and a drag moves it.
+A click goes to a tag and a drag moves it. The keys are the default bindings
+of the [`overview` mode](keybindings.md#modes).

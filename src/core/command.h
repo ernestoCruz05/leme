@@ -80,6 +80,16 @@ enum leme_output_switch {
   LEME_OUTPUT_SWITCH_TOGGLE,
 };
 
+enum leme_overview_action {
+  LEME_OVERVIEW_LEFT,
+  LEME_OVERVIEW_RIGHT,
+  LEME_OVERVIEW_UP,
+  LEME_OVERVIEW_DOWN,
+  LEME_OVERVIEW_LIFT,
+  LEME_OVERVIEW_ACCEPT,
+  LEME_OVERVIEW_CANCEL,
+};
+
 struct leme_command {
   enum leme_command_type type;
   uint16_t tag_id;
@@ -89,6 +99,7 @@ struct leme_command {
   enum leme_layout_kind layout;
   enum leme_view_placement placement;
   enum leme_output_switch output_switch;
+  enum leme_overview_action overview;
   int amount;
   bool follow;
   bool backward;

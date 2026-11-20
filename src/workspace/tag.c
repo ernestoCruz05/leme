@@ -79,9 +79,8 @@ static size_t leme_tags_tiled_views(const struct leme_tag *tag,
   return count;
 }
 
-static bool leme_tags_swap_list_order(struct leme_tag *tag,
-                                      struct leme_view *first,
-                                      struct leme_view *second) {
+bool leme_tags_swap_list_order(struct leme_tag *tag, struct leme_view *first,
+                               struct leme_view *second) {
   struct wl_list *first_prev;
   struct wl_list *second_prev;
 
@@ -738,7 +737,8 @@ bool leme_tags_remove_empty(struct leme_tags *tags, uint16_t id) {
   return leme_tags_prune_empty(tags, tags->table[id]);
 }
 
-bool leme_tags_move(struct leme_tags *tags, uint16_t from, uint16_t to) {
+static bool leme_tags_reorder(struct leme_tags *tags, uint16_t from,
+                              uint16_t to, bool swap) {
   uint16_t ids[LEME_TAGS_RING_MAX];
   const size_t count = leme_tags_navigable(tags, ids, LEME_ARRAY_LENGTH(ids));
   size_t source = count;
@@ -766,7 +766,11 @@ bool leme_tags_move(struct leme_tags *tags, uint16_t from, uint16_t to) {
   const struct leme_tag *previous =
       tags->previous_valid ? tags->table[tags->previous_id] : NULL;
 
-  for (size_t index = source; index != target;) {
+  if (swap) {
+    tags->table[from] = tags->table[to];
+    tags->table[from]->id = from;
+  }
+  for (size_t index = source; !swap && index != target;) {
     const size_t next = source < target ? index + 1 : index - 1;
 
     tags->table[ids[index]] = tags->table[ids[next]];
@@ -785,6 +789,14 @@ bool leme_tags_move(struct leme_tags *tags, uint16_t from, uint16_t to) {
   leme_public_server_invalidate(tags->server);
   leme_publication_invalidate(tags->server);
   return true;
+}
+
+bool leme_tags_move(struct leme_tags *tags, uint16_t from, uint16_t to) {
+  return leme_tags_reorder(tags, from, to, false);
+}
+
+bool leme_tags_swap(struct leme_tags *tags, uint16_t first, uint16_t second) {
+  return leme_tags_reorder(tags, first, second, true);
 }
 
 bool leme_tags_assign_view_to(struct leme_tags *tags, struct leme_view *view,

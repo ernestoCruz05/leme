@@ -24,6 +24,7 @@ struct leme_bind_group {
   size_t inherit_count;
   bool is_mode;
   bool escape_exits;
+  bool oneshot;
   int lineno;
   enum leme_bind_state state;
   const struct leme_binding **resolved;

@@ -17,6 +17,9 @@ positive integers unless a row says otherwise.
 | `move_view_to_tag next\|previous\|ID [follow]` | moves the focused window to a tag; `follow` goes with it |
 | `move_tag next\|previous\|ID` | moves the current tag to another slot |
 | `toggle_overview` | opens or closes the [tag overview](../configuration/tags.md#overview) |
+| `overview left\|right\|up\|down\|lift\|accept\|cancel` | moves the selection, lifts or drops a tag, goes to it, or closes the open overview |
+| `overview_select ID` | selects tag `ID` in the open overview |
+| `overview_swap ID` | swaps the selected tag with tag `ID` |
 | `remove_empty_tag ID` | removes an empty tag above `initial` |
 | `set_layout dwindle\|master_stack\|desktop` | layout of the focused tag |
 | `switch_layout` | cycles dwindle, master-stack and desktop |

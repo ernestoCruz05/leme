@@ -151,12 +151,13 @@ bool leme_desk_owner_handle_key(struct leme_server *server, xkb_keysym_t keysym,
                                 uint32_t modifiers, const char *utf8,
                                 size_t length, bool reserved) {
   const struct leme_desk_owner *owner = server->desk_owner.owner;
-  if (owner == NULL || !owner->modal || owner->key == NULL) {
+  if (owner == NULL || !owner->modal) {
     return false;
   }
   if (reserved) {
     leme_desk_owner_cancel(server);
     return false;
   }
-  return owner->key(server, keysym, modifiers, utf8, length);
+  return owner->key != NULL &&
+         owner->key(server, keysym, modifiers, utf8, length);
 }

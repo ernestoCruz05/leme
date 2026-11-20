@@ -13,8 +13,7 @@ tile keeps. Existing splits never flip when you resize.
 ## Master-stack
 
 The first `nmaster` windows share the master area, which takes `mfact` of the
-width. The rest stack beside it. SUPER-drag reordering only works on dwindle
-tags; use `move` here.
+width. The rest stack beside it. SUPER-drag and `move` swap two windows.
 
 ## Desktop (experimental)
 

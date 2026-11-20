@@ -140,6 +140,10 @@ bool leme_command_execute(struct leme_server *server,
   if ((spec->flags & LEME_COMMAND_FLAG_CANCELS_GRAB) != 0) {
     leme_input_pointer_grab_cancel_tiled(server);
   }
+  if (command->type == LEME_COMMAND_FOCUS_TAG &&
+      leme_overview_go(server, command->tag_id)) {
+    return true;
+  }
   if (command->type != LEME_COMMAND_TOGGLE_OVERVIEW &&
       (spec->flags &
        (LEME_COMMAND_FLAG_NEEDS_TAGS | LEME_COMMAND_FLAG_NEEDS_VIEW |
@@ -172,6 +176,14 @@ bool leme_command_execute(struct leme_server *server,
     return true;
   case LEME_COMMAND_TOGGLE_OVERVIEW:
     leme_overview_toggle(server);
+    return true;
+  case LEME_COMMAND_OVERVIEW:
+    leme_overview_act(server, command->overview);
+    return true;
+  case LEME_COMMAND_OVERVIEW_SELECT:
+  case LEME_COMMAND_OVERVIEW_SWAP:
+    leme_overview_pick(server, command->tag_id,
+                       command->type == LEME_COMMAND_OVERVIEW_SWAP);
     return true;
   case LEME_COMMAND_MOVE_TAG: {
     uint16_t ids[LEME_TAGS_RING_MAX];

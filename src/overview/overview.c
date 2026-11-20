@@ -19,11 +19,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
-#include <xkbcommon/xkbcommon-keysyms.h>
 
 #define LEME_OVERVIEW_COLUMNS 5
 #define LEME_OVERVIEW_LABEL 28
@@ -408,23 +406,29 @@ static void leme_overview_animate(struct leme_overview *overview) {
   wlr_output_schedule_frame(overview->output->wlr_output);
 }
 
+static size_t leme_overview_moved(size_t index, size_t from, size_t to) {
+  if (index == from) {
+    return to;
+  }
+  if (from < index && index <= to) {
+    return index - 1;
+  }
+  if (to <= index && index < from) {
+    return index + 1;
+  }
+  return index;
+}
+
 static void leme_overview_arrange(struct leme_overview *overview) {
   const struct wlr_cursor *cursor = overview->output->server->cursor;
   const size_t lifted = overview->lifted;
   const size_t over = overview->over;
 
   for (size_t index = 0; index < overview->count; index++) {
-    size_t place = index;
+    const size_t place = lifted < overview->count
+                             ? leme_overview_moved(index, lifted, over)
+                             : index;
 
-    if (lifted < overview->count) {
-      if (index == lifted) {
-        place = over;
-      } else if (lifted < index && index <= over) {
-        place = index - 1;
-      } else if (over <= index && index < lifted) {
-        place = index + 1;
-      }
-    }
     overview->slots[index].to = overview->slots[place].box;
     overview->slots[index].alpha_to = 1.0f;
   }
@@ -485,16 +489,22 @@ static void leme_overview_dismiss(struct leme_overview *overview, uint16_t id) {
   leme_overview_animate(overview);
 }
 
-static void leme_overview_drop(struct leme_overview *overview) {
-  const size_t lifted = overview->lifted;
-  const size_t over = overview->over;
+static void leme_overview_reorder(struct leme_overview *overview, size_t from,
+                                  size_t to, bool swap) {
+  struct leme_tags *tags = &overview->output->tags;
+  const uint16_t source = overview->slots[from].id;
+  const uint16_t target = overview->slots[to].id;
+  const size_t count = overview->count;
+  struct leme_box shown[LEME_TAGS_RING_MAX];
 
+  for (size_t index = 0; index < count; index++) {
+    shown[index] = overview->slots[index].shown;
+  }
   overview->lifted = SIZE_MAX;
   overview->dragging = false;
-  overview->selected = over;
-  if (lifted == over ||
-      !leme_tags_move(&overview->output->tags, overview->slots[lifted].id,
-                      overview->slots[over].id)) {
+  overview->selected = to;
+  if (from == to || !(swap ? leme_tags_swap(tags, source, target)
+                           : leme_tags_move(tags, source, target))) {
     leme_overview_arrange(overview);
     return;
   }
@@ -503,7 +513,23 @@ static void leme_overview_drop(struct leme_overview *overview) {
   overview->building = false;
   if (!built) {
     leme_overview_close(overview->output->server);
+    return;
   }
+  for (size_t index = 0; index < count && overview->count == count; index++) {
+    const size_t place = !swap           ? leme_overview_moved(index, from, to)
+                         : index == from ? to
+                         : index == to   ? from
+                                         : index;
+
+    overview->slots[place].shown = shown[index];
+    leme_overview_place(overview, &overview->slots[place]);
+  }
+  wlr_scene_node_raise_to_top(&overview->slots[overview->selected].frame->node);
+  leme_overview_arrange(overview);
+}
+
+static void leme_overview_drop(struct leme_overview *overview) {
+  leme_overview_reorder(overview, overview->lifted, overview->over, false);
 }
 
 static size_t leme_overview_at(const struct leme_server *server) {
@@ -594,33 +620,75 @@ static bool leme_overview_button(struct leme_server *server,
   return true;
 }
 
-static bool leme_overview_key(struct leme_server *server, xkb_keysym_t keysym,
-                              uint32_t modifiers, const char *utf8,
-                              size_t length) {
+bool leme_overview_go(struct leme_server *server, uint16_t id) {
   struct leme_overview *overview = server->overview;
+
+  if (overview == NULL || overview->closing ||
+      overview->output != leme_output_focused(server)) {
+    return false;
+  }
+  for (size_t index = 0; index < overview->count; index++) {
+    if (overview->slots[index].id == id) {
+      leme_overview_dismiss(overview, id);
+      return true;
+    }
+  }
+  return false;
+}
+
+void leme_overview_pick(struct leme_server *server, uint16_t id, bool swap) {
+  struct leme_overview *overview = server->overview;
+  size_t index = 0;
+
+  if (overview == NULL || overview->closing) {
+    return;
+  }
+  while (index < overview->count && overview->slots[index].id != id) {
+    index++;
+  }
+  if (index == overview->count) {
+    return;
+  }
+  const bool lifted = overview->lifted < overview->count;
+
+  if (swap) {
+    leme_overview_reorder(
+        overview, lifted ? overview->lifted : overview->selected, index, true);
+  } else if (lifted) {
+    overview->over = index;
+    leme_overview_arrange(overview);
+  } else if (index != overview->selected) {
+    leme_overview_select(overview, index);
+  }
+}
+
+void leme_overview_act(struct leme_server *server,
+                       enum leme_overview_action action) {
+  struct leme_overview *overview = server->overview;
+
+  if (overview == NULL) {
+    return;
+  }
+  if (overview->closing) {
+    if (action == LEME_OVERVIEW_CANCEL) {
+      leme_overview_close(server);
+    }
+    return;
+  }
   const bool lifted = overview->lifted < overview->count;
   size_t target = lifted ? overview->over : overview->selected;
 
-  (void)modifiers;
-  (void)utf8;
-  (void)length;
-  if (overview->closing) {
-    if (keysym == XKB_KEY_Escape) {
-      leme_overview_close(server);
-    }
-    return true;
-  }
-  switch (keysym) {
-  case XKB_KEY_Left:
+  switch (action) {
+  case LEME_OVERVIEW_LEFT:
     target = target > 0 ? target - 1 : target;
     break;
-  case XKB_KEY_Right:
+  case LEME_OVERVIEW_RIGHT:
     target = target + 1 < overview->count ? target + 1 : target;
     break;
-  case XKB_KEY_Up:
+  case LEME_OVERVIEW_UP:
     target = target >= overview->columns ? target - overview->columns : target;
     break;
-  case XKB_KEY_Down:
+  case LEME_OVERVIEW_DOWN:
     if (target / overview->columns <
         (overview->count - 1) / overview->columns) {
       target = target + overview->columns < overview->count
@@ -628,7 +696,7 @@ static bool leme_overview_key(struct leme_server *server, xkb_keysym_t keysym,
                    : overview->count - 1;
     }
     break;
-  case XKB_KEY_space:
+  case LEME_OVERVIEW_LIFT:
     if (lifted) {
       leme_overview_drop(overview);
     } else {
@@ -637,16 +705,15 @@ static bool leme_overview_key(struct leme_server *server, xkb_keysym_t keysym,
       overview->pressed = SIZE_MAX;
       leme_overview_arrange(overview);
     }
-    return true;
-  case XKB_KEY_Return:
-  case XKB_KEY_KP_Enter:
+    return;
+  case LEME_OVERVIEW_ACCEPT:
     if (lifted) {
       leme_overview_drop(overview);
     } else {
       leme_overview_dismiss(overview, overview->slots[target].id);
     }
-    return true;
-  case XKB_KEY_Escape:
+    return;
+  case LEME_OVERVIEW_CANCEL:
     if (lifted) {
       overview->lifted = SIZE_MAX;
       overview->dragging = false;
@@ -655,9 +722,7 @@ static bool leme_overview_key(struct leme_server *server, xkb_keysym_t keysym,
     } else {
       leme_overview_dismiss(overview, overview->output->tags.focused_id);
     }
-    return true;
-  default:
-    return false;
+    return;
   }
   if (lifted) {
     overview->over = target;
@@ -665,14 +730,12 @@ static bool leme_overview_key(struct leme_server *server, xkb_keysym_t keysym,
   } else if (target != overview->selected) {
     leme_overview_select(overview, target);
   }
-  return true;
 }
 
 static const struct leme_desk_owner leme_overview_owner = {
     .modal = true,
     .motion = leme_overview_motion,
     .button = leme_overview_button,
-    .key = leme_overview_key,
     .cancel = leme_overview_close,
 };
 

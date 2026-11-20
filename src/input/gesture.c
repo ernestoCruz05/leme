@@ -389,6 +389,17 @@ void leme_input_gesture_hold_begin(
 
   leme_input_gesture_start(server, LEME_BINDING_HOLD, event->fingers,
                            event->time_msec, event->pointer);
+  const struct leme_binding *begin =
+      state->bindings
+          ? leme_input_gesture_binding(server, LEME_BINDING_HOLD,
+                                       event->fingers, state->modifiers,
+                                       LEME_GESTURE_BEGIN, LEME_EDGE_NONE)
+          : NULL;
+  if (begin != NULL) {
+    state->route = LEME_GESTURE_ROUTE_BINDING;
+    leme_input_gesture_run(server, begin);
+    return;
+  }
   state->binding =
       state->bindings
           ? leme_input_gesture_binding(server, LEME_BINDING_HOLD,
@@ -416,7 +427,7 @@ void leme_input_gesture_hold_end(
     wlr_pointer_gestures_v1_send_hold_end(server->pointer_gestures,
                                           server->seat, event->time_msec,
                                           event->cancelled);
-  } else if (!event->cancelled) {
+  } else if (!event->cancelled && state->binding != NULL) {
     leme_input_gesture_run(server, state->binding);
   }
   server->gesture_route = (struct leme_gesture_state){0};

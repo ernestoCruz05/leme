@@ -41,19 +41,22 @@ static const char *const leme_command_container_layouts[] = {"dwindle",
                                                              "master_stack"};
 static const char *const leme_command_cycles[] = {"next", "previous"};
 static const char *const leme_command_switches[] = {"on", "off", "toggle"};
+static const char *const leme_command_overview[] = {
+    "left", "right", "up", "down", "lift", "accept", "cancel"};
 
 _Static_assert(LEME_DIRECTION_LEFT == 0 && LEME_DIRECTION_DOWN == 3 &&
                    LEME_RESIZE_LEFT == 0 && LEME_RESIZE_DOWN == 3 &&
                    LEME_LAYOUT_DWINDLE == 0 && LEME_LAYOUT_DESKTOP == 2 &&
                    LEME_OUTPUT_SWITCH_ON == 0 &&
-                   LEME_OUTPUT_SWITCH_TOGGLE == 2 &&
-                   LEME_VIEW_PLACEMENT_NORMAL == 0,
+                   LEME_OUTPUT_SWITCH_TOGGLE == 2 && LEME_OVERVIEW_LEFT == 0 &&
+                   LEME_OVERVIEW_CANCEL == 6 && LEME_VIEW_PLACEMENT_NORMAL == 0,
                "command words follow the enum order");
 _Static_assert(sizeof(enum leme_direction) == sizeof(unsigned) &&
                    sizeof(enum leme_resize_edge) == sizeof(unsigned) &&
                    sizeof(enum leme_layout_kind) == sizeof(unsigned) &&
                    sizeof(enum leme_view_placement) == sizeof(unsigned) &&
-                   sizeof(enum leme_output_switch) == sizeof(unsigned),
+                   sizeof(enum leme_output_switch) == sizeof(unsigned) &&
+                   sizeof(enum leme_overview_action) == sizeof(unsigned),
                "command choices are stored as unsigned");
 
 #define FIELD(member)                                                          \

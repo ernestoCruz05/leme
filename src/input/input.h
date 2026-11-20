@@ -31,6 +31,7 @@ enum leme_gesture_direction {
   LEME_GESTURE_RIGHT,
   LEME_GESTURE_IN,
   LEME_GESTURE_OUT,
+  LEME_GESTURE_BEGIN,
 };
 
 struct leme_binding {
@@ -52,6 +53,7 @@ struct leme_mode {
   struct leme_binding *bindings;
   size_t binding_count;
   bool escape_exits;
+  bool oneshot;
 };
 
 struct leme_config;
