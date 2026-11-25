@@ -1,6 +1,5 @@
 # Limitations
 
-- Adaptive sync has no fullscreen-only mode.
 - No touch, tablet, text input or input methods.
 - Touchpad edge bindings need a touchpad that reports its size, and do not work
   when Leme runs inside another compositor.

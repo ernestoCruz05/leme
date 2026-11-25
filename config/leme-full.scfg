@@ -2,6 +2,7 @@ tags {
     initial 3
     maximum 9
     layout dwindle
+    layout_cycle dwindle master_stack desktop
     drop_mode simple
     tag 2 {
         layout master_stack

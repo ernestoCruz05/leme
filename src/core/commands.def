@@ -18,7 +18,8 @@ LEME_COMMAND(FOCUS_OUTPUT, "focus_output", "left|right|up|down|NAME", 0,
 LEME_COMMAND(MOVE_VIEW_TO_OUTPUT, "move_view_to_output",
              "left|right|up|down|NAME [follow]", NEEDS_VIEW | STICKY_ROOT,
              ARG_OUTPUT ARG_KEYWORD("follow", follow))
-LEME_COMMAND(SET_LAYOUT, "set_layout", "dwindle|master_stack|desktop",
+LEME_COMMAND(SET_LAYOUT, "set_layout",
+             "dwindle|master_stack|desktop|grid|centered_master",
              NEEDS_TAGS | CANCELS_GRAB, ARG_CHOICE(leme_command_layouts, layout))
 LEME_COMMAND(SWITCH_LAYOUT, "switch_layout", "", NEEDS_TAGS | CANCELS_GRAB, )
 LEME_COMMAND(REMOVE_EMPTY_TAG, "remove_empty_tag", "ID",

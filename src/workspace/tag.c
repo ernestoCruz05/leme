@@ -147,7 +147,8 @@ void leme_tags_apply_settings(struct leme_tags *tags,
 }
 
 bool leme_tag_set_layout(struct leme_tag *tag, enum leme_layout_kind kind) {
-  if (tag == NULL || kind < LEME_LAYOUT_DWINDLE || kind > LEME_LAYOUT_DESKTOP) {
+  if (tag == NULL || kind < LEME_LAYOUT_DWINDLE ||
+      kind > LEME_LAYOUT_CENTERED_MASTER) {
     return false;
   }
   if (tag->layout.kind == kind) {
@@ -243,24 +244,21 @@ enum leme_layout_kind leme_tags_id_layout(const struct leme_tags *tags,
 }
 
 bool leme_tags_cycle_layout(struct leme_tags *tags) {
-  enum leme_layout_kind next;
-
-  if (tags == NULL) {
+  if (tags == NULL || tags->server == NULL || tags->server->config == NULL ||
+      tags->server->config->layout_cycle_count == 0) {
     return false;
   }
-  switch (leme_tags_id_layout(tags, tags->focused_id)) {
-  case LEME_LAYOUT_DWINDLE:
-    next = LEME_LAYOUT_MASTER_STACK;
-    break;
-  case LEME_LAYOUT_MASTER_STACK:
-    next = LEME_LAYOUT_DESKTOP;
-    break;
-  case LEME_LAYOUT_DESKTOP:
-  default:
-    next = LEME_LAYOUT_DWINDLE;
-    break;
+  const struct leme_config *config = tags->server->config;
+  const enum leme_layout_kind current =
+      leme_tags_id_layout(tags, tags->focused_id);
+  size_t next = 0;
+
+  for (size_t index = 0; index < config->layout_cycle_count; index++) {
+    if (config->layout_cycle[index] == current) {
+      next = (index + 1) % config->layout_cycle_count;
+    }
   }
-  return leme_tags_set_layout(tags, next);
+  return leme_tags_set_layout(tags, config->layout_cycle[next]);
 }
 
 static void leme_tag_apply_settings(struct leme_tag *tag,

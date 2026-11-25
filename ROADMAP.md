@@ -1,6 +1,6 @@
 # Leme roadmap
 
-Last updated: 2026-11-12
+Last updated: 2026-11-20
 
 Leme is early alpha. This page lists what works and what is planned. Setup and
 configuration are in the [documentation](docs/README.md), and missing features
@@ -9,9 +9,10 @@ in [limitations](docs/reference/limitations.md).
 ## Available now
 
 - Windows: native Wayland and XWayland windows, per-output adaptive tags,
-  dwindle and master-stack layouts, an experimental
+  dwindle, master-stack, grid and centered master layouts, an experimental
   [desktop layout](docs/configuration/desktop.md), floating and fullscreen
-  windows, sticky windows, scratchpads and window rules.
+  windows, sticky windows, scratchpads, window rules and a
+  [tag overview](docs/configuration/tags.md#overview).
 - Pointer: tiled drags with drop previews, split resizing, and drags across
   outputs.
 - Look: gaps, borders, opacity and optional
@@ -43,15 +44,13 @@ in [limitations](docs/reference/limitations.md).
 
 - Input methods and text input.
 - Animations for bars, launchers and notifications.
-- Grid and centered master layouts.
 - Moving and swapping tags between monitors.
 - Terminal swallowing.
-- An overview of all windows and tags.
+- An overview of all windows.
 
 ## Planned
 
 - Drop shadows.
-- A monocle layout.
 - Touchscreens, drawing tablets and pads.
 - Custom shaders: shaders compiled to SPIR-V, applied to windows or outputs on
   both the GLES2 and Vulkan renderers.

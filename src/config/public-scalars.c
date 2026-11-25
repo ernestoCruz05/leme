@@ -252,10 +252,24 @@ static enum leme_public_status tags_value(struct leme_public_builder *b,
                                           const struct leme_config *config,
                                           struct leme_public_value **out) {
   const struct leme_tag_settings *settings = &config->tag_defaults;
-  struct leme_public_value *tags = NULL, *defaults = NULL;
-  if (config->initial_tags > config->max_tags)
+  struct leme_public_value *tags = NULL, *defaults = NULL, *cycle = NULL;
+  if (config->initial_tags > config->max_tags ||
+      config->layout_cycle_count > LEME_ARRAY_LENGTH(config->layout_cycle))
     return leme_public_fail(b, LEME_PUBLIC_INVALID);
-  if (leme_public_object(b, 3, &tags) != LEME_PUBLIC_OK ||
+  if (leme_public_array(b, config->layout_cycle_count, &cycle) !=
+      LEME_PUBLIC_OK)
+    return leme_public_builder_status(b);
+  for (size_t i = 0; i < config->layout_cycle_count; ++i) {
+    struct leme_public_value *name = NULL;
+    if (leme_config_public_text(
+            b, leme_layout_public_name(config->layout_cycle[i]), &name) !=
+            LEME_PUBLIC_OK ||
+        leme_public_array_set(b, cycle, i, name) != LEME_PUBLIC_OK)
+      return leme_public_builder_status(b);
+  }
+  if (leme_public_object(b, 4, &tags) != LEME_PUBLIC_OK ||
+      leme_public_object_set(b, tags, LEME_PUBLIC_TEXT("layout_cycle"),
+                             cycle) != LEME_PUBLIC_OK ||
       leme_public_object(b, 6, &defaults) != LEME_PUBLIC_OK ||
       leme_public_put_int(b, tags, LEME_PUBLIC_TEXT("initial"),
                           config->initial_tags) != LEME_PUBLIC_OK ||

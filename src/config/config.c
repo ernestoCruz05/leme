@@ -235,6 +235,10 @@ void leme_config_set_output_defaults(struct leme_config *config) {
       .split_ratio = 0.5,
       .has_gap = false,
   };
+  config->layout_cycle[0] = LEME_LAYOUT_DWINDLE;
+  config->layout_cycle[1] = LEME_LAYOUT_MASTER_STACK;
+  config->layout_cycle[2] = LEME_LAYOUT_DESKTOP;
+  config->layout_cycle_count = 3;
   config->tag_rules = NULL;
   config->tag_rule_count = 0;
   config->window_rules = NULL;
@@ -352,10 +356,8 @@ const char *const leme_choice_gesture_mode[3] = {
     "scrub",
     "free",
 };
-const char *const leme_choice_layout[3] = {
-    "dwindle",
-    "master_stack",
-    "desktop",
+const char *const leme_choice_layout[LEME_LAYOUT_COUNT] = {
+    "dwindle", "master_stack", "desktop", "grid", "centered_master",
 };
 const char *const leme_choice_secondary_gpu[2] = {
     "on_demand",

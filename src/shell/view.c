@@ -1253,7 +1253,7 @@ bool leme_view_commit_tiled_drag(struct leme_view *view,
   }
   struct leme_tag *tag = leme_ownership_tag(view);
 
-  if (tag->layout.kind == LEME_LAYOUT_MASTER_STACK) {
+  if (leme_layout_listed(&tag->layout)) {
     if (!leme_tags_swap_list_order(tag, view, target)) {
       return false;
     }

@@ -17,6 +17,10 @@ const char *leme_layout_public_name(enum leme_layout_kind kind) {
     return "master_stack";
   case LEME_LAYOUT_DESKTOP:
     return "desktop";
+  case LEME_LAYOUT_GRID:
+    return "grid";
+  case LEME_LAYOUT_CENTERED_MASTER:
+    return "centered_master";
   }
   return NULL;
 }

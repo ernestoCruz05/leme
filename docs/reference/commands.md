@@ -21,8 +21,8 @@ positive integers unless a row says otherwise.
 | `overview_select ID` | selects tag `ID` in the open overview |
 | `overview_swap ID` | swaps the selected tag with tag `ID` |
 | `remove_empty_tag ID` | removes an empty tag above `initial` |
-| `set_layout dwindle\|master_stack\|desktop` | layout of the focused tag |
-| `switch_layout` | cycles dwindle, master-stack and desktop |
+| `set_layout dwindle\|master_stack\|grid\|centered_master\|desktop` | layout of the focused tag |
+| `switch_layout` | next layout in [`layout_cycle`](../configuration/tags.md) |
 
 ## Focus and movement
 

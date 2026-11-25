@@ -24,7 +24,7 @@ extern const char *const leme_choice_accel_profile[2];
 extern const char *const leme_choice_drop_mode[2];
 extern const char *const leme_choice_fullscreen_covers[3];
 extern const char *const leme_choice_gesture_mode[3];
-extern const char *const leme_choice_layout[3];
+extern const char *const leme_choice_layout[LEME_LAYOUT_COUNT];
 extern const char *const leme_choice_secondary_gpu[2];
 extern const char *const leme_choice_workspace_style[2];
 extern const char *const leme_pointer_click_names[3];

@@ -15,6 +15,16 @@ tile keeps. Existing splits never flip when you resize.
 The first `nmaster` windows share the master area, which takes `mfact` of the
 width. The rest stack beside it. SUPER-drag and `move` swap two windows.
 
+## Grid
+
+Windows fill rows of equal cells, and the last row stretches to the full
+width. SUPER-drag and `move` swap two windows.
+
+## Centered master
+
+Like master-stack, but from three windows up the master area sits in the
+middle and the rest fill the right and left sides in turn.
+
 ## Desktop (experimental)
 
 Windows are placed freely, with titlebars, minimizing, window groups and the

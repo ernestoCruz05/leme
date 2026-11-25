@@ -39,7 +39,11 @@ enum leme_layout_kind {
   LEME_LAYOUT_DWINDLE,
   LEME_LAYOUT_MASTER_STACK,
   LEME_LAYOUT_DESKTOP,
+  LEME_LAYOUT_GRID,
+  LEME_LAYOUT_CENTERED_MASTER,
 };
+
+enum { LEME_LAYOUT_COUNT = LEME_LAYOUT_CENTERED_MASTER + 1 };
 
 struct leme_layout_node;
 
@@ -183,6 +187,7 @@ void leme_layout_arrange_subject(struct leme_layout *layout,
 bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
                         enum leme_resize_edge edge, int delta,
                         struct leme_box area, leme_layout_min_fn min_length);
+bool leme_layout_listed(const struct leme_layout *layout);
 bool leme_layout_drag_supported(const struct leme_layout *layout);
 
 #endif

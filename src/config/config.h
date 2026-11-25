@@ -382,6 +382,8 @@ struct leme_config {
   struct leme_animation_settings animation[LEME_ANIMATION_EVENT_COUNT];
   struct leme_workspace_animation_settings workspace_animation;
   struct leme_tag_settings tag_defaults;
+  enum leme_layout_kind layout_cycle[LEME_LAYOUT_COUNT];
+  size_t layout_cycle_count;
   struct leme_tag_rule *tag_rules;
   size_t tag_rule_count;
   struct leme_window_rule *window_rules;

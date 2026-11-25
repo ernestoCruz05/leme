@@ -26,7 +26,9 @@ static bool parse_layout(const struct leme_control_call *call,
     enum leme_layout_kind kind;
   } layouts[] = {{"dwindle", LEME_LAYOUT_DWINDLE},
                  {"master_stack", LEME_LAYOUT_MASTER_STACK},
-                 {"desktop", LEME_LAYOUT_DESKTOP}};
+                 {"desktop", LEME_LAYOUT_DESKTOP},
+                 {"grid", LEME_LAYOUT_GRID},
+                 {"centered_master", LEME_LAYOUT_CENTERED_MASTER}};
   for (size_t i = 0; i < sizeof(layouts) / sizeof(layouts[0]); i++) {
     if (text.length == strlen(layouts[i].name) &&
         memcmp(text.data, layouts[i].name, text.length) == 0) {

@@ -323,7 +323,7 @@ struct leme_layout_detach *leme_layout_detach_view(struct leme_layout *layout,
   if (layout == NULL || view == NULL) {
     return NULL;
   }
-  if (layout->kind == LEME_LAYOUT_MASTER_STACK) {
+  if (leme_layout_listed(layout)) {
     return calloc(1, sizeof(*detach));
   }
   struct leme_layout_node **const root = &layout->root;
@@ -1025,7 +1025,7 @@ bool leme_layout_prepare(const struct leme_layout *current,
                          struct leme_view *const *views, size_t count,
                          struct leme_layout *out) {
   if (current == NULL || out == NULL || (count > 0 && views == NULL) ||
-      kind < LEME_LAYOUT_DWINDLE || kind > LEME_LAYOUT_DESKTOP) {
+      kind < LEME_LAYOUT_DWINDLE || kind > LEME_LAYOUT_CENTERED_MASTER) {
     return false;
   }
   struct leme_layout prepared = *current;
@@ -1061,46 +1061,65 @@ void leme_layout_remove_view(struct leme_layout *layout,
   }
 }
 
+static struct leme_box leme_layout_column_slot(struct leme_box area,
+                                               size_t count, int gap,
+                                               size_t index) {
+  if (count > (size_t)area.height) {
+    const int row = index < (size_t)area.height ? (int)index : area.height - 1;
+
+    return (struct leme_box){area.x, area.y + row, area.width, 1};
+  }
+  const int slots = (int)count;
+
+  if (slots > 1 && gap > (area.height - slots) / (slots - 1)) {
+    gap = 0;
+  }
+  const int available = area.height - (slots - 1) * gap;
+  const int height = available / slots;
+  const int offset = (int)index * height;
+
+  return (struct leme_box){
+      .x = area.x,
+      .y = area.y + offset + (int)index * gap,
+      .width = area.width,
+      .height = index + 1 == count ? available - offset : height,
+  };
+}
+
+static struct leme_box leme_layout_transpose(struct leme_box box) {
+  return (struct leme_box){box.y, box.x, box.height, box.width};
+}
+
 static void leme_layout_arrange_column(struct leme_view *const *views,
                                        size_t count, struct leme_box area,
                                        int gap, leme_layout_apply_fn apply,
                                        void *data) {
-  size_t index;
-  int available;
-  int offset = 0;
+  for (size_t index = 0; index < count; index++) {
+    apply(views[index], leme_layout_column_slot(area, count, gap, index), data);
+  }
+}
 
-  if (count == 0) {
-    return;
-  }
-  if (count > (size_t)area.height) {
-    for (index = 0; index < count; index++) {
-      const int row =
-          index < (size_t)area.height ? (int)index : area.height - 1;
-      const struct leme_box box = {area.x, area.y + row, area.width, 1};
-      apply(views[index], box, data);
-    }
-    return;
-  }
-  const int slots = (int)count;
-  if (slots > 1 && gap > (area.height - slots) / (slots - 1)) {
-    gap = 0;
-  }
-  available = area.height - (slots - 1) * gap;
-  for (index = 0; index < count; index++) {
-    int height = available / slots;
-    struct leme_box box;
+static void leme_layout_arrange_grid(struct leme_view *const *views,
+                                     size_t count, struct leme_box area,
+                                     int gap, leme_layout_apply_fn apply,
+                                     void *data) {
+  size_t columns = 1;
 
-    if (index + 1 == count) {
-      height = available - offset;
-    }
-    box = (struct leme_box){
-        .x = area.x,
-        .y = area.y + offset + (int)index * gap,
-        .width = area.width,
-        .height = height,
-    };
-    apply(views[index], box, data);
-    offset += height;
+  while (columns * columns < count) {
+    columns++;
+  }
+  const size_t rows = (count + columns - 1) / columns;
+
+  for (size_t index = 0; index < count; index++) {
+    const size_t row = index / columns;
+    const size_t cells = row + 1 == rows ? count - row * columns : columns;
+    const struct leme_box strip =
+        leme_layout_transpose(leme_layout_column_slot(area, rows, gap, row));
+
+    apply(views[index],
+          leme_layout_transpose(leme_layout_column_slot(strip, cells, gap,
+                                                        index - row * columns)),
+          data);
   }
 }
 
@@ -1138,6 +1157,51 @@ static void leme_layout_arrange_master_stack(
                              apply, data);
 }
 
+static void leme_layout_arrange_centered_master(
+    struct leme_layout *layout, struct leme_view *const *views, size_t count,
+    struct leme_box area, int gap, leme_layout_apply_fn apply, void *data) {
+  size_t masters = layout->nmaster < 1 ? 1 : layout->nmaster;
+  const int split_gap = gap <= (area.width - 3) / 2 ? gap : 0;
+  const int available = area.width - 2 * split_gap;
+
+  if (masters > count) {
+    masters = count;
+  }
+  const size_t stacked = count - masters;
+
+  if (stacked < 2 || available < 3) {
+    leme_layout_arrange_master_stack(layout, views, count, area, gap, apply,
+                                     data);
+    return;
+  }
+  int center = (int)((double)available * layout->mfact);
+
+  if (center < 1) {
+    center = 1;
+  } else if (center > available - 2) {
+    center = available - 2;
+  }
+  const int left = (available - center) / 2;
+  const struct leme_box sides[] = {
+      {area.x + left + center + 2 * split_gap, area.y,
+       available - center - left, area.height},
+      {area.x, area.y, left, area.height},
+  };
+
+  leme_layout_arrange_column(
+      views, masters,
+      (struct leme_box){area.x + left + split_gap, area.y, center, area.height},
+      gap, apply, data);
+  for (size_t index = 0; index < stacked; index++) {
+    const size_t side = index % 2;
+
+    apply(views[masters + index],
+          leme_layout_column_slot(sides[side], (stacked + 1 - side) / 2, gap,
+                                  index / 2),
+          data);
+  }
+}
+
 void leme_layout_arrange_subject(struct leme_layout *layout,
                                  struct leme_view *const *views, size_t count,
                                  struct leme_box area, int gap,
@@ -1160,6 +1224,13 @@ void leme_layout_arrange_subject(struct leme_layout *layout,
     leme_layout_arrange_master_stack(layout, views, count, area, gap, apply,
                                      data);
     return;
+  case LEME_LAYOUT_GRID:
+    leme_layout_arrange_grid(views, count, area, gap, apply, data);
+    return;
+  case LEME_LAYOUT_CENTERED_MASTER:
+    leme_layout_arrange_centered_master(layout, views, count, area, gap, apply,
+                                        data);
+    return;
   }
 }
 
@@ -1170,11 +1241,13 @@ bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
 
   switch (layout->kind) {
   case LEME_LAYOUT_DESKTOP:
+  case LEME_LAYOUT_GRID:
     return false;
   case LEME_LAYOUT_DWINDLE:
     return leme_layout_resize_focused(layout->root, focused, edge, delta,
                                       min_length);
   case LEME_LAYOUT_MASTER_STACK:
+  case LEME_LAYOUT_CENTERED_MASTER:
     if (edge != LEME_RESIZE_LEFT && edge != LEME_RESIZE_RIGHT) {
       return false;
     }
@@ -1188,6 +1261,12 @@ bool leme_layout_resize(struct leme_layout *layout, struct leme_view *focused,
     return true;
   }
   return false;
+}
+
+bool leme_layout_listed(const struct leme_layout *layout) {
+  return layout != NULL && (layout->kind == LEME_LAYOUT_MASTER_STACK ||
+                            layout->kind == LEME_LAYOUT_GRID ||
+                            layout->kind == LEME_LAYOUT_CENTERED_MASTER);
 }
 
 bool leme_layout_drag_supported(const struct leme_layout *layout) {

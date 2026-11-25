@@ -35,8 +35,8 @@ enum leme_command_status {
 
 static const char *const leme_command_directions[] = {"left", "right", "up",
                                                       "down"};
-static const char *const leme_command_layouts[] = {"dwindle", "master_stack",
-                                                   "desktop"};
+static const char *const leme_command_layouts[] = {
+    "dwindle", "master_stack", "desktop", "grid", "centered_master"};
 static const char *const leme_command_container_layouts[] = {"dwindle",
                                                              "master_stack"};
 static const char *const leme_command_cycles[] = {"next", "previous"};
@@ -47,6 +47,7 @@ static const char *const leme_command_overview[] = {
 _Static_assert(LEME_DIRECTION_LEFT == 0 && LEME_DIRECTION_DOWN == 3 &&
                    LEME_RESIZE_LEFT == 0 && LEME_RESIZE_DOWN == 3 &&
                    LEME_LAYOUT_DWINDLE == 0 && LEME_LAYOUT_DESKTOP == 2 &&
+                   LEME_LAYOUT_CENTERED_MASTER == 4 &&
                    LEME_OUTPUT_SWITCH_ON == 0 &&
                    LEME_OUTPUT_SWITCH_TOGGLE == 2 && LEME_OVERVIEW_LEFT == 0 &&
                    LEME_OVERVIEW_CANCEL == 6 && LEME_VIEW_PLACEMENT_NORMAL == 0,

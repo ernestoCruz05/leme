@@ -43,16 +43,14 @@ static bool leme_config_parse_u16_allow_zero(const char *text,
 
 static bool leme_config_parse_layout_kind(const char *text,
                                           enum leme_layout_kind *kind) {
-  if (strcmp(text, "dwindle") == 0) {
-    *kind = LEME_LAYOUT_DWINDLE;
-  } else if (strcmp(text, "master_stack") == 0) {
-    *kind = LEME_LAYOUT_MASTER_STACK;
-  } else if (strcmp(text, "desktop") == 0) {
-    *kind = LEME_LAYOUT_DESKTOP;
-  } else {
-    return false;
+  for (size_t index = 0; index < LEME_ARRAY_LENGTH(leme_choice_layout);
+       index++) {
+    if (strcmp(text, leme_choice_layout[index]) == 0) {
+      *kind = (enum leme_layout_kind)index;
+      return true;
+    }
   }
-  return true;
+  return false;
 }
 
 static bool
@@ -76,6 +74,37 @@ leme_config_parse_tag_entry(const struct leme_option_parse *parse) {
                                     context->error)
              ? LEME_OPTION_ACCEPTED
              : LEME_OPTION_FATAL;
+}
+
+static enum leme_option_result
+leme_config_parse_layout_cycle(const struct leme_option_parse *parse) {
+  const struct leme_scfg_directive *entry = parse->entry;
+  enum leme_layout_kind cycle[LEME_LAYOUT_COUNT];
+  size_t count = 0;
+
+  if (entry->params_len == 0 || entry->children.directives_len != 0) {
+    return leme_option_reject(parse, -1, NULL,
+                              "layout_cycle needs at least one layout");
+  }
+  for (size_t index = 0; index < entry->params_len; index++) {
+    enum leme_layout_kind kind;
+
+    if (!leme_config_parse_layout_kind(entry->params[index], &kind)) {
+      return leme_option_reject(parse, (int)index, NULL, "unknown layout %s",
+                                entry->params[index]);
+    }
+    for (size_t previous = 0; previous < count; previous++) {
+      if (cycle[previous] == kind) {
+        return leme_option_reject(parse, (int)index, NULL,
+                                  "layout %s is listed twice",
+                                  entry->params[index]);
+      }
+    }
+    cycle[count++] = kind;
+  }
+  memcpy(parse->config->layout_cycle, cycle, count * sizeof(*cycle));
+  parse->config->layout_cycle_count = count;
+  return LEME_OPTION_ACCEPTED;
 }
 
 _Static_assert(sizeof(enum leme_drop_mode) == sizeof(unsigned) &&
@@ -102,6 +131,10 @@ static const struct leme_option leme_tags_options[] = {
      .kind = LEME_OPTION_CHOICE,
      .offset = offsetof(struct leme_config, tag_defaults.layout),
      LEME_OPTION_CHOICES(leme_choice_layout)},
+    {.name = "layout_cycle",
+     .kind = LEME_OPTION_CUSTOM,
+     .flags = LEME_OPTION_MULTI,
+     .parse = leme_config_parse_layout_cycle},
     {.name = "tag",
      .kind = LEME_OPTION_CUSTOM,
      .flags = LEME_OPTION_MULTI | LEME_OPTION_REPEAT,

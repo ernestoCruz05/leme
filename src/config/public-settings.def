@@ -129,6 +129,8 @@ PUBLIC_SCHEMA(TAGS_CONFIG, "tags_config", false,
       "Highest addressable slot on each output"),
   PUBLIC_FIELD("defaults", TAG_SETTINGS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Resolved default tag settings"),
+  PUBLIC_FIELD("layout_cycle", LAYOUTS, false, true, NULL, SENSITIVE, ALWAYS, NULL,
+      "Layouts switch_layout goes through, in order"),
   PUBLIC_FIELD("rules", TAG_RULES, false, true, NULL, SENSITIVE, ALWAYS, NULL,
       "Ordered explicit slot rules")
 )

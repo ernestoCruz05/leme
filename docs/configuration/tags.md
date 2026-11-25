@@ -28,7 +28,8 @@ tags {
 | --- | --- | --- | --- |
 | `initial` | `1` to `maximum` | `3` | tags that always exist |
 | `maximum` | `1` to `64` | `9` | highest tag id |
-| `layout` | `dwindle`, `master_stack`, `desktop` | `dwindle` | layout of every tag |
+| `layout` | `dwindle`, `master_stack`, `grid`, `centered_master`, `desktop` | `dwindle` | layout of every tag |
+| `layout_cycle` | layout names | `dwindle master_stack desktop` | layouts `switch_layout` goes through, in order |
 | `drop_mode` | `simple`, `edges` | `simple` | where a dragged tiled window lands: the half of the target facing its longer side, or the nearest edge |
 
 Tags above `initial` are created when a window goes there and removed when the
@@ -46,10 +47,10 @@ one block.
 
 | Key | Values | Default | Effect |
 | --- | --- | --- | --- |
-| `layout` | `dwindle`, `master_stack`, `desktop` | `tags.layout` | layout of the tag |
+| `layout` | `dwindle`, `master_stack`, `grid`, `centered_master`, `desktop` | `tags.layout` | layout of the tag |
 | `drop_mode` | `simple`, `edges` | `tags.drop_mode` | where a window dragged onto this tag's windows lands |
-| `mfact` | `0.10` to `0.90` | `0.5` | master area share, master-stack |
-| `nmaster` | `1` to `16` | `1` | windows in the master area, master-stack |
+| `mfact` | `0.10` to `0.90` | `0.5` | master area share, master-stack and centered master |
+| `nmaster` | `1` to `16` | `1` | windows in the master area, master-stack and centered master |
 | `gap` | `0` to `65535` | `style.gap` | gap between tiled windows |
 | `split_ratio` | `0.10` to `0.90` | `0.5` | share a tile keeps when a new window splits it, dwindle |
 
